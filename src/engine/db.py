@@ -20,7 +20,6 @@ CREATE TABLE IF NOT EXISTS frames (
 );
 
 CREATE INDEX IF NOT EXISTS idx_frames_id ON frames(id);
-CREATE INDEX IF NOT EXISTS idx_frames_processed ON frames(processed);
 
 CREATE TABLE IF NOT EXISTS audio_frames (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -35,7 +34,6 @@ CREATE TABLE IF NOT EXISTS audio_frames (
 );
 
 CREATE INDEX IF NOT EXISTS idx_audio_frames_id ON audio_frames(id);
-CREATE INDEX IF NOT EXISTS idx_audio_frames_processed ON audio_frames(processed);
 
 CREATE TABLE IF NOT EXISTS os_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -113,6 +111,12 @@ class DB:
                 await self._conn.execute(sql)
             except Exception:
                 pass  # Column already exists
+        # Indexes on processed column (safe to run after migration)
+        for sql in [
+            "CREATE INDEX IF NOT EXISTS idx_frames_processed ON frames(processed)",
+            "CREATE INDEX IF NOT EXISTS idx_audio_frames_processed ON audio_frames(processed)",
+        ]:
+            await self._conn.execute(sql)
         await self._conn.commit()
         logger.info("database connected and schema initialized at %s", self.path)
 
