@@ -2,11 +2,10 @@ services:
   engine:
     build: .
     ports:
-      - "5000:5000"
+      - "5001:5000"
     volumes:
       - engine-data:/data
-      # Mount Screenpipe's DB (macOS default path)
-      - ${HOME}/.screenpipe:/data/screenpipe:ro
+      - ${SCREENPIPE_HOST_PATH:-${HOME}/.screenpipe}:/data/screenpipe:ro
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - SCREENPIPE_DB_PATH=/data/screenpipe/db.sqlite

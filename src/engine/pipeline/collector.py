@@ -69,8 +69,11 @@ async def poll_screenpipe(
             ) as sp_db:
                 sp_db.row_factory = aiosqlite.Row
                 async with sp_db.execute(
-                    "SELECT id, text, app_name, window_name, timestamp "
-                    "FROM ocr_text WHERE id > ? ORDER BY id LIMIT 500",
+                    "SELECT f.id, o.text, o.app_name, o.window_name, f.timestamp "
+                    "FROM frames f "
+                    "JOIN ocr_text o ON o.frame_id = f.id "
+                    "WHERE f.id > ? "
+                    "ORDER BY f.id LIMIT 500",
                     (cursor,),
                 ) as cur:
                     rows = await cur.fetchall()
@@ -91,7 +94,7 @@ async def poll_screenpipe(
                 ]
                 await on_frames.put(frames)
                 await db.set_state(cursor_key, frames[-1].id)
-                logger.debug("Polled %d frames from Screenpipe", len(frames))
+                logger.debug("polled %d frames from screenpipe, new cursor=%d", len(frames), frames[-1].id)
 
         except Exception:
             logger.exception("Error polling Screenpipe")

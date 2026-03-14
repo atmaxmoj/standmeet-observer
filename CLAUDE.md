@@ -12,7 +12,14 @@ Behavioral distillation engine. Observes screen activity (via Screenpipe), ident
 ## Running
 
 ```bash
-docker compose up
+# First time: installs screenpipe + starts everything (macOS & Linux)
+make setup
+
+# Daily use
+make start          # start screenpipe + docker
+make stop           # stop everything
+make status         # check health
+make logs           # bisimulator logs
 ```
 
 Only env var needed: `ANTHROPIC_API_KEY` in `.env`.
