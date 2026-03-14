@@ -3,7 +3,6 @@
 import hashlib
 import io
 import logging
-import sys
 
 import Quartz
 import Vision
@@ -121,7 +120,7 @@ def compress_image(image: object, max_width: int, quality: int) -> bytes:
     """Downscale CGImage and compress to WebP. Returns WebP bytes."""
     width = Quartz.CGImageGetWidth(image)
     height = Quartz.CGImageGetHeight(image)
-    bpp = Quartz.CGImageGetBitsPerPixel(image)
+    Quartz.CGImageGetBitsPerPixel(image)
     bpr = Quartz.CGImageGetBytesPerRow(image)
 
     # Get raw pixel data

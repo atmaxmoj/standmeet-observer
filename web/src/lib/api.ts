@@ -88,7 +88,7 @@ export interface UsageSummary {
   }[];
 }
 
-export interface Status {
+interface Status {
   episode_count: number;
   playbook_count: number;
 }

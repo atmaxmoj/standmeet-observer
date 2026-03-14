@@ -278,7 +278,7 @@ class DB:
             return cur.lastrowid
 
     async def get_recent_episodes(self, days: int = 7) -> list[dict]:
-        cutoff = datetime.now(timezone.utc).isoformat()
+        datetime.now(timezone.utc).isoformat()
         async with self._conn.execute(
             "SELECT * FROM episodes WHERE created_at >= datetime('now', ?) ORDER BY created_at",
             (f"-{days} days",),

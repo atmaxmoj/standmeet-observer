@@ -1,0 +1,14 @@
+# Python: ruff lint
+uv run ruff check src/ capture/src/ audio/src/ cli.py || exit 1
+
+# Python: engine tests
+PYTHONPATH=src uv run pytest tests/ -q || exit 1
+
+# Python: capture tests
+(cd capture && uv run pytest tests/ -q) || exit 1
+
+# JS/TS: knip dead code
+(cd web && npx knip) || exit 1
+
+# JS/TS: eslint (allow existing 4 warnings, fail on new ones)
+(cd web && npx eslint src/ --max-warnings 4) || exit 1

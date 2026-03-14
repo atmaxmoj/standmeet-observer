@@ -1,0 +1,25 @@
+# Ruff — Python linter for bisimulator
+# Focus: dead code, large functions/files, unused imports
+
+target-version = "py312"
+
+[lint]
+select = [
+    "F",     # pyflakes (unused imports, undefined names)
+    "E",     # pycodestyle errors
+    "W",     # pycodestyle warnings
+    "C901",  # mccabe complexity
+    "PLR09", # pylint: too-many-* (statements, args, returns, branches)
+]
+ignore = [
+    "E501",  # line length — no prettier, don't care
+]
+
+[lint.mccabe]
+max-complexity = 15
+
+[lint.pylint]
+max-args = 8
+max-statements = 50
+max-branches = 12
+max-returns = 6

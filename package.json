@@ -13,6 +13,12 @@
     "test": "uv run python cli.py test",
     "test:capture": "uv run python cli.py test capture",
     "test:audio": "uv run python cli.py test audio",
-    "test:web": "uv run python cli.py test web"
+    "test:web": "uv run python cli.py test web",
+    "lint": "uv run ruff check src/ capture/src/ audio/src/ cli.py",
+    "lint:fix": "uv run ruff check src/ capture/src/ audio/src/ cli.py --fix",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7"
   }
 }
