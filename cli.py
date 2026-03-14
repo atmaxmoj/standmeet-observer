@@ -4,7 +4,9 @@
 Usage:
     npm run setup      # First-time install
     npm start          # Start everything
-    npm stop           # Stop everything
+    npm stop           # Stop daemons + containers
+    npm run down       # Stop + remove containers and volumes
+    npm run restart    # Stop + start everything
     npm run status     # Check what's running
     npm run logs       # Docker compose logs
     npm test           # Run web Playwright tests
@@ -212,10 +214,25 @@ def cmd_rebuild():
     run(["docker", "compose", "up", "-d", "--build"], cwd=ROOT)
 
 
+def cmd_down():
+    """Stop and remove containers + volumes (clean slate)."""
+    print("==> Tearing down containers...")
+    run(["docker", "compose", "down", "-v"], cwd=ROOT)
+    print("==> Containers and volumes removed")
+
+
+def cmd_restart():
+    """Restart everything (stop + start)."""
+    cmd_stop()
+    cmd_start()
+
+
 COMMANDS = {
     "setup": cmd_setup,
     "start": cmd_start,
     "stop": cmd_stop,
+    "down": cmd_down,
+    "restart": cmd_restart,
     "status": cmd_status,
     "logs": cmd_logs,
     "test": cmd_test,

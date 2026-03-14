@@ -5,6 +5,8 @@
     "setup": "uv run python cli.py setup",
     "start": "uv run python cli.py start",
     "stop": "uv run python cli.py stop",
+    "down": "uv run python cli.py down",
+    "restart": "uv run python cli.py restart",
     "status": "uv run python cli.py status",
     "logs": "uv run python cli.py logs",
     "rebuild": "uv run python cli.py rebuild",
