@@ -16,6 +16,12 @@ logger = logging.getLogger("capture")
 
 
 def main():
+    # Check screen recording permission before starting
+    if sys.platform == "darwin":
+        from capture.backends.macos import check_screen_recording_permission
+        if not check_screen_recording_permission():
+            sys.exit(1)
+
     db = CaptureDB(DB_PATH)
     db.connect()
 

@@ -41,9 +41,8 @@ export function FramesPanel() {
   };
 
   return (
-    <div className="space-y-4" data-testid="frames-panel">
-      <div className="flex justify-between items-center">
-        <Pagination page={page} totalPages={totalPages} onPageChange={load} />
+    <div className="space-y-4 pb-16" data-testid="frames-panel">
+      <div className="flex justify-end">
         <Button variant="outline" size="sm" onClick={() => load(1)}>
           Refresh
         </Button>
@@ -88,6 +87,10 @@ export function FramesPanel() {
           ))}
         </div>
       )}
+
+      <div className="fixed bottom-0 left-0 right-0 bg-background/80 backdrop-blur-sm border-t py-2 flex justify-center z-50">
+        <Pagination page={page} totalPages={totalPages} onPageChange={load} />
+      </div>
     </div>
   );
 }

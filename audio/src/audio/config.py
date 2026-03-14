@@ -23,4 +23,8 @@ CHUNKS_DIR = os.environ.get(
     str(Path.home() / ".bisimulator" / "audio_chunks"),
 )
 
+# Output device for system audio capture (e.g. "BlackHole 2ch" on macOS)
+# Leave empty to only record microphone input
+AUDIO_OUTPUT_DEVICE = os.environ.get("AUDIO_OUTPUT_DEVICE", "")
+
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "DEBUG").upper()

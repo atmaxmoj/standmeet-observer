@@ -2,12 +2,32 @@
 
 import hashlib
 import logging
+import sys
 
 import Quartz
 import Vision
 from AppKit import NSWorkspace
 
 logger = logging.getLogger(__name__)
+
+
+def check_screen_recording_permission() -> bool:
+    """Check if the app has screen recording permission on macOS.
+
+    Attempts a test screenshot of the main display. If CGDisplayCreateImage
+    returns None, the permission has not been granted.
+    """
+    main_display = Quartz.CGMainDisplayID()
+    test_image = Quartz.CGDisplayCreateImage(main_display)
+    if test_image is None:
+        logger.error(
+            "Screen recording permission denied. "
+            "Go to System Settings → Privacy & Security → Screen Recording "
+            "and enable access for Terminal (or your terminal app)."
+        )
+        return False
+    logger.info("Screen recording permission: OK")
+    return True
 
 
 # -- Display enumeration --

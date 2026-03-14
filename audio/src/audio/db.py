@@ -13,11 +13,16 @@ CREATE TABLE IF NOT EXISTS audio_frames (
     duration_seconds REAL NOT NULL DEFAULT 0.0,
     text TEXT NOT NULL DEFAULT '',
     language TEXT NOT NULL DEFAULT '',
+    source TEXT NOT NULL DEFAULT 'mic',
     chunk_path TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_audio_frames_id ON audio_frames(id);
+"""
+
+MIGRATION_ADD_SOURCE = """
+ALTER TABLE audio_frames ADD COLUMN source TEXT NOT NULL DEFAULT 'mic';
 """
 
 
@@ -32,6 +37,13 @@ class AudioDB:
         self._conn = sqlite3.connect(self.path)
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.executescript(SCHEMA)
+        # Migrate: add source column if missing
+        try:
+            self._conn.execute(MIGRATION_ADD_SOURCE)
+            self._conn.commit()
+            logger.info("migrated: added source column")
+        except sqlite3.OperationalError:
+            pass  # column already exists
         self._conn.commit()
         logger.info("audio DB ready at %s (WAL mode)", self.path)
 
@@ -47,11 +59,12 @@ class AudioDB:
         text: str,
         language: str,
         chunk_path: str,
+        source: str = "mic",
     ) -> int:
         cursor = self._conn.execute(
-            "INSERT INTO audio_frames (timestamp, duration_seconds, text, language, chunk_path) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (timestamp, duration_seconds, text, language, chunk_path),
+            "INSERT INTO audio_frames (timestamp, duration_seconds, text, language, source, chunk_path) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (timestamp, duration_seconds, text, language, source, chunk_path),
         )
         self._conn.commit()
         row_id = cursor.lastrowid

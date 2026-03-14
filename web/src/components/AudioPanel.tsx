@@ -32,9 +32,8 @@ export function AudioPanel() {
   useEffect(() => { load(1); }, []);
 
   return (
-    <div className="space-y-4" data-testid="audio-panel">
-      <div className="flex justify-between items-center">
-        <Pagination page={page} totalPages={totalPages} onPageChange={load} />
+    <div className="space-y-4 pb-16" data-testid="audio-panel">
+      <div className="flex justify-end">
         <Button variant="outline" size="sm" onClick={() => load(1)}>
           Refresh
         </Button>
@@ -55,6 +54,9 @@ export function AudioPanel() {
                 <div className="flex items-center gap-3 mb-2">
                   <span className="text-xs text-muted-foreground">{fmtTime(a.timestamp)}</span>
                   <span className="text-[10px] text-muted-foreground/60">{timeAgo(a.timestamp)}</span>
+                  <Badge variant={a.source === "speaker" ? "default" : "outline"}>
+                    {a.source === "speaker" ? "🔊" : "🎤"}
+                  </Badge>
                   <Badge variant="outline">{a.language || "?"}</Badge>
                   <span className="text-[10px] text-muted-foreground">{a.duration_seconds.toFixed(0)}s</span>
                 </div>
@@ -64,6 +66,10 @@ export function AudioPanel() {
           ))}
         </div>
       )}
+
+      <div className="fixed bottom-0 left-0 right-0 bg-background/80 backdrop-blur-sm border-t py-2 flex justify-center z-50">
+        <Pagination page={page} totalPages={totalPages} onPageChange={load} />
+      </div>
     </div>
   );
 }

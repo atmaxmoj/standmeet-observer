@@ -68,3 +68,27 @@ def transcribe(audio_path: str) -> dict:
         "language_probability": info.language_probability,
         "segments": segments,
     }
+
+
+def is_hallucination(result: dict) -> bool:
+    """Detect whisper hallucination patterns (e.g. 'You You You You...')."""
+    text = result["text"].strip()
+    if not text:
+        return False
+
+    # Low language probability often indicates noise
+    if result["language_probability"] < 0.5:
+        logger.debug("hallucination: low lang prob %.2f", result["language_probability"])
+        return True
+
+    # Repetitive text: if one word makes up >60% of all words, it's likely hallucination
+    words = text.lower().split()
+    if len(words) >= 3:
+        from collections import Counter
+        counts = Counter(words)
+        most_common_count = counts.most_common(1)[0][1]
+        if most_common_count / len(words) > 0.6:
+            logger.debug("hallucination: repetitive text '%s'", text[:80])
+            return True
+
+    return False

@@ -112,7 +112,8 @@ async def list_audio_frames(request: Request, limit: int = 50, offset: int = 0):
             total = (await cur.fetchone())[0]
 
         async with db.execute(
-            "SELECT id, timestamp, duration_seconds, text, language "
+            "SELECT id, timestamp, duration_seconds, text, language, "
+            "COALESCE(source, 'mic') as source "
             "FROM audio_frames ORDER BY id DESC LIMIT ? OFFSET ?",
             (limit, offset),
         ) as cur:

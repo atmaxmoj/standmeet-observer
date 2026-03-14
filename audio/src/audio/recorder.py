@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 class AudioRecorder:
-    """Records microphone audio in fixed-duration WAV chunks."""
+    """Records audio in fixed-duration WAV chunks from a specified device."""
 
     def __init__(
         self,
@@ -23,12 +23,16 @@ class AudioRecorder:
         channels: int = CHANNELS,
         chunk_seconds: int = CHUNK_DURATION_SECONDS,
         output_dir: str = CHUNKS_DIR,
+        device: int | str | None = None,
+        source: str = "mic",
     ):
         self.sample_rate = sample_rate
         self.channels = channels
         self.chunk_seconds = chunk_seconds
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.device = device
+        self.source = source
 
         self._stop_event = threading.Event()
         self._current_file: sf.SoundFile | None = None
@@ -37,8 +41,8 @@ class AudioRecorder:
         self._chunk_path: str | None = None
 
         logger.debug(
-            "recorder init: rate=%d channels=%d chunk=%ds dir=%s",
-            sample_rate, channels, chunk_seconds, output_dir,
+            "recorder init: source=%s device=%s rate=%d channels=%d chunk=%ds dir=%s",
+            source, device, sample_rate, channels, chunk_seconds, output_dir,
         )
 
     def _audio_callback(self, indata, frames, time_info, status):
@@ -67,7 +71,7 @@ class AudioRecorder:
         # Start new chunk
         self._chunk_start = datetime.now(timezone.utc)
         ts = self._chunk_start.strftime("%Y%m%d_%H%M%S")
-        self._chunk_path = str(self.output_dir / f"chunk_{ts}.wav")
+        self._chunk_path = str(self.output_dir / f"chunk_{self.source}_{ts}.wav")
         self._frames_written = 0
 
         self._current_file = sf.SoundFile(
@@ -98,11 +102,14 @@ class AudioRecorder:
         default_input = sd.query_devices(kind="input")
         logger.debug("default input device: %s", default_input["name"])
         logger.debug("available input devices: %d total", len(devices))
+        if self.device is not None:
+            logger.info("using device: %s (source=%s)", self.device, self.source)
 
         self._start_new_chunk()
 
         try:
             with sd.InputStream(
+                device=self.device,
                 samplerate=self.sample_rate,
                 channels=self.channels,
                 dtype="float32",

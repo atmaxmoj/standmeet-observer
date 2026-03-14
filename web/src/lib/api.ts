@@ -28,6 +28,7 @@ export interface AudioFrame {
   duration_seconds: number;
   text: string;
   language: string;
+  source: "mic" | "speaker";
 }
 
 export interface Episode {

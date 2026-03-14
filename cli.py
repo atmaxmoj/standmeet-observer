@@ -80,7 +80,37 @@ def daemon_running(name: str) -> int | None:
     return None
 
 
+def _kill_stale_processes(name: str):
+    """Find and kill any orphaned processes for this daemon (not tracked by PID file)."""
+    if sys.platform == "win32":
+        return  # TODO: implement for Windows
+    try:
+        result = subprocess.run(
+            ["pgrep", "-f", f"python -m {name}"],
+            capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            return
+        tracked_pid = None
+        pf = _pid_file(name)
+        if pf.exists():
+            tracked_pid = int(pf.read_text().strip())
+        for line in result.stdout.strip().split("\n"):
+            pid = int(line.strip())
+            if pid != tracked_pid:
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                    print(f"  killed stale {name} process (pid {pid})")
+                except OSError:
+                    pass
+    except Exception:
+        pass
+
+
 def daemon_start(name: str, cwd: Path):
+    # Kill any orphaned processes before starting
+    _kill_stale_processes(name)
+
     pid = daemon_running(name)
     if pid:
         print(f"  {name} already running (pid {pid})")
@@ -105,19 +135,21 @@ def daemon_start(name: str, cwd: Path):
 
 def daemon_stop(name: str):
     pid = daemon_running(name)
-    if not pid:
+    if pid:
+        try:
+            if sys.platform == "win32":
+                subprocess.run(["taskkill", "/F", "/PID", str(pid)], capture_output=True)
+            else:
+                os.kill(pid, signal.SIGTERM)
+            print(f"  {name} stopped (pid {pid})")
+        except Exception as e:
+            print(f"  {name} stop failed: {e}")
+    else:
         print(f"  {name} not running")
-        return
 
-    try:
-        if sys.platform == "win32":
-            subprocess.run(["taskkill", "/F", "/PID", str(pid)], capture_output=True)
-        else:
-            os.kill(pid, signal.SIGTERM)
-        print(f"  {name} stopped (pid {pid})")
-    except Exception as e:
-        print(f"  {name} stop failed: {e}")
     _pid_file(name).unlink(missing_ok=True)
+    # Also kill any orphaned processes
+    _kill_stale_processes(name)
 
 
 # ── Commands ──────────────────────────────────────────────────────────
@@ -152,6 +184,47 @@ def cmd_setup():
     print("\n==> Setup complete! Run: npm start")
 
 
+def check_macos_permissions():
+    """On macOS, verify screen recording + microphone permissions."""
+    if sys.platform != "darwin":
+        return
+
+    # Screen recording: try a test capture
+    try:
+        result = subprocess.run(
+            ["uv", "run", "python", "-c",
+             "from capture.backends.macos import check_screen_recording_permission; "
+             "import sys; sys.exit(0 if check_screen_recording_permission() else 1)"],
+            cwd=ROOT / "capture", capture_output=True, text=True, timeout=10,
+        )
+        if result.returncode != 0:
+            print("  !! Screen recording permission DENIED")
+            print("  !! Go to System Settings → Privacy & Security → Screen Recording")
+            print("  !! Enable access for Terminal (or your terminal app), then restart")
+            sys.exit(1)
+        print("  Screen recording permission: OK")
+    except Exception as e:
+        print(f"  !! Could not check screen recording permission: {e}")
+
+    # Microphone: try opening a stream
+    try:
+        result = subprocess.run(
+            ["uv", "run", "python", "-c",
+             "import sounddevice as sd; "
+             "s = sd.InputStream(samplerate=16000, channels=1); s.start(); s.stop(); s.close(); "
+             "print('OK')"],
+            cwd=ROOT / "audio", capture_output=True, text=True, timeout=10,
+        )
+        if result.returncode != 0 or "OK" not in result.stdout:
+            print("  !! Microphone permission DENIED")
+            print("  !! Go to System Settings → Privacy & Security → Microphone")
+            print("  !! Enable access for Terminal (or your terminal app), then restart")
+            sys.exit(1)
+        print("  Microphone permission: OK")
+    except Exception as e:
+        print(f"  !! Could not check microphone permission: {e}")
+
+
 def cmd_start():
     print("==> Starting bisimulator...")
     check_prereqs()
@@ -159,6 +232,8 @@ def cmd_start():
 
     extra = platform_extra()
     if extra:
+        print("==> Checking permissions...")
+        check_macos_permissions()
         daemon_start("capture", ROOT / "capture")
     daemon_start("audio", ROOT / "audio")
 
