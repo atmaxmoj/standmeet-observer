@@ -30,11 +30,23 @@ fi
 
 mkdir -p ~/.bisimulator
 
-# --- Install + start capture daemon (macOS only) ---
-if [ "$OS" = "Darwin" ]; then
-    echo "==> Installing capture daemon dependencies..."
+# --- Determine platform extras for capture daemon ---
+case "$OS" in
+    Darwin)  CAPTURE_EXTRA="macos" ;;
+    MINGW*|MSYS*|CYGWIN*|Windows_NT)
+             CAPTURE_EXTRA="windows" ;;
+    *)
+        echo "==> WARNING: Unsupported OS for screen capture: $OS"
+        echo "==> Skipping capture daemon."
+        CAPTURE_EXTRA=""
+        ;;
+esac
+
+# --- Install + start capture daemon ---
+if [ -n "$CAPTURE_EXTRA" ]; then
+    echo "==> Installing capture daemon dependencies (platform: $CAPTURE_EXTRA)..."
     cd "$SCRIPT_DIR/capture"
-    uv sync
+    uv sync --extra "$CAPTURE_EXTRA"
 
     if pgrep -f "python -m capture" >/dev/null 2>&1; then
         echo "==> Capture daemon already running"
@@ -50,8 +62,6 @@ if [ "$OS" = "Darwin" ]; then
             echo "==> Continuing without screen capture..."
         fi
     fi
-else
-    echo "==> Skipping capture daemon (macOS only). Install screenpipe manually on Linux."
 fi
 
 # --- Install + start audio daemon (cross-platform) ---

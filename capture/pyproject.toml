@@ -1,13 +1,21 @@
 [project]
 name = "bisimulator-capture"
 version = "0.1.0"
-description = "Native macOS screen capture daemon for bisimulator"
+description = "Screen capture daemon for bisimulator (macOS + Windows)"
 requires-python = ">=3.12"
-dependencies = [
+dependencies = []
+
+[project.optional-dependencies]
+macos = [
     "pyobjc-core>=10.0",
     "pyobjc-framework-Cocoa>=10.0",
     "pyobjc-framework-Quartz>=10.0",
     "pyobjc-framework-Vision>=10.0",
+]
+windows = [
+    "mss>=9.0",
+    "Pillow>=10.0",
+    "rapidocr-onnxruntime>=1.3",
 ]
 
 [build-system]

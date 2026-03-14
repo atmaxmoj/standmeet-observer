@@ -1,0 +1,33 @@
+"""Platform dispatch: exports unified capture interface regardless of OS."""
+
+import sys
+
+if sys.platform == "darwin":
+    from capture.backends.macos import (
+        capture_display,
+        get_all_displays,
+        get_frontmost_app,
+        hash_image,
+        ocr_image,
+    )
+elif sys.platform == "win32":
+    from capture.backends.windows import (
+        capture_display,
+        get_all_displays,
+        get_frontmost_app,
+        hash_image,
+        ocr_image,
+    )
+else:
+    raise RuntimeError(
+        f"Unsupported platform: {sys.platform}. "
+        "Capture daemon supports macOS and Windows only."
+    )
+
+__all__ = [
+    "get_all_displays",
+    "capture_display",
+    "hash_image",
+    "ocr_image",
+    "get_frontmost_app",
+]

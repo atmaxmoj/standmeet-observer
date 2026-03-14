@@ -4,11 +4,15 @@ import logging
 import time
 from datetime import datetime, timezone
 
+from capture.backends import (
+    capture_display,
+    get_all_displays,
+    get_frontmost_app,
+    hash_image,
+    ocr_image,
+)
 from capture.config import CAPTURE_INTERVAL
 from capture.db import CaptureDB
-from capture.ocr import ocr_image
-from capture.screen import capture_display, get_all_displays, hash_image
-from capture.window import get_frontmost_app
 
 logger = logging.getLogger(__name__)
 
