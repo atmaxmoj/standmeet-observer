@@ -1,7 +1,9 @@
 """Task-level: Haiku analyzes a time window, identifies tasks, and creates episodes."""
 
+import base64
 import json
 import logging
+from pathlib import Path
 
 import anthropic
 
@@ -53,13 +55,50 @@ Output valid JSON array (one object per task):
 Output ONLY the JSON array, nothing else."""
 
 
+def _sample_images(
+    frames: list[Frame],
+    frames_base_dir: str,
+    max_images: int = 5,
+) -> list[tuple[int, str, bytes]]:
+    """
+    Sample up to max_images from the window, evenly spaced.
+    Returns [(frame_id, media_type, base64_bytes), ...].
+    Only includes frames that have image files on disk.
+    """
+    frames_with_images = [
+        f for f in frames if f.image_path
+    ]
+    if not frames_with_images:
+        return []
+
+    # Evenly sample
+    step = max(1, len(frames_with_images) // max_images)
+    sampled = frames_with_images[::step][:max_images]
+
+    result = []
+    for f in sampled:
+        path = Path(frames_base_dir) / f.image_path
+        if not path.exists():
+            continue
+        image_bytes = path.read_bytes()
+        b64 = base64.standard_b64encode(image_bytes).decode("ascii")
+        result.append((f.id, "image/webp", b64))
+
+    logger.debug(
+        "sampled %d images from %d frames with images (of %d total)",
+        len(result), len(frames_with_images), len(frames),
+    )
+    return result
+
+
 async def process_window(
     client: anthropic.AsyncAnthropic,
     db: DB,
     frames: list[Frame],
+    frames_base_dir: str = "",
 ) -> list[int]:
     """
-    Send a time window of frames to Haiku.
+    Send a time window of frames to Haiku (with sampled screenshots).
     Haiku identifies task boundaries and summarizes each task with rich signals.
     Returns list of created episode IDs.
     """
@@ -82,17 +121,28 @@ async def process_window(
     context = "\n".join(context_lines)
     logger.debug("built context for haiku: %d lines, %d chars", len(context_lines), len(context))
 
+    # Build multimodal message content: text + sampled images
+    content = []
+    sampled_images = _sample_images(frames, frames_base_dir) if frames_base_dir else []
+    if sampled_images:
+        for frame_id, media_type, b64_data in sampled_images:
+            content.append({
+                "type": "image",
+                "source": {"type": "base64", "media_type": media_type, "data": b64_data},
+            })
+        logger.debug("attached %d sampled screenshots to haiku request", len(sampled_images))
+
+    content.append({
+        "type": "text",
+        "text": EPISODE_PROMPT.format(context=context),
+    })
+
     try:
         logger.debug("sending %d frames to haiku model=%s", len(frames), MODEL_TASK)
         response = await client.messages.create(
             model=MODEL_TASK,  # Haiku — cheap, ~$0.01-0.03 per window
             max_tokens=2048,
-            messages=[
-                {
-                    "role": "user",
-                    "content": EPISODE_PROMPT.format(context=context),
-                }
-            ],
+            messages=[{"role": "user", "content": content}],
         )
         raw = response.content[0].text
         usage = response.usage
@@ -120,6 +170,13 @@ async def process_window(
             tasks = [tasks]
         logger.debug("haiku identified %d tasks in window", len(tasks))
 
+        # Compute frame ID range for this window
+        frame_id_min = min(f.id for f in frames)
+        frame_id_max = max(f.id for f in frames)
+        # Determine primary source
+        sources = set(f.source for f in frames)
+        frame_source = ",".join(sorted(sources))
+
         episode_ids = []
         for task in tasks:
             # Store the full rich summary as JSON
@@ -140,6 +197,9 @@ async def process_window(
                 frame_count=len(frames),
                 started_at=task.get("started_at", frames[0].timestamp),
                 ended_at=task.get("ended_at", frames[-1].timestamp),
+                frame_id_min=frame_id_min,
+                frame_id_max=frame_id_max,
+                frame_source=frame_source,
             )
             episode_ids.append(episode_id)
             logger.info(

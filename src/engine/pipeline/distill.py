@@ -151,6 +151,8 @@ async def weekly_distill(
             text = text.split("\n", 1)[1]
             text = text.rsplit("```", 1)[0]
         entries = json.loads(text)
+        if not isinstance(entries, list):
+            entries = [entries]
         logger.debug("opus returned %d playbook entries", len(entries))
 
         count = 0

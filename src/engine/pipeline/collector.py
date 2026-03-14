@@ -1,19 +1,13 @@
 """
-Signal collectors: poll external sources and emit Frames.
+Signal collectors: poll engine's own DB for new frames and emit them to the pipeline.
 
-Each collector is an async function with signature:
-    async def poll_xxx(db, on_frames: Queue[list[Frame]], **kwargs)
-
-To add a new signal source, write a function following this pattern
-and register it in main.py's pipeline_loop.
+Data flows in via ingest API (capture/audio daemons POST here),
+collectors poll the DB and push frames to the pipeline queue.
 """
 
 import asyncio
 import logging
 from dataclasses import dataclass
-from pathlib import Path
-
-import aiosqlite
 
 from engine.db import DB
 
@@ -25,9 +19,10 @@ class Frame:
     """
     A single observation from any source.
 
-    source: where this came from ("screenpipe", "git", "shell", ...)
-    app_name: the application context (for screenpipe: the focused app)
-    text: the signal content (OCR text, commit message, shell command, ...)
+    source: where this came from ("capture", "audio", ...)
+    app_name: the application context (for capture: the focused app)
+    text: the signal content (OCR text, transcription, ...)
+    image_path: relative path to compressed screenshot (empty if no image)
     """
 
     id: int
@@ -36,180 +31,71 @@ class Frame:
     app_name: str
     window_name: str
     timestamp: str
+    image_path: str = ""
 
 
-# ---------------------------------------------------------------------------
-# Screenpipe collector (reads OCR frames from Screenpipe's SQLite)
-# ---------------------------------------------------------------------------
-
-
-async def poll_screenpipe(
+async def poll_frames(
     db: DB,
-    screenpipe_db_path: str,
     interval: int,
     on_frames: "asyncio.Queue[list[Frame]]",
 ):
-    cursor_key = "screenpipe_cursor"
-    logger.info("screenpipe collector started, db=%s, interval=%ds", screenpipe_db_path, interval)
+    """Poll engine DB for new screen capture frames."""
+    cursor_key = "frames_cursor"
+    logger.info("frames collector started, interval=%ds", interval)
 
     while True:
         try:
-            if not Path(screenpipe_db_path).exists():
-                logger.info(
-                    "screenpipe DB not found at %s, waiting %ds...", screenpipe_db_path, interval * 6
-                )
-                await asyncio.sleep(interval * 6)
-                continue
-
             cursor = await db.get_state(cursor_key, 0)
-            logger.debug("polling screenpipe from cursor=%d", cursor)
 
-            async with aiosqlite.connect(
-                f"file:{screenpipe_db_path}?mode=ro", uri=True
-            ) as sp_db:
-                sp_db.row_factory = aiosqlite.Row
-                async with sp_db.execute(
-                    "SELECT f.id, o.text, o.app_name, o.window_name, f.timestamp "
-                    "FROM frames f "
-                    "JOIN ocr_text o ON o.frame_id = f.id "
-                    "WHERE f.id > ? "
-                    "ORDER BY f.id LIMIT 500",
-                    (cursor,),
-                ) as cur:
-                    rows = await cur.fetchall()
-
-            logger.debug("screenpipe query returned %d rows", len(rows))
+            async with db._conn.execute(
+                "SELECT id, timestamp, app_name, window_name, text, image_path "
+                "FROM frames WHERE id > ? ORDER BY id LIMIT 500",
+                (cursor,),
+            ) as cur:
+                rows = await cur.fetchall()
 
             if rows:
                 frames = [
                     Frame(
                         id=r["id"],
-                        source="screenpipe",
+                        source="capture",
                         text=r["text"] or "",
                         app_name=r["app_name"] or "",
                         window_name=r["window_name"] or "",
                         timestamp=r["timestamp"] or "",
+                        image_path=r["image_path"] or "",
                     )
                     for r in rows
                 ]
                 await on_frames.put(frames)
                 await db.set_state(cursor_key, frames[-1].id)
-                logger.debug("polled %d frames from screenpipe, new cursor=%d", len(frames), frames[-1].id)
+                logger.debug("polled %d frames, new cursor=%d", len(frames), frames[-1].id)
 
         except Exception:
-            logger.exception("Error polling Screenpipe")
+            logger.exception("error polling frames")
 
         await asyncio.sleep(interval)
-
-
-# ---------------------------------------------------------------------------
-# Native capture collector (reads from bisimulator's own capture daemon)
-# ---------------------------------------------------------------------------
-
-
-async def poll_native_capture(
-    db: DB,
-    capture_db_path: str,
-    interval: int,
-    on_frames: "asyncio.Queue[list[Frame]]",
-):
-    cursor_key = "native_capture_cursor"
-    logger.info("native capture collector started, db=%s, interval=%ds", capture_db_path, interval)
-
-    while True:
-        try:
-            if not Path(capture_db_path).exists():
-                logger.info(
-                    "capture DB not found at %s, waiting %ds...", capture_db_path, interval * 6
-                )
-                await asyncio.sleep(interval * 6)
-                continue
-
-            cursor = await db.get_state(cursor_key, 0)
-            logger.debug("polling native capture from cursor=%d", cursor)
-
-            async with aiosqlite.connect(
-                f"file:{capture_db_path}?mode=ro", uri=True
-            ) as cap_db:
-                cap_db.row_factory = aiosqlite.Row
-                async with cap_db.execute(
-                    "SELECT id, timestamp, app_name, window_name, text "
-                    "FROM frames WHERE id > ? ORDER BY id LIMIT 500",
-                    (cursor,),
-                ) as cur:
-                    rows = await cur.fetchall()
-
-            logger.debug("native capture query returned %d rows", len(rows))
-
-            if rows:
-                frames = [
-                    Frame(
-                        id=r["id"],
-                        source="native_capture",
-                        text=r["text"] or "",
-                        app_name=r["app_name"] or "",
-                        window_name=r["window_name"] or "",
-                        timestamp=r["timestamp"] or "",
-                    )
-                    for r in rows
-                ]
-                await on_frames.put(frames)
-                await db.set_state(cursor_key, frames[-1].id)
-                logger.debug("polled %d frames from native capture, new cursor=%d", len(frames), frames[-1].id)
-
-        except Exception:
-            logger.exception("error polling native capture")
-
-        await asyncio.sleep(interval)
-
-
-# ---------------------------------------------------------------------------
-# Audio collector (reads transcribed audio from capture DB)
-# ---------------------------------------------------------------------------
 
 
 async def poll_audio(
     db: DB,
-    capture_db_path: str,
     interval: int,
     on_frames: "asyncio.Queue[list[Frame]]",
 ):
+    """Poll engine DB for new audio transcriptions."""
     cursor_key = "audio_cursor"
-    logger.info("audio collector started, db=%s, interval=%ds", capture_db_path, interval)
+    logger.info("audio collector started, interval=%ds", interval)
 
     while True:
         try:
-            if not Path(capture_db_path).exists():
-                logger.info(
-                    "capture DB not found at %s, waiting %ds...", capture_db_path, interval * 6
-                )
-                await asyncio.sleep(interval * 6)
-                continue
-
             cursor = await db.get_state(cursor_key, 0)
-            logger.debug("polling audio from cursor=%d", cursor)
 
-            async with aiosqlite.connect(
-                f"file:{capture_db_path}?mode=ro", uri=True
-            ) as cap_db:
-                cap_db.row_factory = aiosqlite.Row
-                # Check if audio_frames table exists
-                async with cap_db.execute(
-                    "SELECT name FROM sqlite_master WHERE type='table' AND name='audio_frames'"
-                ) as cur:
-                    if not await cur.fetchone():
-                        logger.debug("audio_frames table not found yet, waiting")
-                        await asyncio.sleep(interval * 6)
-                        continue
-
-                async with cap_db.execute(
-                    "SELECT id, timestamp, duration_seconds, text, language "
-                    "FROM audio_frames WHERE id > ? ORDER BY id LIMIT 100",
-                    (cursor,),
-                ) as cur:
-                    rows = await cur.fetchall()
-
-            logger.debug("audio query returned %d rows", len(rows))
+            async with db._conn.execute(
+                "SELECT id, timestamp, text, language "
+                "FROM audio_frames WHERE id > ? ORDER BY id LIMIT 100",
+                (cursor,),
+            ) as cur:
+                rows = await cur.fetchall()
 
             if rows:
                 frames = [

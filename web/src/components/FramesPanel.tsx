@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type Frame } from "@/lib/api";
+import { api, frameImageUrl, type Frame } from "@/lib/api";
 import { timeAgo, fmtTime } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -82,6 +82,14 @@ export function FramesPanel() {
                     {f.text}
                   </div>
                 </div>
+                {expandedIds.has(f.id) && f.image_path && (
+                  <img
+                    src={frameImageUrl(f.id)}
+                    alt={`Screenshot ${f.id}`}
+                    className="mt-2 w-full rounded border"
+                    loading="lazy"
+                  />
+                )}
               </CardContent>
             </Card>
           ))}

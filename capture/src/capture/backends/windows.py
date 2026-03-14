@@ -103,6 +103,34 @@ def ocr_image(image: bytes) -> str:
         return ""
 
 
+# -- Image compression --
+
+
+def compress_image(image: bytes, max_width: int, quality: int) -> bytes:
+    """Downscale PNG bytes and compress to WebP. Returns WebP bytes."""
+    pil_image = Image.open(io.BytesIO(image))
+    width, height = pil_image.size
+
+    # Downscale
+    if width > max_width:
+        ratio = max_width / width
+        new_height = int(height * ratio)
+        pil_image = pil_image.resize((max_width, new_height), Image.LANCZOS)
+
+    # Ensure RGB
+    if pil_image.mode != "RGB":
+        pil_image = pil_image.convert("RGB")
+
+    buf = io.BytesIO()
+    pil_image.save(buf, format="webp", quality=quality)
+    webp_bytes = buf.getvalue()
+    logger.debug(
+        "compressed %dx%d → %dx%d, %d bytes WebP (q=%d)",
+        width, height, pil_image.width, pil_image.height, len(webp_bytes), quality,
+    )
+    return webp_bytes
+
+
 # -- Frontmost app --
 
 

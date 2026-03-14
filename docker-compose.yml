@@ -5,13 +5,11 @@ services:
       - "5001:5000"
     volumes:
       - engine-data:/data
-      - ${HOME}/.bisimulator:/data/capture:ro
-      - ${SCREENPIPE_HOST_PATH:-${HOME}/.screenpipe}:/data/screenpipe:ro
+      - ${HOME}/.bisimulator/frames:/data/frames:ro
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - CAPTURE_DB_PATH=/data/capture/capture.db
-      - SCREENPIPE_DB_PATH=/data/screenpipe/db.sqlite
       - DB_PATH=/data/engine.db
+      - FRAMES_BASE_DIR=/data/frames
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/engine/status')"]
       interval: 30s

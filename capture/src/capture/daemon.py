@@ -1,34 +1,41 @@
-"""Main capture loop: screenshot → hash → OCR if changed → write to DB.
+"""Main capture loop: screenshot → hash → OCR if changed → compress → push to engine.
 Also collects OS events (shell commands, browser URLs)."""
 
 import logging
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 
 from capture.backends import (
     capture_display,
+    compress_image,
     get_all_displays,
     get_frontmost_app,
     hash_image,
     ocr_image,
 )
 from capture.collectors import get_all_collectors
-from capture.config import CAPTURE_INTERVAL
-from capture.db import CaptureDB
+from capture.config import CAPTURE_INTERVAL, FRAME_MAX_WIDTH, FRAMES_DIR, WEBP_QUALITY
+from capture.engine_client import EngineClient
 
 logger = logging.getLogger(__name__)
 
 
-def run(db: CaptureDB):
+def _save_frame(webp_bytes: bytes, timestamp: str, display_id: int) -> str:
+    """Save compressed WebP frame to disk. Returns relative path."""
+    dt = datetime.fromisoformat(timestamp)
+    date_dir = Path(FRAMES_DIR) / dt.strftime("%Y-%m-%d")
+    date_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"{dt.strftime('%H%M%S')}_{dt.microsecond // 1000:03d}_d{display_id}.webp"
+    path = date_dir / filename
+    path.write_bytes(webp_bytes)
+    return str(path.relative_to(Path(FRAMES_DIR).parent))
+
+
+def run(client: EngineClient):
     """Main capture loop. Runs forever until interrupted."""
     last_hashes: dict[int, str] = {}
-
-    # Initialize last_hashes from DB
-    for display_id in get_all_displays():
-        saved_hash = db.get_last_hash(display_id)
-        if saved_hash:
-            last_hashes[display_id] = saved_hash
-            logger.debug("loaded last hash for display %d: %s", display_id, saved_hash[:12])
+    Path(FRAMES_DIR).mkdir(parents=True, exist_ok=True)
 
     # Initialize OS event collectors
     collectors = []
@@ -42,15 +49,13 @@ def run(db: CaptureDB):
     logger.info(
         "capture daemon started: interval=%ds, displays=%d, collectors=%d",
         CAPTURE_INTERVAL,
-        len(last_hashes) or len(get_all_displays()),
+        len(get_all_displays()),
         len(collectors),
     )
 
-    cycle_count = 0
     while True:
         try:
             cycle_start = time.monotonic()
-            cycle_count += 1
             displays = get_all_displays()
             app_name, window_name = get_frontmost_app()
             timestamp = datetime.now(timezone.utc).isoformat()
@@ -70,13 +75,23 @@ def run(db: CaptureDB):
                     continue
 
                 text = ocr_image(image)
-                db.insert_frame(
+
+                # Compress and save frame
+                image_path = ""
+                try:
+                    webp_bytes = compress_image(image, FRAME_MAX_WIDTH, WEBP_QUALITY)
+                    image_path = _save_frame(webp_bytes, timestamp, display_id)
+                except Exception:
+                    logger.exception("failed to compress/save frame for display %d", display_id)
+
+                client.insert_frame(
                     timestamp=timestamp,
                     app_name=app_name,
                     window_name=window_name,
                     text=text,
                     display_id=display_id,
                     image_hash=current_hash,
+                    image_path=image_path,
                 )
                 last_hashes[display_id] = current_hash
                 captured += 1
@@ -87,7 +102,7 @@ def run(db: CaptureDB):
                 try:
                     entries = collector.collect()
                     for data in entries:
-                        db.insert_os_event(
+                        client.insert_os_event(
                             timestamp=timestamp,
                             event_type=collector.event_type,
                             source=collector.source,
@@ -96,10 +111,6 @@ def run(db: CaptureDB):
                         os_events += 1
                 except Exception:
                     logger.exception("collector %s/%s failed", collector.event_type, collector.source)
-
-            # Checkpoint WAL every ~30s so Docker readers see fresh data
-            if cycle_count % 10 == 0:
-                db.checkpoint()
 
             elapsed = time.monotonic() - cycle_start
             logger.debug(

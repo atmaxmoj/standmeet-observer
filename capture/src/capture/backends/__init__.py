@@ -5,6 +5,7 @@ import sys
 if sys.platform == "darwin":
     from capture.backends.macos import (
         capture_display,
+        compress_image,
         get_all_displays,
         get_frontmost_app,
         hash_image,
@@ -13,6 +14,7 @@ if sys.platform == "darwin":
 elif sys.platform == "win32":
     from capture.backends.windows import (
         capture_display,
+        compress_image,
         get_all_displays,
         get_frontmost_app,
         hash_image,
@@ -27,6 +29,7 @@ else:
 __all__ = [
     "get_all_displays",
     "capture_display",
+    "compress_image",
     "hash_image",
     "ocr_image",
     "get_frontmost_app",

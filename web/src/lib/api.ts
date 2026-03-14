@@ -20,6 +20,11 @@ export interface Frame {
   text: string;
   display_id: number;
   image_hash: string;
+  image_path: string;
+}
+
+export function frameImageUrl(frameId: number): string {
+  return `${BASE}/capture/frames/${frameId}/image`;
 }
 
 export interface AudioFrame {

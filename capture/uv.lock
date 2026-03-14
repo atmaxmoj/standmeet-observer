@@ -9,6 +9,7 @@ source = { editable = "." }
 
 [package.optional-dependencies]
 macos = [
+    { name = "pillow" },
     { name = "pyobjc-core" },
     { name = "pyobjc-framework-cocoa" },
     { name = "pyobjc-framework-quartz" },
@@ -26,6 +27,7 @@ windows = [
 [package.metadata]
 requires-dist = [
     { name = "mss", marker = "extra == 'windows'", specifier = ">=9.0" },
+    { name = "pillow", marker = "extra == 'macos'", specifier = ">=10.0" },
     { name = "pillow", marker = "extra == 'windows'", specifier = ">=10.0" },
     { name = "pyobjc-core", marker = "extra == 'macos'", specifier = ">=10.0" },
     { name = "pyobjc-framework-cocoa", marker = "extra == 'macos'", specifier = ">=10.0" },

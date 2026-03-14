@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS frames (
     text TEXT NOT NULL DEFAULT '',
     display_id INTEGER NOT NULL DEFAULT 0,
     image_hash TEXT NOT NULL DEFAULT '',
+    image_path TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -45,6 +46,13 @@ class CaptureDB:
         self._conn = sqlite3.connect(self.path)
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.executescript(SCHEMA)
+        # Migrate: add image_path column if missing
+        try:
+            self._conn.execute("ALTER TABLE frames ADD COLUMN image_path TEXT NOT NULL DEFAULT ''")
+            self._conn.commit()
+            logger.info("migrated: added image_path column")
+        except sqlite3.OperationalError:
+            pass  # column already exists
         self._conn.commit()
         logger.info("capture DB ready at %s (WAL mode)", self.path)
 
@@ -66,17 +74,18 @@ class CaptureDB:
         text: str,
         display_id: int,
         image_hash: str,
+        image_path: str = "",
     ) -> int:
         cursor = self._conn.execute(
-            "INSERT INTO frames (timestamp, app_name, window_name, text, display_id, image_hash) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (timestamp, app_name, window_name, text, display_id, image_hash),
+            "INSERT INTO frames (timestamp, app_name, window_name, text, display_id, image_hash, image_path) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (timestamp, app_name, window_name, text, display_id, image_hash, image_path),
         )
         self._conn.commit()
         row_id = cursor.lastrowid
         logger.debug(
-            "inserted frame id=%d display=%d app=%s hash=%s text_len=%d",
-            row_id, display_id, app_name, image_hash[:12], len(text),
+            "inserted frame id=%d display=%d app=%s hash=%s text_len=%d image=%s",
+            row_id, display_id, app_name, image_hash[:12], len(text), image_path or "(none)",
         )
         return row_id
 

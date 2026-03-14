@@ -6,6 +6,45 @@ from datetime import datetime, timezone
 logger = logging.getLogger(__name__)
 
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS frames (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT NOT NULL,
+    app_name TEXT NOT NULL DEFAULT '',
+    window_name TEXT NOT NULL DEFAULT '',
+    text TEXT NOT NULL DEFAULT '',
+    display_id INTEGER NOT NULL DEFAULT 0,
+    image_hash TEXT NOT NULL DEFAULT '',
+    image_path TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_frames_id ON frames(id);
+
+CREATE TABLE IF NOT EXISTS audio_frames (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT NOT NULL,
+    duration_seconds REAL NOT NULL DEFAULT 0.0,
+    text TEXT NOT NULL DEFAULT '',
+    language TEXT NOT NULL DEFAULT '',
+    source TEXT NOT NULL DEFAULT 'mic',
+    chunk_path TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_audio_frames_id ON audio_frames(id);
+
+CREATE TABLE IF NOT EXISTS os_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT '',
+    data TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_os_events_id ON os_events(id);
+CREATE INDEX IF NOT EXISTS idx_os_events_type ON os_events(event_type);
+
 CREATE TABLE IF NOT EXISTS episodes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     summary TEXT NOT NULL,
@@ -13,6 +52,9 @@ CREATE TABLE IF NOT EXISTS episodes (
     frame_count INTEGER NOT NULL DEFAULT 0,
     started_at TEXT NOT NULL,
     ended_at TEXT NOT NULL,
+    frame_id_min INTEGER NOT NULL DEFAULT 0,
+    frame_id_max INTEGER NOT NULL DEFAULT 0,
+    frame_source TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -65,6 +107,129 @@ class DB:
             logger.debug("closing database connection")
             await self._conn.close()
 
+    # -- ingest (capture/audio daemons push data here) --
+
+    async def insert_frame(
+        self,
+        timestamp: str,
+        app_name: str,
+        window_name: str,
+        text: str,
+        display_id: int,
+        image_hash: str,
+        image_path: str = "",
+    ) -> int:
+        async with self._conn.execute(
+            "INSERT INTO frames (timestamp, app_name, window_name, text, display_id, image_hash, image_path) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (timestamp, app_name, window_name, text, display_id, image_hash, image_path),
+        ) as cur:
+            await self._conn.commit()
+            logger.debug(
+                "inserted frame id=%d display=%d app=%s",
+                cur.lastrowid, display_id, app_name,
+            )
+            return cur.lastrowid
+
+    async def insert_audio_frame(
+        self,
+        timestamp: str,
+        duration_seconds: float,
+        text: str,
+        language: str,
+        source: str = "mic",
+        chunk_path: str = "",
+    ) -> int:
+        async with self._conn.execute(
+            "INSERT INTO audio_frames (timestamp, duration_seconds, text, language, source, chunk_path) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (timestamp, duration_seconds, text, language, source, chunk_path),
+        ) as cur:
+            await self._conn.commit()
+            logger.debug(
+                "inserted audio_frame id=%d duration=%.1fs lang=%s",
+                cur.lastrowid, duration_seconds, language,
+            )
+            return cur.lastrowid
+
+    async def insert_os_event(
+        self,
+        timestamp: str,
+        event_type: str,
+        source: str,
+        data: str,
+    ) -> int:
+        async with self._conn.execute(
+            "INSERT INTO os_events (timestamp, event_type, source, data) "
+            "VALUES (?, ?, ?, ?)",
+            (timestamp, event_type, source, data),
+        ) as cur:
+            await self._conn.commit()
+            logger.debug(
+                "inserted os_event id=%d type=%s source=%s",
+                cur.lastrowid, event_type, source,
+            )
+            return cur.lastrowid
+
+    # -- query (for API + pipeline) --
+
+    async def get_frames(self, limit: int = 50, offset: int = 0) -> tuple[list[dict], int]:
+        async with self._conn.execute("SELECT COUNT(*) FROM frames") as cur:
+            total = (await cur.fetchone())[0]
+        async with self._conn.execute(
+            "SELECT id, timestamp, app_name, window_name, "
+            "substr(text, 1, 500) as text, display_id, image_hash, image_path "
+            "FROM frames ORDER BY id DESC LIMIT ? OFFSET ?",
+            (limit, offset),
+        ) as cur:
+            rows = [dict(r) for r in await cur.fetchall()]
+        return rows, total
+
+    async def get_audio_frames(self, limit: int = 50, offset: int = 0) -> tuple[list[dict], int]:
+        async with self._conn.execute("SELECT COUNT(*) FROM audio_frames") as cur:
+            total = (await cur.fetchone())[0]
+        async with self._conn.execute(
+            "SELECT id, timestamp, duration_seconds, text, language, source "
+            "FROM audio_frames ORDER BY id DESC LIMIT ? OFFSET ?",
+            (limit, offset),
+        ) as cur:
+            rows = [dict(r) for r in await cur.fetchall()]
+        return rows, total
+
+    async def get_os_events(
+        self, limit: int = 50, offset: int = 0, event_type: str = ""
+    ) -> tuple[list[dict], int]:
+        where = "WHERE event_type = ?" if event_type else ""
+        params: list = [event_type] if event_type else []
+        async with self._conn.execute(
+            f"SELECT COUNT(*) FROM os_events {where}", params
+        ) as cur:
+            total = (await cur.fetchone())[0]
+        async with self._conn.execute(
+            f"SELECT id, timestamp, event_type, source, data "
+            f"FROM os_events {where} ORDER BY id DESC LIMIT ? OFFSET ?",
+            params + [limit, offset],
+        ) as cur:
+            rows = [dict(r) for r in await cur.fetchall()]
+        return rows, total
+
+    async def get_last_os_event_data(self, event_type: str, source: str) -> str | None:
+        async with self._conn.execute(
+            "SELECT data FROM os_events WHERE event_type = ? AND source = ? "
+            "ORDER BY id DESC LIMIT 1",
+            (event_type, source),
+        ) as cur:
+            row = await cur.fetchone()
+            return row["data"] if row else None
+
+    async def get_last_frame_hash(self, display_id: int) -> str | None:
+        async with self._conn.execute(
+            "SELECT image_hash FROM frames WHERE display_id = ? ORDER BY id DESC LIMIT 1",
+            (display_id,),
+        ) as cur:
+            row = await cur.fetchone()
+            return row["image_hash"] if row else None
+
     # -- state (each collector tracks its own cursor) --
 
     async def get_state(self, key: str, default: int = 0) -> int:
@@ -94,16 +259,21 @@ class DB:
         frame_count: int,
         started_at: str,
         ended_at: str,
+        frame_id_min: int = 0,
+        frame_id_max: int = 0,
+        frame_source: str = "",
     ) -> int:
         async with self._conn.execute(
-            "INSERT INTO episodes (summary, app_names, frame_count, started_at, ended_at) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (summary, app_names, frame_count, started_at, ended_at),
+            "INSERT INTO episodes (summary, app_names, frame_count, started_at, ended_at, "
+            "frame_id_min, frame_id_max, frame_source) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (summary, app_names, frame_count, started_at, ended_at,
+             frame_id_min, frame_id_max, frame_source),
         ) as cur:
             await self._conn.commit()
             logger.debug(
-                "inserted episode id=%d frame_count=%d range=[%s, %s]",
-                cur.lastrowid, frame_count, started_at, ended_at,
+                "inserted episode id=%d frame_count=%d range=[%s, %s] frames=[%d, %d]",
+                cur.lastrowid, frame_count, started_at, ended_at, frame_id_min, frame_id_max,
             )
             return cur.lastrowid
 

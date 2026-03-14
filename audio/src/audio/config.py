@@ -1,11 +1,8 @@
 import os
 from pathlib import Path
 
-# Shared DB with capture daemon
-DB_PATH = os.environ.get(
-    "CAPTURE_DB_PATH",
-    str(Path.home() / ".bisimulator" / "capture.db"),
-)
+# Engine API
+ENGINE_URL = os.environ.get("ENGINE_URL", "http://localhost:5001")
 
 # Recording settings
 SAMPLE_RATE = int(os.environ.get("AUDIO_SAMPLE_RATE", "16000"))

@@ -23,14 +23,11 @@ TOKEN_COSTS = {
 class Settings(BaseSettings):
     anthropic_api_key: str
 
-    # Screenpipe integration
-    screenpipe_db_path: str = "/data/screenpipe/db.sqlite"
-
     # Engine storage
     db_path: str = "/data/engine.db"
 
-    # Native capture daemon DB
-    capture_db_path: str = "/data/capture/capture.db"
+    # Frames directory (for image access during episode processing)
+    frames_base_dir: str = "/data/frames"
 
     # Polling
     poll_interval_seconds: int = 5

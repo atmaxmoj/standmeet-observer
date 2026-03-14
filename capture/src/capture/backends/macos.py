@@ -1,12 +1,14 @@
 """macOS backend: Quartz (CoreGraphics) for capture, Vision for OCR, AppKit for window info."""
 
 import hashlib
+import io
 import logging
 import sys
 
 import Quartz
 import Vision
 from AppKit import NSWorkspace
+from PIL import Image
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +112,42 @@ def ocr_image(image: object) -> str:
     text = "\n".join(lines)
     logger.debug("OCR recognized %d lines, %d chars", len(lines), len(text))
     return text
+
+
+# -- Image compression --
+
+
+def compress_image(image: object, max_width: int, quality: int) -> bytes:
+    """Downscale CGImage and compress to WebP. Returns WebP bytes."""
+    width = Quartz.CGImageGetWidth(image)
+    height = Quartz.CGImageGetHeight(image)
+    bpp = Quartz.CGImageGetBitsPerPixel(image)
+    bpr = Quartz.CGImageGetBytesPerRow(image)
+
+    # Get raw pixel data
+    data_provider = Quartz.CGImageGetDataProvider(image)
+    raw_data = Quartz.CGDataProviderCopyData(data_provider)
+
+    # CGImage is typically BGRA
+    pil_image = Image.frombytes("RGBA", (width, height), bytes(raw_data), "raw", "BGRA", bpr)
+
+    # Downscale
+    if width > max_width:
+        ratio = max_width / width
+        new_height = int(height * ratio)
+        pil_image = pil_image.resize((max_width, new_height), Image.LANCZOS)
+
+    # Convert RGBA → RGB (WebP lossy doesn't need alpha for screenshots)
+    pil_image = pil_image.convert("RGB")
+
+    buf = io.BytesIO()
+    pil_image.save(buf, format="webp", quality=quality)
+    webp_bytes = buf.getvalue()
+    logger.debug(
+        "compressed %dx%d → %dx%d, %d bytes WebP (q=%d)",
+        width, height, pil_image.width, pil_image.height, len(webp_bytes), quality,
+    )
+    return webp_bytes
 
 
 # -- Frontmost app --

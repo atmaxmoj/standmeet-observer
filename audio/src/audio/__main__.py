@@ -4,9 +4,9 @@ import logging
 import signal
 import sys
 
-from audio.config import AUDIO_OUTPUT_DEVICE, DB_PATH, LOG_LEVEL
+from audio.config import AUDIO_OUTPUT_DEVICE, ENGINE_URL, LOG_LEVEL
 from audio.daemon import run
-from audio.db import AudioDB
+from audio.engine_client import EngineClient
 from audio.recorder import AudioRecorder
 
 logging.basicConfig(
@@ -17,8 +17,8 @@ logger = logging.getLogger("audio")
 
 
 def main():
-    db = AudioDB(DB_PATH)
-    db.connect()
+    client = EngineClient(ENGINE_URL)
+    logger.info("engine API: %s", ENGINE_URL)
 
     recorders = []
 
@@ -41,20 +41,18 @@ def main():
         logger.info("shutting down (signal %d)", sig)
         for rec in recorders:
             rec.stop()
-        db.close()
         sys.exit(0)
 
     signal.signal(signal.SIGINT, shutdown)
     signal.signal(signal.SIGTERM, shutdown)
 
     try:
-        run(db, recorders)
+        run(client, recorders)
     except KeyboardInterrupt:
         logger.info("interrupted")
     finally:
         for rec in recorders:
             rec.stop()
-        db.close()
 
 
 if __name__ == "__main__":

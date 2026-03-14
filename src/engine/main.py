@@ -10,7 +10,7 @@ from fastapi import FastAPI
 
 from engine.config import Settings
 from engine.db import DB
-from engine.pipeline.collector import Frame, poll_audio, poll_native_capture, poll_screenpipe
+from engine.pipeline.collector import Frame, poll_frames, poll_audio
 from engine.pipeline.episode import process_window
 from engine.pipeline.filter import WindowAccumulator
 
@@ -29,12 +29,10 @@ async def pipeline_loop(
     db: DB,
 ):
     """
-    Main pipeline: collectors → noise filter → time window → Haiku.
+    Main pipeline: collectors poll DB → noise filter → time window → Haiku.
 
-    All collectors push into the same queue.
-    WindowAccumulator merges signals from all sources by time,
-    then Haiku sees the full picture (screen + tools + whatever else)
-    when identifying tasks.
+    Data arrives via ingest API (capture/audio POST here).
+    Collectors poll the same DB and push frames to the pipeline.
     """
     frame_queue: asyncio.Queue[list[Frame]] = asyncio.Queue()
     accumulator = WindowAccumulator(
@@ -42,13 +40,10 @@ async def pipeline_loop(
         idle_threshold_seconds=settings.idle_threshold_seconds,
     )
 
-    # Start all collectors — each pushes to the same queue.
-    # All collectors gracefully wait if their DB doesn't exist.
     collectors = [
         asyncio.create_task(
-            poll_native_capture(
+            poll_frames(
                 db=db,
-                capture_db_path=settings.capture_db_path,
                 interval=settings.poll_interval_seconds,
                 on_frames=frame_queue,
             )
@@ -56,15 +51,6 @@ async def pipeline_loop(
         asyncio.create_task(
             poll_audio(
                 db=db,
-                capture_db_path=settings.capture_db_path,
-                interval=settings.poll_interval_seconds,
-                on_frames=frame_queue,
-            )
-        ),
-        asyncio.create_task(
-            poll_screenpipe(
-                db=db,
-                screenpipe_db_path=settings.screenpipe_db_path,
                 interval=settings.poll_interval_seconds,
                 on_frames=frame_queue,
             )
@@ -84,13 +70,13 @@ async def pipeline_loop(
                     "window complete: %d frames, sending to haiku",
                     len(window_frames),
                 )
-                await process_window(client, db, window_frames)
+                await process_window(client, db, window_frames, settings.frames_base_dir)
     except asyncio.CancelledError:
         logger.info("pipeline loop cancelled, flushing remaining buffer")
         remaining = accumulator.flush()
         if remaining:
             logger.info("flushing %d remaining frames to haiku", len(remaining))
-            await process_window(client, db, remaining)
+            await process_window(client, db, remaining, settings.frames_base_dir)
         for task in collectors:
             task.cancel()
         raise
@@ -111,8 +97,7 @@ async def lifespan(app: FastAPI):
     pipeline_task = asyncio.create_task(pipeline_loop(settings, client, db))
 
     logger.info(
-        "Bisimulator started — polling %s every %ds, window=30min",
-        settings.screenpipe_db_path,
+        "Bisimulator started — polling every %ds, window=30min",
         settings.poll_interval_seconds,
     )
 
