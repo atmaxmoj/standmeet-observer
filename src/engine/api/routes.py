@@ -217,7 +217,7 @@ async def backfill(request: Request):
     conn.execute("UPDATE os_events SET processed = 0")
     conn.commit()
 
-    # Read ALL frames (no limit)
+    # Read ALL data sources
     screen_rows = conn.execute(
         "SELECT id, timestamp, app_name, window_name, text, image_path "
         "FROM frames ORDER BY timestamp",
@@ -268,7 +268,6 @@ async def backfill(request: Request):
     )
 
     if not kept:
-        # Mark all as processed
         conn.execute("UPDATE frames SET processed = 1")
         conn.execute("UPDATE audio_frames SET processed = 1")
         conn.execute("UPDATE os_events SET processed = 1")
@@ -284,17 +283,11 @@ async def backfill(request: Request):
 
     # Enqueue each window
     enqueued = 0
-    all_screen_ids = set()
-    all_audio_ids = set()
-    all_os_ids = set()
     for window in windows:
         screen_ids = [f.id for f in window if f.source == "capture"]
         audio_ids = [f.id for f in window if f.source == "audio"]
         os_event_ids = [f.id for f in window if f.source == "os_event"]
         process_episode(screen_ids, audio_ids, os_event_ids)
-        all_screen_ids.update(screen_ids)
-        all_audio_ids.update(audio_ids)
-        all_os_ids.update(os_event_ids)
         enqueued += 1
 
     # Mark all as processed

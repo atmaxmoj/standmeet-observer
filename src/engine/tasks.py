@@ -112,7 +112,6 @@ def on_new_data():
         )
 
         if not kept:
-            # All noise — mark everything processed
             _mark_processed(conn, all_screen_ids, all_audio_ids, all_os_ids)
             return
 
@@ -135,7 +134,7 @@ def on_new_data():
             len(windows), len(all_raw), len(remainder),
         )
 
-        # Enqueue episode processing — only IDs, lightweight
+        # Enqueue episode processing
         for window in windows:
             screen_ids = [f.id for f in window if f.source == "capture"]
             audio_ids = [f.id for f in window if f.source == "audio"]
