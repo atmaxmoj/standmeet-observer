@@ -75,9 +75,17 @@ test.describe("Dashboard", () => {
     await page.screenshot({ path: "tests/screenshots/os-events.png", fullPage: true });
   });
 
+  test("Logs tab loads", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("tab", { name: "Logs" }).click();
+    const panel = page.getByTestId("logs-panel");
+    await expect(panel).toBeVisible({ timeout: 10000 });
+    await page.screenshot({ path: "tests/screenshots/logs.png", fullPage: true });
+  });
+
   test("tab switching works", async ({ page }) => {
     await page.goto("/");
-    for (const tab of ["Capture", "Audio", "OS Events", "Episodes", "Playbook", "Usage"]) {
+    for (const tab of ["Capture", "Audio", "OS Events", "Episodes", "Playbook", "Usage", "Logs"]) {
       await page.getByRole("tab", { name: tab }).click();
       await expect(page.getByRole("tab", { name: tab })).toHaveAttribute(
         "aria-selected",

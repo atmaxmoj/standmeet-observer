@@ -334,3 +334,60 @@ class TestPipelineControl:
             "timestamp": "2026-03-14T10:00:00+00:00",
         })
         assert resp.json()["id"] == 1
+
+
+@pytest.mark.asyncio
+class TestPipelineLogs:
+    async def test_empty_logs(self, client):
+        resp = await client.get("/engine/logs")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["logs"] == []
+        assert data["total"] == 0
+
+    async def test_logs_returned(self, client, db):
+        await db.insert_pipeline_log(
+            stage="episode",
+            prompt="test prompt",
+            response="test response",
+            model="haiku",
+            input_tokens=100,
+            output_tokens=50,
+            cost_usd=0.001,
+        )
+        resp = await client.get("/engine/logs")
+        data = resp.json()
+        assert data["total"] == 1
+        log = data["logs"][0]
+        assert log["stage"] == "episode"
+        assert log["prompt"] == "test prompt"
+        assert log["response"] == "test response"
+        assert log["model"] == "haiku"
+        assert log["input_tokens"] == 100
+        assert log["cost_usd"] == 0.001
+
+    async def test_logs_pagination(self, client, db):
+        for i in range(5):
+            await db.insert_pipeline_log(
+                stage="episode", prompt=f"p{i}", response=f"r{i}",
+                model="haiku",
+            )
+        resp = await client.get("/engine/logs?limit=2&offset=0")
+        data = resp.json()
+        assert data["total"] == 5
+        assert len(data["logs"]) == 2
+        # Most recent first
+        assert data["logs"][0]["prompt"] == "p4"
+
+    async def test_distill_stage_logged(self, client, db):
+        await db.insert_pipeline_log(
+            stage="distill",
+            prompt="distill prompt",
+            response="distill response",
+            model="opus",
+            input_tokens=5000,
+            output_tokens=2000,
+            cost_usd=0.05,
+        )
+        resp = await client.get("/engine/logs")
+        assert resp.json()["logs"][0]["stage"] == "distill"

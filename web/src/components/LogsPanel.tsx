@@ -7,8 +7,49 @@ import { Pagination } from "@/components/Pagination";
 
 const PAGE_SIZE = 10;
 
-function truncate(text: string, max: number): string {
-  return text.length > max ? text.slice(0, max) + "…" : text;
+function LogDetail({ log }: { log: PipelineLog }) {
+  return (
+    <CardContent className="space-y-3" onClick={(e) => e.stopPropagation()}>
+      <div>
+        <h4 className="text-xs font-medium text-muted-foreground mb-1">Prompt</h4>
+        <pre className="text-xs whitespace-pre-wrap bg-muted/50 rounded p-3 max-h-60 overflow-auto">
+          {log.prompt}
+        </pre>
+      </div>
+      <div>
+        <h4 className="text-xs font-medium text-muted-foreground mb-1">Response</h4>
+        <pre className="text-xs whitespace-pre-wrap bg-muted/50 rounded p-3 max-h-60 overflow-auto">
+          {log.response}
+        </pre>
+      </div>
+    </CardContent>
+  );
+}
+
+function LogCard({ log, expanded, onToggle }: { log: PipelineLog; expanded: boolean; onToggle: () => void }) {
+  const preview = log.response.length > 100 ? log.response.slice(0, 100) + "…" : log.response;
+  return (
+    <Card className="cursor-pointer" onClick={onToggle} data-testid="log-card">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm font-normal flex items-center gap-2">
+          <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+            log.stage === "distill" ? "bg-purple-500/15 text-purple-400" : "bg-blue-500/15 text-blue-400"
+          }`}>
+            {log.stage}
+          </span>
+          <span className="text-muted-foreground">{log.model}</span>
+          {!expanded && <span className="text-muted-foreground truncate">{preview}</span>}
+        </CardTitle>
+        <CardDescription className="flex gap-4 text-xs">
+          <span>#{log.id}</span>
+          <span>{log.input_tokens.toLocaleString()} in / {log.output_tokens.toLocaleString()} out</span>
+          <span>${log.cost_usd.toFixed(4)}</span>
+          <span>{timeAgo(log.created_at)}</span>
+        </CardDescription>
+      </CardHeader>
+      {expanded && <LogDetail log={log} />}
+    </Card>
+  );
 }
 
 export function LogsPanel() {
@@ -38,9 +79,7 @@ export function LogsPanel() {
   return (
     <div className="space-y-4 pb-16" data-testid="logs-panel">
       <div className="flex justify-end">
-        <Button variant="outline" size="sm" onClick={() => load(page)}>
-          Refresh
-        </Button>
+        <Button variant="outline" size="sm" onClick={() => load(page)}>Refresh</Button>
       </div>
 
       {loading ? (
@@ -52,57 +91,14 @@ export function LogsPanel() {
         </div>
       ) : (
         <div className="space-y-3">
-          {logs.map((log) => {
-            const isExpanded = expanded === log.id;
-            return (
-              <Card
-                key={log.id}
-                className="cursor-pointer"
-                onClick={() => setExpanded(isExpanded ? null : log.id)}
-                data-testid="log-card"
-              >
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-normal flex items-center gap-2">
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                      log.stage === "distill"
-                        ? "bg-purple-500/15 text-purple-400"
-                        : "bg-blue-500/15 text-blue-400"
-                    }`}>
-                      {log.stage}
-                    </span>
-                    <span className="text-muted-foreground">{log.model}</span>
-                    {!isExpanded && (
-                      <span className="text-muted-foreground truncate">
-                        {truncate(log.response, 100)}
-                      </span>
-                    )}
-                  </CardTitle>
-                  <CardDescription className="flex gap-4 text-xs">
-                    <span>#{log.id}</span>
-                    <span>{log.input_tokens.toLocaleString()} in / {log.output_tokens.toLocaleString()} out</span>
-                    <span>${log.cost_usd.toFixed(4)}</span>
-                    <span>{timeAgo(log.created_at)}</span>
-                  </CardDescription>
-                </CardHeader>
-                {isExpanded && (
-                  <CardContent className="space-y-3" onClick={(e) => e.stopPropagation()}>
-                    <div>
-                      <h4 className="text-xs font-medium text-muted-foreground mb-1">Prompt</h4>
-                      <pre className="text-xs whitespace-pre-wrap bg-muted/50 rounded p-3 max-h-60 overflow-auto">
-                        {log.prompt}
-                      </pre>
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-medium text-muted-foreground mb-1">Response</h4>
-                      <pre className="text-xs whitespace-pre-wrap bg-muted/50 rounded p-3 max-h-60 overflow-auto">
-                        {log.response}
-                      </pre>
-                    </div>
-                  </CardContent>
-                )}
-              </Card>
-            );
-          })}
+          {logs.map((log) => (
+            <LogCard
+              key={log.id}
+              log={log}
+              expanded={expanded === log.id}
+              onToggle={() => setExpanded(expanded === log.id ? null : log.id)}
+            />
+          ))}
         </div>
       )}
 
