@@ -53,25 +53,19 @@ function Header() {
     <header className="flex items-center justify-between px-6 py-4 border-b" data-testid="header">
       <h1 className="text-sm font-semibold tracking-wider">BISIMULATOR</h1>
       <div className="flex items-center gap-5 text-xs text-muted-foreground">
-        <span className="flex items-center gap-1.5" data-testid="engine-status">
-          <span
-            className={`w-2 h-2 rounded-full ${
-              status.online ? (paused ? "bg-yellow-500" : "bg-green-500") : "bg-destructive"
-            }`}
-          />
-          Engine
-        </span>
         <button
           onClick={togglePipeline}
           disabled={toggling || !status.online}
           data-testid="pipeline-toggle"
-          className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
-            paused
-              ? "bg-green-500/15 text-green-400 hover:bg-green-500/25"
-              : "bg-yellow-500/15 text-yellow-400 hover:bg-yellow-500/25"
-          } disabled:opacity-50`}
+          className="flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-medium transition-colors hover:bg-accent disabled:opacity-50"
         >
-          {paused ? "Resume" : "Pause"}
+          <span
+            data-testid="engine-status"
+            className={`w-2 h-2 rounded-full ${
+              status.online ? (paused ? "bg-yellow-500 animate-pulse" : "bg-green-500") : "bg-destructive"
+            }`}
+          />
+          {paused ? "Paused" : "Recording"}
         </button>
         <span data-testid="episode-count">{status.episodes} episodes</span>
         <span data-testid="playbook-count">{status.playbooks} playbooks</span>
