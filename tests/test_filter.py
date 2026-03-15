@@ -43,6 +43,21 @@ class TestShouldKeep:
         f2 = _frame(source="audio", app_name="microphone", text="   ")
         assert should_keep(f2) is False
 
+    def test_os_event_passes_through(self):
+        f = _frame(source="os_event", app_name="shell_command", text="git push origin main")
+        assert should_keep(f) is True
+
+    def test_os_event_empty_data_filtered(self):
+        f = _frame(source="os_event", app_name="shell_command", text="")
+        assert should_keep(f) is False
+        f2 = _frame(source="os_event", app_name="browser_url", text="   ")
+        assert should_keep(f2) is False
+
+    def test_os_event_not_affected_by_ignore_apps(self):
+        """os_events use event_type as app_name, should never be filtered by IGNORE_APPS."""
+        f = _frame(source="os_event", app_name="Finder", text="some event data here")
+        assert should_keep(f) is True
+
 
 class TestDetectWindows:
     def test_empty_input(self):

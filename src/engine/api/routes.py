@@ -214,6 +214,7 @@ async def backfill(request: Request):
     # Reset all to unprocessed
     conn.execute("UPDATE frames SET processed = 0")
     conn.execute("UPDATE audio_frames SET processed = 0")
+    conn.execute("UPDATE os_events SET processed = 0")
     conn.commit()
 
     # Read ALL frames (no limit)
@@ -246,7 +247,21 @@ async def backfill(request: Request):
         for r in audio_rows
     ]
 
-    all_raw = screen_frames + audio_frames
+    os_rows = conn.execute(
+        "SELECT id, timestamp, event_type, source, data "
+        "FROM os_events ORDER BY timestamp",
+    ).fetchall()
+    os_event_frames = [
+        Frame(
+            id=r["id"], source="os_event",
+            text=r["data"] or "", app_name=r["event_type"] or "",
+            window_name=r["source"] or "",
+            timestamp=r["timestamp"] or "",
+        )
+        for r in os_rows
+    ]
+
+    all_raw = screen_frames + audio_frames + os_event_frames
     kept = sorted(
         [f for f in all_raw if should_keep(f)],
         key=lambda f: f.timestamp,
@@ -256,6 +271,7 @@ async def backfill(request: Request):
         # Mark all as processed
         conn.execute("UPDATE frames SET processed = 1")
         conn.execute("UPDATE audio_frames SET processed = 1")
+        conn.execute("UPDATE os_events SET processed = 1")
         conn.commit()
         conn.close()
         return {"windows": 0, "message": "All frames filtered as noise"}
@@ -270,17 +286,21 @@ async def backfill(request: Request):
     enqueued = 0
     all_screen_ids = set()
     all_audio_ids = set()
+    all_os_ids = set()
     for window in windows:
         screen_ids = [f.id for f in window if f.source == "capture"]
         audio_ids = [f.id for f in window if f.source == "audio"]
-        process_episode(screen_ids, audio_ids)
+        os_event_ids = [f.id for f in window if f.source == "os_event"]
+        process_episode(screen_ids, audio_ids, os_event_ids)
         all_screen_ids.update(screen_ids)
         all_audio_ids.update(audio_ids)
+        all_os_ids.update(os_event_ids)
         enqueued += 1
 
     # Mark all as processed
     conn.execute("UPDATE frames SET processed = 1")
     conn.execute("UPDATE audio_frames SET processed = 1")
+    conn.execute("UPDATE os_events SET processed = 1")
     conn.commit()
     conn.close()
 

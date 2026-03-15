@@ -83,12 +83,27 @@ def on_new_data():
             for r in audio_rows
         ]
 
-        if not screen_frames and not audio_frames:
+        os_rows = conn.execute(
+            "SELECT id, timestamp, event_type, source, data "
+            "FROM os_events WHERE processed = 0 ORDER BY timestamp LIMIT 200",
+        ).fetchall()
+        os_frames = [
+            Frame(
+                id=r["id"], source="os_event",
+                text=r["data"] or "", app_name=r["event_type"] or "",
+                window_name=r["source"] or "",
+                timestamp=r["timestamp"] or "",
+            )
+            for r in os_rows
+        ]
+
+        if not screen_frames and not audio_frames and not os_frames:
             return
 
-        all_raw = screen_frames + audio_frames
+        all_raw = screen_frames + audio_frames + os_frames
         all_screen_ids = {f.id for f in screen_frames}
         all_audio_ids = {f.id for f in audio_frames}
+        all_os_ids = {f.id for f in os_frames}
 
         # Filter noise + sort
         kept = sorted(
@@ -98,7 +113,7 @@ def on_new_data():
 
         if not kept:
             # All noise — mark everything processed
-            _mark_processed(conn, all_screen_ids, all_audio_ids)
+            _mark_processed(conn, all_screen_ids, all_audio_ids, all_os_ids)
             return
 
         # Detect windows
@@ -124,7 +139,8 @@ def on_new_data():
         for window in windows:
             screen_ids = [f.id for f in window if f.source == "capture"]
             audio_ids = [f.id for f in window if f.source == "audio"]
-            process_episode(screen_ids, audio_ids)
+            os_event_ids = [f.id for f in window if f.source == "os_event"]
+            process_episode(screen_ids, audio_ids, os_event_ids)
 
         # Mark everything EXCEPT remainder as processed
         remainder_ids = {f.id for f in remainder}
@@ -132,6 +148,7 @@ def on_new_data():
             conn,
             all_screen_ids - remainder_ids,
             all_audio_ids - remainder_ids,
+            all_os_ids - remainder_ids,
         )
 
     except Exception:
@@ -144,6 +161,7 @@ def _mark_processed(
     conn: sqlite3.Connection,
     screen_ids: set[int],
     audio_ids: set[int],
+    os_event_ids: set[int] | None = None,
 ):
     """Mark frames as processed in DB."""
     if screen_ids:
@@ -158,6 +176,12 @@ def _mark_processed(
             f"UPDATE audio_frames SET processed = 1 WHERE id IN ({placeholders})",
             list(audio_ids),
         )
+    if os_event_ids:
+        placeholders = ",".join("?" * len(os_event_ids))
+        conn.execute(
+            f"UPDATE os_events SET processed = 1 WHERE id IN ({placeholders})",
+            list(os_event_ids),
+        )
     conn.commit()
 
 
@@ -168,6 +192,7 @@ def _load_frames(
     conn: sqlite3.Connection,
     screen_ids: list[int],
     audio_ids: list[int],
+    os_event_ids: list[int] | None = None,
 ) -> list[Frame]:
     """Load full frame data from DB by IDs."""
     frames: list[Frame] = []
@@ -200,6 +225,22 @@ def _load_frames(
                 id=r["id"], source="audio",
                 text=r["text"] or "", app_name="microphone",
                 window_name=f"audio/{r['language'] or 'unknown'}",
+                timestamp=r["timestamp"] or "",
+            )
+            for r in rows
+        )
+    if os_event_ids:
+        placeholders = ",".join("?" * len(os_event_ids))
+        rows = conn.execute(
+            f"SELECT id, timestamp, event_type, source, data "
+            f"FROM os_events WHERE id IN ({placeholders}) ORDER BY timestamp",
+            os_event_ids,
+        ).fetchall()
+        frames.extend(
+            Frame(
+                id=r["id"], source="os_event",
+                text=r["data"] or "", app_name=r["event_type"] or "",
+                window_name=r["source"] or "",
                 timestamp=r["timestamp"] or "",
             )
             for r in rows
@@ -257,14 +298,18 @@ def _store_episodes(
 
 
 @huey.task(retries=2, retry_delay=30)
-def process_episode(screen_ids: list[int], audio_ids: list[int]):
+def process_episode(
+    screen_ids: list[int],
+    audio_ids: list[int],
+    os_event_ids: list[int] | None = None,
+):
     """Read frame data from DB, call Claude Agent SDK, store episodes."""
-    if not screen_ids and not audio_ids:
+    if not screen_ids and not audio_ids and not os_event_ids:
         return
 
     conn = _get_conn()
     try:
-        frames = _load_frames(conn, screen_ids, audio_ids)
+        frames = _load_frames(conn, screen_ids, audio_ids, os_event_ids)
         if not frames:
             return
 

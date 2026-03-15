@@ -26,9 +26,9 @@ MIN_TEXT_LENGTH = 10
 
 
 def should_keep(frame: Frame) -> bool:
-    if frame.source == "audio":
+    if frame.source in ("os_event", "audio"):
         if not frame.text or not frame.text.strip():
-            logger.debug("filtered out audio frame id=%d (empty text)", frame.id)
+            logger.debug("filtered out %s id=%d (empty text)", frame.source, frame.id)
             return False
         return True
     if frame.app_name in IGNORE_APPS:

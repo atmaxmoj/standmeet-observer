@@ -8,6 +8,7 @@ Verifies:
 5. Audio frames included alongside screen frames
 6. Empty DB returns 0 windows
 7. Noise-only frames return 0 windows, all marked processed
+8. OS events included alongside screen/audio frames
 """
 
 import sqlite3
@@ -105,6 +106,23 @@ def _insert_audio_frames(db_path: str, count: int, minutes_ago: int):
     return ids
 
 
+def _insert_os_events(db_path: str, count: int, minutes_ago: int):
+    conn = sqlite3.connect(db_path)
+    base = datetime.now(timezone.utc) - timedelta(minutes=minutes_ago)
+    ids = []
+    for i in range(count):
+        t = (base + timedelta(minutes=i)).isoformat()
+        conn.execute(
+            "INSERT INTO os_events (timestamp, event_type, source, data) "
+            "VALUES (?, ?, ?, ?)",
+            (t, "shell_command", "zsh", f"git commit -m 'change number {i}'"),
+        )
+        ids.append(conn.execute("SELECT last_insert_rowid()").fetchone()[0])
+    conn.commit()
+    conn.close()
+    return ids
+
+
 def _count_processed(db_path: str, table: str, processed: int) -> int:
     conn = sqlite3.connect(db_path)
     c = conn.execute(f"SELECT COUNT(*) FROM {table} WHERE processed = ?", (processed,)).fetchone()[0]
@@ -174,7 +192,7 @@ class TestBackfillEndpoint:
         # Collect all screen IDs passed to process_episode
         all_screen_ids = []
         for call in mock_engine_tasks.call_args_list:
-            screen_ids, audio_ids = call[0]
+            screen_ids = call[0][0]
             all_screen_ids.extend(screen_ids)
 
         assert sorted(all_screen_ids) == sorted(inserted_ids)
@@ -192,7 +210,7 @@ class TestBackfillEndpoint:
         # Collect all audio IDs passed to process_episode
         all_audio_ids = []
         for call in mock_engine_tasks.call_args_list:
-            _, a_ids = call[0]
+            a_ids = call[0][1]
             all_audio_ids.extend(a_ids)
 
         assert sorted(all_audio_ids) == sorted(audio_ids)
@@ -273,3 +291,72 @@ class TestBackfillEndpoint:
         # Backfill appends remainder as a window, so these should be processed
         assert data["windows"] >= 1, "Backfill should force-close remainder into a window"
         assert mock_engine_tasks.call_count >= 1
+
+    async def test_os_events_included(self, client, db, mock_engine_tasks):
+        """OS events should be included alongside screen frames in backfill."""
+        _insert_screen_frames(db.path, count=5, minutes_ago=60)
+        os_ids = _insert_os_events(db.path, count=3, minutes_ago=60)
+
+        resp = await client.post("/engine/backfill")
+
+        data = resp.json()
+        assert data["total_frames"] == 8  # 5 screen + 3 os_events
+        assert data["windows"] >= 1
+
+        # Collect all os_event IDs passed to process_episode
+        all_os_ids = []
+        for call in mock_engine_tasks.call_args_list:
+            os_event_ids = call[0][2]
+            all_os_ids.extend(os_event_ids)
+
+        assert sorted(all_os_ids) == sorted(os_ids)
+
+        # OS events also marked processed
+        assert _count_processed(db.path, "os_events", 1) == 3
+
+    async def test_os_events_marked_processed_when_noise(self, client, db, mock_engine_tasks):
+        """OS events with empty data should be filtered, but still marked processed."""
+        conn = sqlite3.connect(db.path)
+        old = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+        # Insert noise-only screen frames + empty os_events
+        conn.execute(
+            "INSERT INTO frames (timestamp, app_name, window_name, text, display_id, image_hash) "
+            "VALUES (?, 'Finder', 'Desktop', 'x', 1, 'n1')", (old,),
+        )
+        conn.execute(
+            "INSERT INTO os_events (timestamp, event_type, source, data) "
+            "VALUES (?, 'shell_command', 'zsh', '')", (old,),
+        )
+        conn.commit()
+        conn.close()
+
+        resp = await client.post("/engine/backfill")
+
+        data = resp.json()
+        assert data["windows"] == 0
+        assert _count_processed(db.path, "os_events", 1) == 1
+
+    async def test_all_three_sources_in_window(self, client, db, mock_engine_tasks):
+        """Screen + audio + os_event all in same window → all IDs passed to process_episode."""
+        screen_ids = _insert_screen_frames(db.path, count=3, minutes_ago=60)
+        audio_ids = _insert_audio_frames(db.path, count=2, minutes_ago=60)
+        os_ids = _insert_os_events(db.path, count=2, minutes_ago=60)
+
+        resp = await client.post("/engine/backfill")
+
+        data = resp.json()
+        assert data["total_frames"] == 7
+        assert data["windows"] >= 1
+
+        # Collect all IDs from all calls
+        all_screen = []
+        all_audio = []
+        all_os = []
+        for call in mock_engine_tasks.call_args_list:
+            all_screen.extend(call[0][0])
+            all_audio.extend(call[0][1])
+            all_os.extend(call[0][2])
+
+        assert sorted(all_screen) == sorted(screen_ids)
+        assert sorted(all_audio) == sorted(audio_ids)
+        assert sorted(all_os) == sorted(os_ids)

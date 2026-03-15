@@ -106,6 +106,7 @@ class DB:
         for sql in [
             "ALTER TABLE frames ADD COLUMN processed INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE audio_frames ADD COLUMN processed INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE os_events ADD COLUMN processed INTEGER NOT NULL DEFAULT 0",
         ]:
             try:
                 await self._conn.execute(sql)
@@ -115,6 +116,7 @@ class DB:
         for sql in [
             "CREATE INDEX IF NOT EXISTS idx_frames_processed ON frames(processed)",
             "CREATE INDEX IF NOT EXISTS idx_audio_frames_processed ON audio_frames(processed)",
+            "CREATE INDEX IF NOT EXISTS idx_os_events_processed ON os_events(processed)",
         ]:
             await self._conn.execute(sql)
         await self._conn.commit()
