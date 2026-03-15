@@ -53,9 +53,15 @@ class OsEventIngest(BaseModel):
 # -- Ingest endpoints (capture/audio daemons POST here) --
 
 
+async def _is_paused(db) -> bool:
+    return bool(await db.get_state("pipeline_paused", 0))
+
+
 @router.post("/ingest/frame")
 async def ingest_frame(request: Request, body: FrameIngest):
     db = request.app.state.db
+    if await _is_paused(db):
+        return {"id": None, "paused": True}
     row_id = await db.insert_frame(
         timestamp=body.timestamp,
         app_name=body.app_name,
@@ -72,6 +78,8 @@ async def ingest_frame(request: Request, body: FrameIngest):
 @router.post("/ingest/audio")
 async def ingest_audio(request: Request, body: AudioFrameIngest):
     db = request.app.state.db
+    if await _is_paused(db):
+        return {"id": None, "paused": True}
     row_id = await db.insert_audio_frame(
         timestamp=body.timestamp,
         duration_seconds=body.duration_seconds,
@@ -87,6 +95,8 @@ async def ingest_audio(request: Request, body: AudioFrameIngest):
 @router.post("/ingest/os-event")
 async def ingest_os_event(request: Request, body: OsEventIngest):
     db = request.app.state.db
+    if await _is_paused(db):
+        return {"id": None, "paused": True}
     row_id = await db.insert_os_event(
         timestamp=body.timestamp,
         event_type=body.event_type,
@@ -304,6 +314,30 @@ async def backfill(request: Request):
         "kept_frames": len(kept),
         "message": f"Enqueued {enqueued} episodes for processing",
     }
+
+
+# -- Pipeline control --
+
+
+@router.get("/engine/pipeline")
+async def pipeline_status(request: Request):
+    db = request.app.state.db
+    paused = await db.get_state("pipeline_paused", 0)
+    return {"paused": bool(paused)}
+
+
+@router.post("/engine/pipeline/pause")
+async def pipeline_pause(request: Request):
+    db = request.app.state.db
+    await db.set_state("pipeline_paused", 1)
+    return {"paused": True}
+
+
+@router.post("/engine/pipeline/resume")
+async def pipeline_resume(request: Request):
+    db = request.app.state.db
+    await db.set_state("pipeline_paused", 0)
+    return {"paused": False}
 
 
 # -- Test helper --

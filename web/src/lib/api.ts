@@ -108,4 +108,7 @@ export const api = {
     ),
   usage: (days = 30) => get<UsageSummary>(`/engine/usage?days=${days}`),
   distill: () => post<{ playbook_entries_updated: number }>("/engine/distill"),
+  pipeline: () => get<{ paused: boolean }>("/engine/pipeline"),
+  pipelinePause: () => post<{ paused: boolean }>("/engine/pipeline/pause"),
+  pipelineResume: () => post<{ paused: boolean }>("/engine/pipeline/resume"),
 };

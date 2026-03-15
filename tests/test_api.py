@@ -1,4 +1,4 @@
-"""Tests for engine API: ingest endpoints, query endpoints, frame image serving."""
+"""Tests for engine API: ingest endpoints, query endpoints, frame image serving, pipeline control."""
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock
@@ -275,3 +275,62 @@ class TestPlaybooks:
         assert resp.status_code == 200
         data = resp.json()
         assert len(data["playbooks"]) == 1
+
+
+@pytest.mark.asyncio
+class TestPipelineControl:
+    async def test_pipeline_status_default(self, client):
+        resp = await client.get("/engine/pipeline")
+        assert resp.status_code == 200
+        assert resp.json()["paused"] is False
+
+    async def test_pause_and_resume(self, client):
+        resp = await client.post("/engine/pipeline/pause")
+        assert resp.json()["paused"] is True
+
+        resp = await client.get("/engine/pipeline")
+        assert resp.json()["paused"] is True
+
+        resp = await client.post("/engine/pipeline/resume")
+        assert resp.json()["paused"] is False
+
+        resp = await client.get("/engine/pipeline")
+        assert resp.json()["paused"] is False
+
+    async def test_ingest_rejected_when_paused(self, client, db):
+        await client.post("/engine/pipeline/pause")
+
+        # All three ingest endpoints should reject data
+        resp = await client.post("/ingest/frame", json={
+            "timestamp": "2026-03-14T10:00:00+00:00",
+        })
+        assert resp.json()["id"] is None
+        assert resp.json()["paused"] is True
+
+        resp = await client.post("/ingest/audio", json={
+            "timestamp": "2026-03-14T10:00:00+00:00",
+            "duration_seconds": 5.0,
+            "text": "hello",
+        })
+        assert resp.json()["id"] is None
+
+        resp = await client.post("/ingest/os-event", json={
+            "timestamp": "2026-03-14T10:00:00+00:00",
+            "event_type": "shell_command",
+            "source": "zsh",
+            "data": "ls",
+        })
+        assert resp.json()["id"] is None
+
+        # DB should be empty
+        frames, total = await db.get_frames()
+        assert total == 0
+
+    async def test_ingest_works_after_resume(self, client, db):
+        await client.post("/engine/pipeline/pause")
+        await client.post("/engine/pipeline/resume")
+
+        resp = await client.post("/ingest/frame", json={
+            "timestamp": "2026-03-14T10:00:00+00:00",
+        })
+        assert resp.json()["id"] == 1
