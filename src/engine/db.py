@@ -495,7 +495,27 @@ class DB:
         ) as cur:
             row = await cur.fetchone()
             playbook_count = row["c"]
+        # Check if capture is alive: last frame within 2 minutes
+        last_frame_at = None
+        async with self._conn.execute(
+            "SELECT timestamp FROM frames ORDER BY id DESC LIMIT 1"
+        ) as cur:
+            row = await cur.fetchone()
+            if row:
+                last_frame_at = row["timestamp"]
+
+        capture_alive = False
+        if last_frame_at:
+            from datetime import datetime, timezone, timedelta
+            try:
+                ts = datetime.fromisoformat(last_frame_at)
+                capture_alive = (datetime.now(timezone.utc) - ts) < timedelta(minutes=2)
+            except Exception:
+                pass
+
         return {
             "episode_count": episode_count,
             "playbook_count": playbook_count,
+            "capture_alive": capture_alive,
+            "last_frame_at": last_frame_at,
         }

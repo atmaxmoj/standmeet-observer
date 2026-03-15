@@ -96,6 +96,7 @@ export interface UsageSummary {
 interface Status {
   episode_count: number;
   playbook_count: number;
+  capture_alive: boolean;
 }
 
 export interface PipelineLog {

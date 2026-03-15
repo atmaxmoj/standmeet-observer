@@ -15,6 +15,7 @@ function Header() {
     episodes: 0,
     playbooks: 0,
     cost: 0,
+    captureAlive: false,
   });
   const [paused, setPaused] = useState(false);
   const [toggling, setToggling] = useState(false);
@@ -28,6 +29,7 @@ function Header() {
           episodes: s.episode_count,
           playbooks: s.playbook_count,
           cost: u.total_cost_usd,
+          captureAlive: s.capture_alive,
         });
         setPaused(p.paused);
       } catch {
@@ -53,23 +55,31 @@ function Header() {
     <header className="flex items-center justify-between px-6 py-4 border-b" data-testid="header">
       <h1 className="text-sm font-semibold tracking-wider">BISIMULATOR</h1>
       <div className="flex items-center gap-5 text-xs text-muted-foreground">
+        <span className="flex items-center gap-1.5" data-testid="engine-status">
+          <span className={`w-2 h-2 rounded-full ${
+            !status.online ? "bg-destructive"
+              : !status.captureAlive ? "bg-destructive animate-pulse"
+              : paused ? "bg-yellow-500"
+              : "bg-green-500 animate-pulse"
+          }`} />
+          <span className="text-[10px]">
+            {!status.online ? "Offline"
+              : !status.captureAlive ? "Capture down"
+              : paused ? "Paused"
+              : "Recording"}
+          </span>
+        </span>
+        <span data-testid="episode-count">{status.episodes} episodes</span>
+        <span data-testid="playbook-count">{status.playbooks} playbooks</span>
+        <span className="font-medium text-primary" data-testid="total-cost">${status.cost.toFixed(4)}</span>
         <button
           onClick={togglePipeline}
           disabled={toggling || !status.online}
           data-testid="pipeline-toggle"
-          className="flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-medium transition-colors hover:bg-accent disabled:opacity-50"
+          className={`relative w-8 h-4 rounded-full transition-colors disabled:opacity-50 ${paused ? "bg-muted" : "bg-primary"}`}
         >
-          <span
-            data-testid="engine-status"
-            className={`w-2 h-2 rounded-full ${
-              status.online ? (paused ? "bg-yellow-500 animate-pulse" : "bg-green-500 animate-pulse") : "bg-destructive"
-            }`}
-          />
-          {paused ? "Paused" : "Recording"}
+          <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${paused ? "left-0.5" : "left-[18px]"}`} />
         </button>
-        <span data-testid="episode-count">{status.episodes} episodes</span>
-        <span data-testid="playbook-count">{status.playbooks} playbooks</span>
-        <span className="font-medium text-primary" data-testid="total-cost">${status.cost.toFixed(4)}</span>
       </div>
     </header>
   );
