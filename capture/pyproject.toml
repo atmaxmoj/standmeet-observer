@@ -1,7 +1,7 @@
 [project]
-name = "bisimulator-capture"
+name = "observer-capture"
 version = "0.1.0"
-description = "Screen capture daemon for bisimulator (macOS + Windows)"
+description = "Screen capture daemon for observer (macOS + Windows)"
 requires-python = ">=3.12"
 dependencies = []
 

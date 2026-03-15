@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bisimulator CLI — cross-platform task runner.
+"""Observer CLI — cross-platform task runner.
 
 Usage:
     npm run setup      # First-time install
@@ -21,7 +21,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).parent
-DATA_DIR = Path.home() / ".bisimulator"
+DATA_DIR = Path.home() / ".observer"
 PID_DIR = DATA_DIR / "pids"
 LOG_DIR = DATA_DIR / "logs"
 
@@ -226,7 +226,7 @@ def check_macos_permissions():
 
 
 def cmd_start():
-    print("==> Starting bisimulator...")
+    print("==> Starting observer...")
     check_prereqs()
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -246,7 +246,7 @@ def cmd_start():
 
 
 def cmd_stop():
-    print("==> Stopping bisimulator...")
+    print("==> Stopping observer...")
     daemon_stop("capture")
     daemon_stop("audio")
     run(["docker", "compose", "down"], cwd=ROOT)
@@ -348,7 +348,7 @@ def cmd_restart():
 def _launchd_plist(name: str, cwd: Path) -> str:
     """Generate a launchd plist for a daemon."""
     uv_path = shutil.which("uv") or "/usr/local/bin/uv"
-    label = f"com.bisimulator.{name}"
+    label = f"com.observer.{name}"
     log = str(LOG_DIR / f"{name}.log")
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -384,7 +384,7 @@ def _launchd_plist(name: str, cwd: Path) -> str:
 
 
 def _plist_path(name: str) -> Path:
-    return Path.home() / "Library" / "LaunchAgents" / f"com.bisimulator.{name}.plist"
+    return Path.home() / "Library" / "LaunchAgents" / f"com.observer.{name}.plist"
 
 
 def cmd_watchdog():

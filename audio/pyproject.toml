@@ -1,7 +1,7 @@
 [project]
-name = "bisimulator-audio"
+name = "observer-audio"
 version = "0.1.0"
-description = "Cross-platform audio capture daemon for bisimulator"
+description = "Cross-platform audio capture daemon for observer"
 requires-python = ">=3.11"
 dependencies = [
     "sounddevice>=0.5",

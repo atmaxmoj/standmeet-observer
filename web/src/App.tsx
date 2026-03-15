@@ -53,7 +53,7 @@ function Header() {
 
   return (
     <header className="flex items-center justify-between px-6 py-4 border-b" data-testid="header">
-      <h1 className="text-sm font-semibold tracking-wider">BISIMULATOR</h1>
+      <h1 className="text-sm font-semibold tracking-wider">OBSERVER</h1>
       <div className="flex items-center gap-5 text-xs text-muted-foreground">
         <span className="flex items-center gap-1.5" data-testid="engine-status">
           <span className={`w-2 h-2 rounded-full ${

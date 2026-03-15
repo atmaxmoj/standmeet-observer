@@ -17,7 +17,7 @@ WHISPER_LANGUAGE = os.environ.get("WHISPER_LANGUAGE", None)  # None = auto-detec
 # Paths
 CHUNKS_DIR = os.environ.get(
     "AUDIO_CHUNKS_DIR",
-    str(Path.home() / ".bisimulator" / "audio_chunks"),
+    str(Path.home() / ".observer" / "audio_chunks"),
 )
 
 # Output device for system audio capture (e.g. "BlackHole 2ch" on macOS)

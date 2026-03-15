@@ -1,5 +1,5 @@
 [project]
-name = "bisimulator"
+name = "observer"
 version = "0.1.0"
 description = "Behavioral distillation engine"
 requires-python = ">=3.12"

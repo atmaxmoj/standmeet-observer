@@ -12,7 +12,7 @@ from cli import _launchd_plist, _plist_path
 class TestLaunchdPlist:
     def test_plist_contains_label(self):
         plist = _launchd_plist("capture", Path("/tmp/capture"))
-        assert "com.bisimulator.capture" in plist
+        assert "com.observer.capture" in plist
 
     def test_plist_contains_keep_alive(self):
         plist = _launchd_plist("capture", Path("/tmp/capture"))
@@ -36,5 +36,5 @@ class TestLaunchdPlist:
 
     def test_plist_path(self):
         p = _plist_path("capture")
-        assert p.name == "com.bisimulator.capture.plist"
+        assert p.name == "com.observer.capture.plist"
         assert "LaunchAgents" in str(p)

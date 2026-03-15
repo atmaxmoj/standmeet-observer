@@ -1,4 +1,4 @@
-"""Bisimulator: behavioral distillation engine.
+"""Observer: behavioral distillation engine.
 
 API server (FastAPI) + Huey task queue consumer in background thread.
 """
@@ -20,7 +20,7 @@ logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.DEBUG),
     format="%(asctime)s %(name)s %(levelname)s %(message)s",
 )
-logger = logging.getLogger("bisimulator")
+logger = logging.getLogger("observer")
 
 
 def _start_huey_consumer():
@@ -58,16 +58,16 @@ async def lifespan(app: FastAPI):
 
     _start_huey_consumer()
 
-    logger.info("Bisimulator started — Huey handles pipeline scheduling")
+    logger.info("Observer started — Huey handles pipeline scheduling")
 
     yield
 
     # Huey consumer thread is daemon, exits with process
     await db.close()
-    logger.info("Bisimulator stopped")
+    logger.info("Observer stopped")
 
 
-app = FastAPI(title="Bisimulator", lifespan=lifespan)
+app = FastAPI(title="Observer", lifespan=lifespan)
 
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 

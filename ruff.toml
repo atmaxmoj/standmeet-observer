@@ -1,4 +1,4 @@
-# Ruff — Python linter for bisimulator
+# Ruff — Python linter for observer
 # Focus: dead code, large functions/files, unused imports
 
 target-version = "py312"

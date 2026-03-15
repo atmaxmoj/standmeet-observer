@@ -1,5 +1,5 @@
 {
-  "name": "bisimulator",
+  "name": "observer",
   "private": true,
   "scripts": {
     "setup": "uv run python cli.py setup",

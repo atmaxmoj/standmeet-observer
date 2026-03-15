@@ -71,52 +71,6 @@ wheels = [
 ]
 
 [[package]]
-name = "bisimulator"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "aiosqlite" },
-    { name = "anthropic" },
-    { name = "claude-agent-sdk" },
-    { name = "fastapi" },
-    { name = "huey" },
-    { name = "openai" },
-    { name = "pydantic" },
-    { name = "pydantic-settings" },
-    { name = "uvicorn" },
-]
-
-[package.optional-dependencies]
-test = [
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "import-linter" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "aiosqlite", specifier = ">=0.21" },
-    { name = "anthropic", specifier = ">=0.52" },
-    { name = "claude-agent-sdk", specifier = ">=0.1.48" },
-    { name = "fastapi", specifier = ">=0.115" },
-    { name = "huey", specifier = ">=2.5" },
-    { name = "openai", specifier = ">=1.0" },
-    { name = "pydantic", specifier = ">=2.11" },
-    { name = "pydantic-settings", specifier = ">=2.9" },
-    { name = "pytest", marker = "extra == 'test'", specifier = ">=9.0" },
-    { name = "pytest-asyncio", marker = "extra == 'test'", specifier = ">=0.25" },
-    { name = "uvicorn", specifier = ">=0.34" },
-]
-provides-extras = ["test"]
-
-[package.metadata.requires-dev]
-dev = [{ name = "import-linter", specifier = ">=2.11" }]
-
-[[package]]
 name = "certifi"
 version = "2026.2.25"
 source = { registry = "https://pypi.org/simple" }
@@ -603,6 +557,52 @@ sdist = { url = "https://files.pythonhosted.org/packages/d6/54/cfe61301667036ec9
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b3/38/89ba8ad64ae25be8de66a6d463314cf1eb366222074cfda9ee839c56a4b4/mdurl-0.1.2-py3-none-any.whl", hash = "sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8", size = 9979, upload-time = "2022-08-14T12:40:09.779Z" },
 ]
+
+[[package]]
+name = "observer"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "aiosqlite" },
+    { name = "anthropic" },
+    { name = "claude-agent-sdk" },
+    { name = "fastapi" },
+    { name = "huey" },
+    { name = "openai" },
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
+    { name = "uvicorn" },
+]
+
+[package.optional-dependencies]
+test = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "import-linter" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "aiosqlite", specifier = ">=0.21" },
+    { name = "anthropic", specifier = ">=0.52" },
+    { name = "claude-agent-sdk", specifier = ">=0.1.48" },
+    { name = "fastapi", specifier = ">=0.115" },
+    { name = "huey", specifier = ">=2.5" },
+    { name = "openai", specifier = ">=1.0" },
+    { name = "pydantic", specifier = ">=2.11" },
+    { name = "pydantic-settings", specifier = ">=2.9" },
+    { name = "pytest", marker = "extra == 'test'", specifier = ">=9.0" },
+    { name = "pytest-asyncio", marker = "extra == 'test'", specifier = ">=0.25" },
+    { name = "uvicorn", specifier = ">=0.34" },
+]
+provides-extras = ["test"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "import-linter", specifier = ">=2.11" }]
 
 [[package]]
 name = "openai"

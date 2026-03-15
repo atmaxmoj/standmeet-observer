@@ -4,7 +4,7 @@ test.describe("Dashboard", () => {
   test("header shows engine status", async ({ page }) => {
     await page.goto("/");
     const header = page.getByTestId("header");
-    await expect(header).toContainText("BISIMULATOR");
+    await expect(header).toContainText("OBSERVER");
     await expect(page.getByTestId("engine-status")).toBeVisible();
     await expect(page.getByTestId("episode-count")).toBeVisible({ timeout: 10000 });
     await page.screenshot({ path: "tests/screenshots/header.png", fullPage: false });

@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-DATA_DIR = Path(os.environ.get("BISIMULATOR_DATA_DIR", str(Path.home() / ".bisimulator")))
+DATA_DIR = Path(os.environ.get("OBSERVER_DATA_DIR", str(Path.home() / ".observer")))
 
 ENGINE_URL = os.environ.get("ENGINE_URL", "http://localhost:5001")
 
