@@ -3,20 +3,19 @@
 Queue-native design:
 - Ingest endpoints push lightweight signals to queue (no data, just "check now")
 - on_new_data: reads unprocessed frames from DB, detects windows, enqueues episodes
-- process_episode: receives frame IDs, reads full data from DB, calls Haiku
+- process_episode: receives frame IDs, reads full data from DB, calls LLM
 - DB owns all data + progress tracking (processed column)
 """
 
-import base64
 import json
 import logging
 import sqlite3
 from pathlib import Path
 
-import anthropic
 from huey import SqliteHuey, crontab
 
-from engine.config import Settings, MODEL_TASK, MODEL_WEEKLY, TOKEN_COSTS
+from engine.config import Settings, MODEL_TASK, MODEL_WEEKLY
+from engine.llm import create_client
 from engine.pipeline.collector import Frame
 from engine.pipeline.episode import EPISODE_PROMPT
 from engine.pipeline.distill import DISTILL_PROMPT
@@ -28,6 +27,13 @@ settings = Settings()
 
 huey = SqliteHuey(
     filename=str(Path(settings.db_path).parent / "huey.db"),
+)
+
+_llm = create_client(
+    api_key=settings.anthropic_api_key,
+    auth_token=settings.claude_code_oauth_token,
+    openai_api_key=settings.openai_api_key,
+    openai_base_url=settings.openai_base_url,
 )
 
 
@@ -202,22 +208,8 @@ def _load_frames(
     return frames
 
 
-def _build_haiku_content(frames: list[Frame]) -> list[dict]:
-    """Build multimodal content (text + sampled images) for Haiku."""
-    content: list[dict] = []
-    frames_with_images = [f for f in frames if f.image_path]
-    if frames_with_images:
-        step = max(1, len(frames_with_images) // 5)
-        for f in frames_with_images[::step][:5]:
-            path = Path(settings.frames_base_dir) / f.image_path
-            if not path.exists():
-                continue
-            b64 = base64.standard_b64encode(path.read_bytes()).decode("ascii")
-            content.append({
-                "type": "image",
-                "source": {"type": "base64", "media_type": "image/webp", "data": b64},
-            })
-
+def _build_prompt(frames: list[Frame]) -> str:
+    """Build text prompt from frames for Claude."""
     context_lines = []
     for f in frames:
         text = f.text[:300].replace("\n", " ")
@@ -225,11 +217,7 @@ def _build_haiku_content(frames: list[Frame]) -> list[dict]:
         context_lines.append(
             f"[{f.timestamp}] {f.app_name}/{f.window_name}{source_tag}: {text}"
         )
-    content.append({
-        "type": "text",
-        "text": EPISODE_PROMPT.format(context="\n".join(context_lines)),
-    })
-    return content
+    return EPISODE_PROMPT.format(context="\n".join(context_lines))
 
 
 def _store_episodes(
@@ -270,7 +258,7 @@ def _store_episodes(
 
 @huey.task(retries=2, retry_delay=30)
 def process_episode(screen_ids: list[int], audio_ids: list[int]):
-    """Read frame data from DB, call Haiku, store episodes."""
+    """Read frame data from DB, call Claude Agent SDK, store episodes."""
     if not screen_ids and not audio_ids:
         return
 
@@ -285,20 +273,11 @@ def process_episode(screen_ids: list[int], audio_ids: list[int]):
             len(frames), frames[0].timestamp, frames[-1].timestamp,
         )
 
-        content = _build_haiku_content(frames)
-
-        # Call Haiku (sync)
-        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-        response = client.messages.create(
-            model=MODEL_TASK,
-            max_tokens=2048,
-            messages=[{"role": "user", "content": content}],
-        )
-        raw = response.content[0].text
-        usage = response.usage
+        prompt = _build_prompt(frames)
+        resp = _llm.complete(prompt, MODEL_TASK)
 
         # Parse JSON response
-        text = raw.strip()
+        text = resp.text.strip()
         if text.startswith("```"):
             text = text.split("\n", 1)[1]
             text = text.rsplit("```", 1)[0]
@@ -309,18 +288,17 @@ def process_episode(screen_ids: list[int], audio_ids: list[int]):
         _store_episodes(conn, tasks, frames)
 
         # Record usage
-        costs = TOKEN_COSTS.get(MODEL_TASK, {"input": 0, "output": 0})
-        cost_usd = usage.input_tokens * costs["input"] + usage.output_tokens * costs["output"]
+        cost = resp.cost_usd or 0
         conn.execute(
             "INSERT INTO token_usage (model, layer, input_tokens, output_tokens, cost_usd) "
             "VALUES (?, ?, ?, ?, ?)",
-            (MODEL_TASK, "episode", usage.input_tokens, usage.output_tokens, cost_usd),
+            (MODEL_TASK, "episode", resp.input_tokens, resp.output_tokens, cost),
         )
         conn.commit()
 
         logger.info(
             "process_episode: created %d episodes, cost=$%.4f",
-            len(tasks), cost_usd,
+            len(tasks), cost,
         )
 
     except Exception:
@@ -368,29 +346,19 @@ def weekly_distill_task():
             else "(none yet — this is the first distillation)"
         )
 
-        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-        response = client.messages.create(
-            model=MODEL_WEEKLY,
-            max_tokens=8192,
-            messages=[{
-                "role": "user",
-                "content": DISTILL_PROMPT.format(
-                    playbooks=playbooks_text, episodes=episodes_text,
-                ),
-            }],
+        prompt = DISTILL_PROMPT.format(
+            playbooks=playbooks_text, episodes=episodes_text,
         )
-        raw = response.content[0].text
-        usage = response.usage
+        resp = _llm.complete(prompt, MODEL_WEEKLY)
 
-        costs = TOKEN_COSTS.get(MODEL_WEEKLY, {"input": 0, "output": 0})
-        cost_usd = usage.input_tokens * costs["input"] + usage.output_tokens * costs["output"]
+        cost = resp.cost_usd or 0
         conn.execute(
             "INSERT INTO token_usage (model, layer, input_tokens, output_tokens, cost_usd) "
             "VALUES (?, ?, ?, ?, ?)",
-            (MODEL_WEEKLY, "distill", usage.input_tokens, usage.output_tokens, cost_usd),
+            (MODEL_WEEKLY, "distill", resp.input_tokens, resp.output_tokens, cost),
         )
 
-        text = raw.strip()
+        text = resp.text.strip()
         if text.startswith("```"):
             text = text.split("\n", 1)[1]
             text = text.rsplit("```", 1)[0]
@@ -429,7 +397,7 @@ def weekly_distill_task():
         conn.commit()
         logger.info(
             "weekly distill: %d entries from %d episodes, cost=$%.4f",
-            count, len(episodes), cost_usd,
+            count, len(episodes), cost,
         )
 
     except Exception:

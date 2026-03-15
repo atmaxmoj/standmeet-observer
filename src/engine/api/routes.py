@@ -188,10 +188,109 @@ async def engine_usage(request: Request, days: int = 7):
 async def trigger_distill(request: Request):
     from engine.pipeline.distill import weekly_distill
 
-    client = request.app.state.anthropic
+    llm = request.app.state.llm
     db = request.app.state.db
-    count = await weekly_distill(client, db)
+    count = await weekly_distill(llm, db)
     return {"playbook_entries_updated": count}
+
+
+@router.post("/engine/backfill")
+async def backfill(request: Request):
+    """Reset all frames to unprocessed and re-trigger pipeline.
+
+    This reads ALL frames, runs detect_windows (ignoring recency),
+    and enqueues process_episode for each window.
+    """
+    import sqlite3
+    from engine.config import Settings
+    from engine.pipeline.collector import Frame
+    from engine.pipeline.filter import should_keep, detect_windows
+    from engine.tasks import process_episode
+
+    settings = Settings()
+    conn = sqlite3.connect(settings.db_path)
+    conn.row_factory = sqlite3.Row
+
+    # Reset all to unprocessed
+    conn.execute("UPDATE frames SET processed = 0")
+    conn.execute("UPDATE audio_frames SET processed = 0")
+    conn.commit()
+
+    # Read ALL frames (no limit)
+    screen_rows = conn.execute(
+        "SELECT id, timestamp, app_name, window_name, text, image_path "
+        "FROM frames ORDER BY timestamp",
+    ).fetchall()
+    screen_frames = [
+        Frame(
+            id=r["id"], source="capture",
+            text=r["text"] or "", app_name=r["app_name"] or "",
+            window_name=r["window_name"] or "",
+            timestamp=r["timestamp"] or "",
+            image_path=r["image_path"] or "",
+        )
+        for r in screen_rows
+    ]
+
+    audio_rows = conn.execute(
+        "SELECT id, timestamp, text, language "
+        "FROM audio_frames ORDER BY timestamp",
+    ).fetchall()
+    audio_frames = [
+        Frame(
+            id=r["id"], source="audio",
+            text=r["text"] or "", app_name="microphone",
+            window_name=f"audio/{r['language'] or 'unknown'}",
+            timestamp=r["timestamp"] or "",
+        )
+        for r in audio_rows
+    ]
+
+    all_raw = screen_frames + audio_frames
+    kept = sorted(
+        [f for f in all_raw if should_keep(f)],
+        key=lambda f: f.timestamp,
+    )
+
+    if not kept:
+        # Mark all as processed
+        conn.execute("UPDATE frames SET processed = 1")
+        conn.execute("UPDATE audio_frames SET processed = 1")
+        conn.commit()
+        conn.close()
+        return {"windows": 0, "message": "All frames filtered as noise"}
+
+    # Use normal idle threshold, but force-close the last group
+    # (backfill treats everything as "old enough")
+    windows, remainder = detect_windows(kept, window_minutes=30, idle_seconds=300)
+    if remainder:
+        windows.append(remainder)
+
+    # Enqueue each window
+    enqueued = 0
+    all_screen_ids = set()
+    all_audio_ids = set()
+    for window in windows:
+        screen_ids = [f.id for f in window if f.source == "capture"]
+        audio_ids = [f.id for f in window if f.source == "audio"]
+        process_episode(screen_ids, audio_ids)
+        all_screen_ids.update(screen_ids)
+        all_audio_ids.update(audio_ids)
+        enqueued += 1
+
+    # Mark all as processed
+    conn.execute("UPDATE frames SET processed = 1")
+    conn.execute("UPDATE audio_frames SET processed = 1")
+    conn.commit()
+    conn.close()
+
+    logger.info("backfill: enqueued %d windows from %d frames", enqueued, len(all_raw))
+    return {
+        "windows": enqueued,
+        "total_frames": len(all_raw),
+        "kept_frames": len(kept),
+        "message": f"Enqueued {enqueued} episodes for processing",
+    }
 
 
 # -- Test helper --

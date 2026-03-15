@@ -11,6 +11,14 @@ dependencies = [
     "huey>=2.5",
     "pydantic>=2.11",
     "pydantic-settings>=2.9",
+    "claude-agent-sdk>=0.1.48",
+    "openai>=1.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=9.0",
+    "pytest-asyncio>=0.25",
 ]
 
 [build-system]

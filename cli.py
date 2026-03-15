@@ -281,7 +281,7 @@ def cmd_logs():
 
 def cmd_test():
     """Run tests. Usage: npm test [-- <suite>]
-    Suites: capture, audio, web, all (default: all)
+    Suites: capture, audio, engine, web, all (default: all)
     """
     suite = sys.argv[2] if len(sys.argv) > 2 else "all"
     results = []
@@ -298,6 +298,18 @@ def cmd_test():
         print("\n==> Running audio pytest...")
         r = run(["uv", "run", "--extra", "test", "pytest", "-v"], cwd=ROOT / "audio")
         results.append(("audio", r.returncode))
+
+    if suite in ("engine", "all"):
+        print("\n==> Running engine pytest...")
+        test_env = {
+            **os.environ,
+            "PYTHONPATH": str(ROOT / "src"),
+            "ANTHROPIC_API_KEY": os.environ.get("ANTHROPIC_API_KEY", "sk-fake-test-key"),
+            "ANTHROPIC_AUTH_TOKEN": os.environ.get("ANTHROPIC_AUTH_TOKEN", ""),
+        }
+        r = run(["uv", "run", "--extra", "test", "pytest", "-v"],
+                cwd=ROOT, env=test_env)
+        results.append(("engine", r.returncode))
 
     if suite in ("web", "all"):
         print("\n==> Running Playwright tests...")

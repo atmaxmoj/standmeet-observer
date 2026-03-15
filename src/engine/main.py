@@ -8,11 +8,11 @@ import os
 import threading
 from contextlib import asynccontextmanager
 
-import anthropic
 from fastapi import FastAPI
 
 from engine.config import Settings
 from engine.db import DB
+from engine.llm import create_client
 
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "DEBUG").upper()
 
@@ -29,7 +29,7 @@ def _start_huey_consumer():
     from engine.tasks import huey
 
     class EmbeddedConsumer(Consumer):
-        def _install_signal_handlers(self):
+        def _set_signal_handlers(self):
             pass  # Skip — uvicorn handles signals
 
     consumer = EmbeddedConsumer(huey, workers=2, periodic=True)
@@ -45,10 +45,15 @@ async def lifespan(app: FastAPI):
     db = DB(settings.db_path)
     await db.connect()
 
-    client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    llm = create_client(
+        api_key=settings.anthropic_api_key,
+        auth_token=settings.claude_code_oauth_token,
+        openai_api_key=settings.openai_api_key,
+        openai_base_url=settings.openai_base_url,
+    )
 
     app.state.db = db
-    app.state.anthropic = client
+    app.state.llm = llm
     app.state.settings = settings
 
     _start_huey_consumer()

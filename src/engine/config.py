@@ -21,7 +21,12 @@ TOKEN_COSTS = {
 
 
 class Settings(BaseSettings):
-    anthropic_api_key: str
+    anthropic_api_key: str = ""
+    claude_code_oauth_token: str = ""
+
+    # OpenAI-compatible API (e.g. ollama, vllm, openrouter, together, etc.)
+    openai_api_key: str = ""
+    openai_base_url: str = ""
 
     # Engine storage
     db_path: str = "/data/engine.db"

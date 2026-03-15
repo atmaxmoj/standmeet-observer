@@ -3,10 +3,9 @@
 import json
 import logging
 
-import anthropic
-
-from engine.config import MODEL_WEEKLY, TOKEN_COSTS
+from engine.config import MODEL_WEEKLY
 from engine.db import DB
+from engine.llm import LLMClient
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +79,7 @@ Output ONLY the JSON array, nothing else."""
 
 
 async def weekly_distill(
-    client: anthropic.AsyncAnthropic,
+    client: LLMClient,
     db: DB,
 ) -> int:
     """
@@ -117,36 +116,24 @@ async def weekly_distill(
     )
 
     try:
-        response = await client.messages.create(
-            model=MODEL_WEEKLY,  # Opus — expensive, runs once/week
-            max_tokens=8192,
-            messages=[
-                {
-                    "role": "user",
-                    "content": DISTILL_PROMPT.format(
-                        playbooks=playbooks_text, episodes=episodes_text
-                    ),
-                }
-            ],
+        prompt = DISTILL_PROMPT.format(
+            playbooks=playbooks_text, episodes=episodes_text,
         )
-        raw = response.content[0].text
-        usage = response.usage
-        logger.debug("opus response: %d chars, usage: %s", len(raw), usage)
+        resp = await client.acomplete(prompt, MODEL_WEEKLY)
+        logger.debug("opus response: %d chars", len(resp.text))
 
-        # Record token usage
-        costs = TOKEN_COSTS.get(MODEL_WEEKLY, {"input": 0, "output": 0})
-        cost_usd = usage.input_tokens * costs["input"] + usage.output_tokens * costs["output"]
+        cost_usd = resp.cost_usd or 0
         await db.record_usage(
             model=MODEL_WEEKLY,
             layer="distill",
-            input_tokens=usage.input_tokens,
-            output_tokens=usage.output_tokens,
+            input_tokens=resp.input_tokens,
+            output_tokens=resp.output_tokens,
             cost_usd=cost_usd,
         )
         logger.debug("recorded usage: model=%s cost=$%.6f", MODEL_WEEKLY, cost_usd)
 
         # Parse JSON (handle markdown code fences)
-        text = raw.strip()
+        text = resp.text.strip()
         if text.startswith("```"):
             text = text.split("\n", 1)[1]
             text = text.rsplit("```", 1)[0]

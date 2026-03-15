@@ -5,10 +5,9 @@ import json
 import logging
 from pathlib import Path
 
-import anthropic
-
-from engine.config import MODEL_TASK, TOKEN_COSTS
+from engine.config import MODEL_TASK
 from engine.db import DB
+from engine.llm import LLMClient
 from engine.pipeline.collector import Frame
 
 logger = logging.getLogger(__name__)
@@ -92,7 +91,7 @@ def _sample_images(
 
 
 async def process_window(
-    client: anthropic.AsyncAnthropic,
+    client: LLMClient,
     db: DB,
     frames: list[Frame],
     frames_base_dir: str = "",
@@ -139,28 +138,21 @@ async def process_window(
 
     try:
         logger.debug("sending %d frames to haiku model=%s", len(frames), MODEL_TASK)
-        response = await client.messages.create(
-            model=MODEL_TASK,  # Haiku — cheap, ~$0.01-0.03 per window
-            max_tokens=2048,
-            messages=[{"role": "user", "content": content}],
-        )
-        raw = response.content[0].text
-        usage = response.usage
-        logger.debug("haiku response: %d chars, usage: %s", len(raw), usage)
+        prompt_text = content[-1]["text"]  # The text block with the full prompt
+        resp = await client.acomplete(prompt_text, MODEL_TASK)
+        logger.debug("haiku response: %d chars", len(resp.text))
 
-        # Record token usage
-        costs = TOKEN_COSTS.get(MODEL_TASK, {"input": 0, "output": 0})
-        cost_usd = usage.input_tokens * costs["input"] + usage.output_tokens * costs["output"]
+        cost_usd = resp.cost_usd or 0
         await db.record_usage(
             model=MODEL_TASK,
             layer="episode",
-            input_tokens=usage.input_tokens,
-            output_tokens=usage.output_tokens,
+            input_tokens=resp.input_tokens,
+            output_tokens=resp.output_tokens,
             cost_usd=cost_usd,
         )
         logger.debug("recorded usage: model=%s cost=$%.6f", MODEL_TASK, cost_usd)
 
-        text = raw.strip()
+        text = resp.text.strip()
         if text.startswith("```"):
             text = text.split("\n", 1)[1]
             text = text.rsplit("```", 1)[0]

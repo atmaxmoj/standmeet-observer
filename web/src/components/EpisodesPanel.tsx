@@ -52,7 +52,7 @@ export function EpisodesPanel() {
       ) : !episodes.length ? (
         <div className="text-muted-foreground text-center py-12">
           <p>No episodes yet</p>
-          <p className="text-xs mt-2">First episode after 30min window completes</p>
+          <p className="text-xs mt-2">Episodes are created when an idle gap (&gt;5min) closes a capture window</p>
         </div>
       ) : (
         <div className="space-y-3">
