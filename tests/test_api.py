@@ -229,6 +229,31 @@ class TestEngineStatus:
         assert data["episode_count"] == 0
         assert data["playbook_count"] == 0
 
+    async def test_capture_alive_false_when_no_frames(self, client, db):
+        resp = await client.get("/engine/status")
+        assert resp.json()["capture_alive"] is False
+        assert resp.json()["last_frame_at"] is None
+
+    async def test_capture_alive_true_with_recent_frame(self, client, db):
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc).isoformat()
+        await db.insert_frame(
+            timestamp=now, app_name="App", window_name="w",
+            text="t", display_id=1, image_hash="h",
+        )
+        resp = await client.get("/engine/status")
+        assert resp.json()["capture_alive"] is True
+
+    async def test_capture_alive_false_with_old_frame(self, client, db):
+        from datetime import datetime, timezone, timedelta
+        old = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
+        await db.insert_frame(
+            timestamp=old, app_name="App", window_name="w",
+            text="t", display_id=1, image_hash="h",
+        )
+        resp = await client.get("/engine/status")
+        assert resp.json()["capture_alive"] is False
+
 
 @pytest.mark.asyncio
 class TestEngineUsage:

@@ -83,6 +83,60 @@ test.describe("Dashboard", () => {
     await page.screenshot({ path: "tests/screenshots/logs.png", fullPage: true });
   });
 
+  test("frame detail overlay opens on thumbnail click", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("tab", { name: "Capture" }).click();
+    const panel = page.getByTestId("frames-panel");
+    await expect(panel.getByTestId("frame-card").first()).toBeVisible({ timeout: 10000 });
+
+    // Click the thumbnail image (or OCR button) on the first card
+    const firstCard = panel.getByTestId("frame-card").first();
+    const thumb = firstCard.locator("img").first();
+    if (await thumb.isVisible()) {
+      await thumb.click();
+    } else {
+      // No image — click the OCR button
+      await firstCard.getByText("OCR").click();
+    }
+
+    // Detail overlay should appear
+    const detail = page.getByTestId("frame-detail");
+    await expect(detail).toBeVisible({ timeout: 5000 });
+
+    // Close it
+    await page.getByTestId("frame-detail-close").click();
+    await expect(detail).not.toBeVisible();
+  });
+
+  test("selection bar appears when selecting frames", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("tab", { name: "Capture" }).click();
+    const panel = page.getByTestId("frames-panel");
+    const cards = panel.getByTestId("frame-card");
+    await expect(cards.first()).toBeVisible({ timeout: 10000 });
+
+    // Click first card to select it
+    await cards.first().click();
+
+    // Selection bar should appear with "1 selected"
+    const selCount = page.getByTestId("selection-count");
+    await expect(selCount.first()).toBeVisible({ timeout: 5000 });
+    await expect(selCount.first()).toContainText("1 selected");
+
+    // Click Cancel to clear selection
+    await page.getByTestId("selection-cancel").first().click();
+    await expect(selCount.first()).not.toBeVisible();
+
+    // Pagination should be back
+    await expect(page.getByTestId("pagination")).toBeVisible();
+  });
+
+  test("header shows capture status and toggle switch", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.getByTestId("engine-status")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId("pipeline-toggle")).toBeVisible();
+  });
+
   test("tab switching works", async ({ page }) => {
     await page.goto("/");
     for (const tab of ["Capture", "Audio", "OS Events", "Episodes", "Playbook", "Usage", "Logs"]) {

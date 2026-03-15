@@ -8,7 +8,7 @@ export function SelectionBar({ count, allCount, onSelectAll, onClear, onDelete, 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50 flex justify-center pb-3 px-4 pointer-events-none">
       <div className="pointer-events-auto flex items-center gap-3 px-4 py-2.5 rounded-lg border border-border bg-background shadow-lg">
-        <span className="text-xs tabular-nums text-muted-foreground">{count} selected</span>
+        <span className="text-xs tabular-nums text-muted-foreground" data-testid="selection-count">{count} selected</span>
         <div className="w-px h-4 bg-border" />
         <button onClick={allSelected ? onClear : onSelectAll} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
           {allSelected ? "Deselect all" : `Select all ${allCount}`}
@@ -17,7 +17,7 @@ export function SelectionBar({ count, allCount, onSelectAll, onClear, onDelete, 
         <Button variant="destructive" size="sm" className="h-7 text-xs" onClick={onDelete} disabled={deleting}>
           {deleting ? "Deleting..." : "Delete"}
         </Button>
-        <button onClick={onClear} className="text-xs text-muted-foreground hover:text-foreground transition-colors ml-1">
+        <button onClick={onClear} data-testid="selection-cancel" className="text-xs text-muted-foreground hover:text-foreground transition-colors ml-1">
           Cancel
         </button>
       </div>

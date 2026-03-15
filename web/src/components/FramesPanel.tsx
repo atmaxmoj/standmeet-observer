@@ -21,7 +21,7 @@ function FrameDetail({ frame, onClose }: { frame: Frame; onClose: () => void }) 
             <span className="text-xs text-muted-foreground">{frame.window_name}</span>
             <Badge variant="secondary" className="text-[10px]">display {frame.display_id}</Badge>
           </div>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-lg leading-none px-2">×</button>
+          <button onClick={onClose} data-testid="frame-detail-close" className="text-muted-foreground hover:text-foreground text-lg leading-none px-2">×</button>
         </div>
         {frame.image_path && (
           <img src={frameImageUrl(frame.id)} alt="" className="w-full border-b" loading="lazy" />
