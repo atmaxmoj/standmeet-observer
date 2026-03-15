@@ -10,8 +10,30 @@ import { SelectionBar } from "@/components/SelectionBar";
 
 const PAGE_SIZE = 30;
 
-function FrameCard({ frame, selected, onSelect }: {
-  frame: Frame; selected: boolean; onSelect: () => void;
+function FrameDetail({ frame, onClose }: { frame: Frame; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose} data-testid="frame-detail">
+      <div className="bg-background rounded-lg border shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-4 border-b">
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-muted-foreground">{fmtTime(frame.timestamp)}</span>
+            <span className="text-xs font-medium text-primary">{frame.app_name}</span>
+            <span className="text-xs text-muted-foreground">{frame.window_name}</span>
+            <Badge variant="secondary" className="text-[10px]">display {frame.display_id}</Badge>
+          </div>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-lg leading-none px-2">×</button>
+        </div>
+        {frame.image_path && (
+          <img src={frameImageUrl(frame.id)} alt="" className="w-full border-b" loading="lazy" />
+        )}
+        <pre className="p-4 text-xs whitespace-pre-wrap text-foreground/80">{frame.text}</pre>
+      </div>
+    </div>
+  );
+}
+
+function FrameCard({ frame, selected, onSelect, onOpen }: {
+  frame: Frame; selected: boolean; onSelect: () => void; onOpen: () => void;
 }) {
   return (
     <Card
@@ -34,8 +56,17 @@ function FrameCard({ frame, selected, onSelect }: {
           <div className="text-xs text-foreground/80 whitespace-pre-wrap break-words flex-1 max-h-12 overflow-hidden">
             {frame.text}
           </div>
-          {frame.image_path && (
-            <img src={frameImageUrl(frame.id)} alt="" className="shrink-0 w-20 h-14 object-cover rounded border" loading="lazy" />
+          {frame.image_path ? (
+            <img src={frameImageUrl(frame.id)} alt=""
+              className="shrink-0 w-20 h-14 object-cover rounded border hover:ring-2 hover:ring-primary transition-shadow"
+              loading="lazy"
+              onClick={(e) => { e.stopPropagation(); onOpen(); }}
+            />
+          ) : (
+            <button onClick={(e) => { e.stopPropagation(); onOpen(); }}
+              className="shrink-0 w-20 h-14 rounded border border-dashed flex items-center justify-center text-[10px] text-muted-foreground hover:bg-accent/50 transition-colors">
+              OCR
+            </button>
           )}
         </div>
       </CardContent>
@@ -48,6 +79,7 @@ export function FramesPanel() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [detailFrame, setDetailFrame] = useState<Frame | null>(null);
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
@@ -77,7 +109,8 @@ export function FramesPanel() {
       ) : (
         <div className="space-y-2">
           {frames.map((f) => (
-            <FrameCard key={f.id} frame={f} selected={sel.selected.has(f.id)} onSelect={() => sel.toggle(f.id)} />
+            <FrameCard key={f.id} frame={f} selected={sel.selected.has(f.id)}
+              onSelect={() => sel.toggle(f.id)} onOpen={() => setDetailFrame(f)} />
           ))}
         </div>
       )}
@@ -90,6 +123,7 @@ export function FramesPanel() {
           <Pagination page={page} totalPages={totalPages} onPageChange={load} />
         </div>
       )}
+      {detailFrame && <FrameDetail frame={detailFrame} onClose={() => setDetailFrame(null)} />}
     </div>
   );
 }
