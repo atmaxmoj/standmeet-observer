@@ -4,6 +4,11 @@ import remarkGfm from "remark-gfm";
 import { api, type ChatMessage, type Proposal } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import "@/styles/chat-markdown.css";
 
 type ProposalStatus = "pending" | "approved" | "rejected" | "executing";
@@ -126,8 +131,22 @@ function ChatInputBar({ onSend, onClear, loading, hasMessages }: {
         <span>Memory chat — manages your observation data via AI. Only the last 20 messages are kept.</span>
         {hasMessages && <span>·</span>}
         {hasMessages && (
-          <button onClick={onClear} disabled={loading}
-            className="text-muted-foreground hover:text-foreground transition-colors underline underline-offset-2">Clear chat</button>
+          <AlertDialog>
+            <AlertDialogTrigger
+              disabled={loading}
+              className="text-muted-foreground hover:text-foreground transition-colors underline underline-offset-2 text-[11px]"
+            >Clear chat</AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Clear chat history?</AlertDialogTitle>
+                <AlertDialogDescription>This will delete all chat messages. This cannot be undone.</AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={onClear}>Clear</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         )}
       </div>
     </div>
