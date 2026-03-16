@@ -141,6 +141,7 @@ export const api = {
   pipeline: () => get<{ paused: boolean }>("/engine/pipeline"),
   pipelinePause: () => post<{ paused: boolean }>("/engine/pipeline/pause"),
   pipelineResume: () => post<{ paused: boolean }>("/engine/pipeline/resume"),
+  chatHistory: () => get<{ messages: ChatMessage[] }>("/memory/chat/history"),
   chat: async (
     messages: ChatMessage[],
     onToolCall: (name: string, label: string) => void,

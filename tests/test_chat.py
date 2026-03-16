@@ -426,3 +426,80 @@ class TestChatEndpoint:
         text_event = [e for e in events if e[0] == "text"][0][1]
         assert text_event["content"] == "Summary of your activity."
         assert text_event["input_tokens"] == 250  # 50+80+120
+
+
+class TestChatPersistence:
+    @pytest.mark.asyncio
+    async def test_history_empty_initially(self, seeded_db):
+        llm = MockLLMClient([])
+        app = _make_app(seeded_db, llm)
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get("/api/memory/chat/history")
+        assert resp.status_code == 200
+        assert resp.json()["messages"] == []
+
+    @pytest.mark.asyncio
+    async def test_chat_persists_user_and_assistant(self, seeded_db):
+        """POST /memory/chat should persist both user message and assistant reply."""
+        llm = MockLLMClient([
+            MessageResponse(
+                content=[ContentBlock(type="text", text="Hello! Here's your data.")],
+                stop_reason="end_turn", input_tokens=50, output_tokens=20,
+            ),
+        ])
+        app = _make_app(seeded_db, llm)
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            await client.post("/api/memory/chat", json={"messages": [
+                {"role": "user", "content": "What's up?"},
+            ]})
+            resp = await client.get("/api/memory/chat/history")
+        msgs = resp.json()["messages"]
+        assert len(msgs) == 2
+        assert msgs[0]["role"] == "user"
+        assert msgs[0]["content"] == "What's up?"
+        assert msgs[1]["role"] == "assistant"
+        assert msgs[1]["content"] == "Hello! Here's your data."
+
+    @pytest.mark.asyncio
+    async def test_sliding_window_trims_to_20(self, seeded_db):
+        """Only the last 20 messages should be kept."""
+        # Insert 22 messages directly
+        for i in range(22):
+            role = "user" if i % 2 == 0 else "assistant"
+            await seeded_db.append_chat_message(role, f"msg-{i}")
+        msgs = await seeded_db.get_chat_messages()
+        assert len(msgs) == 20
+        # Oldest two (msg-0, msg-1) should be gone
+        assert msgs[0]["content"] == "msg-2"
+        assert msgs[-1]["content"] == "msg-21"
+
+    @pytest.mark.asyncio
+    async def test_multiple_chats_accumulate(self, seeded_db):
+        """Multiple chat requests should accumulate in history."""
+        llm = MockLLMClient([
+            MessageResponse(
+                content=[ContentBlock(type="text", text="Reply 1")],
+                stop_reason="end_turn", input_tokens=10, output_tokens=5,
+            ),
+            MessageResponse(
+                content=[ContentBlock(type="text", text="Reply 2")],
+                stop_reason="end_turn", input_tokens=10, output_tokens=5,
+            ),
+        ])
+        app = _make_app(seeded_db, llm)
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            await client.post("/api/memory/chat", json={"messages": [
+                {"role": "user", "content": "First"},
+            ]})
+            await client.post("/api/memory/chat", json={"messages": [
+                {"role": "user", "content": "First"},
+                {"role": "assistant", "content": "Reply 1"},
+                {"role": "user", "content": "Second"},
+            ]})
+            resp = await client.get("/api/memory/chat/history")
+        msgs = resp.json()["messages"]
+        assert len(msgs) == 4
+        assert msgs[0]["content"] == "First"
+        assert msgs[1]["content"] == "Reply 1"
+        assert msgs[2]["content"] == "Second"
+        assert msgs[3]["content"] == "Reply 2"

@@ -115,7 +115,16 @@ CREATE TABLE IF NOT EXISTS playbook_history (
 );
 
 CREATE INDEX IF NOT EXISTS idx_playbook_history_name ON playbook_history(playbook_name);
+
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 """
+
+CHAT_WINDOW_SIZE = 20
 
 
 class DB:
@@ -619,3 +628,31 @@ class DB:
             "capture_alive": capture_alive,
             "last_frame_at": last_frame_at,
         }
+
+    # ── Chat messages ──
+
+    async def append_chat_message(self, role: str, content: str):
+        """Insert a message and trim to CHAT_WINDOW_SIZE."""
+        await self._conn.execute(
+            "INSERT INTO chat_messages (role, content) VALUES (?, ?)",
+            (role, content),
+        )
+        await self._conn.execute(
+            "DELETE FROM chat_messages WHERE id NOT IN "
+            "(SELECT id FROM chat_messages ORDER BY id DESC LIMIT ?)",
+            (CHAT_WINDOW_SIZE,),
+        )
+        await self._conn.commit()
+
+    async def get_chat_messages(self) -> list[dict]:
+        """Return up to CHAT_WINDOW_SIZE most recent messages, oldest first."""
+        cursor = await self._conn.execute(
+            "SELECT role, content FROM chat_messages ORDER BY id ASC"
+        )
+        rows = await cursor.fetchall()
+        return [{"role": r["role"], "content": r["content"]} for r in rows]
+
+    async def clear_chat_messages(self):
+        """Delete all chat messages."""
+        await self._conn.execute("DELETE FROM chat_messages")
+        await self._conn.commit()

@@ -233,88 +233,106 @@ class ChatRequest(BaseModel):
     messages: list[dict]
 
 
+@router.get("/memory/chat/history")
+async def chat_history(request: Request):
+    db = request.app.state.db
+    messages = await db.get_chat_messages()
+    return {"messages": messages}
+
+
+async def _chat_stream(db, llm, messages: list[dict]) -> AsyncGenerator[str, None]:
+    """SSE stream generator for chat — tool-use loop with event emission."""
+    tools = _make_read_tools(db)
+    proposals: list[dict] = []
+    total_input = 0
+    total_output = 0
+    logger.info("chat: starting with %d messages", len(messages))
+
+    for _turn in range(8):
+        try:
+            logger.debug("chat: turn %d, calling amessages_create", _turn)
+            resp = await llm.amessages_create(
+                messages=messages,
+                model=MODEL_FAST,
+                tools=tools,
+                system=SYSTEM_PROMPT,
+            )
+        except NotImplementedError:
+            logger.warning("chat: LLM backend does not support amessages_create")
+            yield _sse("error", {"message": "LLM backend does not support chat."})
+            return
+        except Exception:
+            logger.exception("chat: amessages_create failed")
+            yield _sse("error", {"message": "LLM call failed. Check engine logs."})
+            return
+
+        total_input += resp.input_tokens
+        total_output += resp.output_tokens
+
+        tool_uses = [b for b in resp.content if b.type == "tool_use"]
+        text_blocks = [b for b in resp.content if b.type == "text"]
+
+        logger.debug("chat: turn %d got %d tool_uses, stop=%s", _turn, len(tool_uses), resp.stop_reason)
+
+        if not tool_uses or resp.stop_reason == "end_turn":
+            reply = text_blocks[-1].text if text_blocks else ""
+            await db.append_chat_message("assistant", reply)
+            await _record_usage(db, total_input, total_output)
+            logger.info("chat: done, %d tokens in, %d out, %d proposals", total_input, total_output, len(proposals))
+            yield _sse("text", {"content": reply, "proposals": proposals,
+                                "input_tokens": total_input, "output_tokens": total_output})
+            return
+
+        # Build assistant message content for conversation history
+        assistant_content = []
+        for b in resp.content:
+            if b.type == "text":
+                assistant_content.append({"type": "text", "text": b.text})
+            elif b.type == "tool_use":
+                assistant_content.append({
+                    "type": "tool_use", "id": b.tool_use_id,
+                    "name": b.tool_name, "input": b.tool_input,
+                })
+        messages.append({"role": "assistant", "content": assistant_content})
+
+        # Execute tool calls with SSE events
+        tool_results = []
+        for tu in tool_uses:
+            label = TOOL_LABELS.get(tu.tool_name, tu.tool_name)
+            logger.info("chat: calling tool %s", tu.tool_name)
+            yield _sse("tool_call", {"name": tu.tool_name, "label": label})
+
+            result, proposal = await _handle_tool(db, tu.tool_name, tu.tool_input or {})
+            if proposal:
+                proposals.append(proposal)
+            tool_results.append({
+                "type": "tool_result",
+                "tool_use_id": tu.tool_use_id,
+                "content": json.dumps(result, default=str),
+            })
+        messages.append({"role": "user", "content": tool_results})
+
+    # Max turns
+    await _record_usage(db, total_input, total_output)
+    yield _sse("text", {
+        "content": "I've reached the maximum number of steps. Please try a more specific question.",
+        "proposals": proposals,
+        "input_tokens": total_input, "output_tokens": total_output,
+    })
+
+
 @router.post("/memory/chat")
 async def memory_chat(request: Request, body: ChatRequest):
     db = request.app.state.db
     llm = request.app.state.llm
 
-    async def stream() -> AsyncGenerator[str, None]:
-        tools = _make_read_tools(db)
-        messages = list(body.messages)
-        proposals: list[dict] = []
-        total_input = 0
-        total_output = 0
-        logger.info("chat: starting with %d messages", len(messages))
+    # Persist user message (last one in the list)
+    if body.messages:
+        last = body.messages[-1]
+        if last.get("role") == "user":
+            await db.append_chat_message("user", last["content"])
 
-        for _turn in range(8):
-            try:
-                logger.debug("chat: turn %d, calling amessages_create", _turn)
-                resp = await llm.amessages_create(
-                    messages=messages,
-                    model=MODEL_FAST,
-                    tools=tools,
-                    system=SYSTEM_PROMPT,
-                )
-            except NotImplementedError:
-                logger.warning("chat: LLM backend does not support amessages_create")
-                yield _sse("error", {"message": "LLM backend does not support chat."})
-                return
-            except Exception:
-                logger.exception("chat: amessages_create failed")
-                yield _sse("error", {"message": "LLM call failed. Check engine logs."})
-                return
-
-            total_input += resp.input_tokens
-            total_output += resp.output_tokens
-
-            tool_uses = [b for b in resp.content if b.type == "tool_use"]
-            text_blocks = [b for b in resp.content if b.type == "text"]
-
-            logger.debug("chat: turn %d got %d tool_uses, stop=%s", _turn, len(tool_uses), resp.stop_reason)
-
-            if not tool_uses or resp.stop_reason == "end_turn":
-                reply = text_blocks[-1].text if text_blocks else ""
-                await _record_usage(db, total_input, total_output)
-                logger.info("chat: done, %d tokens in, %d out, %d proposals", total_input, total_output, len(proposals))
-                yield _sse("text", {"content": reply, "proposals": proposals,
-                                    "input_tokens": total_input, "output_tokens": total_output})
-                return
-
-            # Build assistant message content for conversation history
-            assistant_content = []
-            for b in resp.content:
-                if b.type == "text":
-                    assistant_content.append({"type": "text", "text": b.text})
-                elif b.type == "tool_use":
-                    assistant_content.append({
-                        "type": "tool_use", "id": b.tool_use_id,
-                        "name": b.tool_name, "input": b.tool_input,
-                    })
-            messages.append({"role": "assistant", "content": assistant_content})
-
-            # Execute tool calls with SSE events
-            tool_results = []
-            for tu in tool_uses:
-                label = TOOL_LABELS.get(tu.tool_name, tu.tool_name)
-                logger.info("chat: calling tool %s", tu.tool_name)
-                yield _sse("tool_call", {"name": tu.tool_name, "label": label})
-
-                result, proposal = await _handle_tool(db, tu.tool_name, tu.tool_input or {})
-                if proposal:
-                    proposals.append(proposal)
-                tool_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": tu.tool_use_id,
-                    "content": json.dumps(result, default=str),
-                })
-            messages.append({"role": "user", "content": tool_results})
-
-        # Max turns
-        await _record_usage(db, total_input, total_output)
-        yield _sse("text", {
-            "content": "I've reached the maximum number of steps. Please try a more specific question.",
-            "proposals": proposals,
-            "input_tokens": total_input, "output_tokens": total_output,
-        })
-
-    return StreamingResponse(stream(), media_type="text/event-stream")
+    return StreamingResponse(
+        _chat_stream(db, llm, list(body.messages)),
+        media_type="text/event-stream",
+    )

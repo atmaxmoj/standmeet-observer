@@ -1,7 +1,10 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { api, type ChatMessage, type Proposal } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import "@/styles/chat-markdown.css";
 
 type ProposalStatus = "pending" | "approved" | "rejected" | "executing";
 
@@ -50,10 +53,12 @@ function MessageBubble({ msg, index, onApprove, onReject }: {
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div className="max-w-[80%] space-y-2">
-        <div className={`rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${
-          isUser ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"
+        <div className={`rounded-lg px-3 py-2 text-sm ${
+          isUser ? "bg-primary text-primary-foreground whitespace-pre-wrap" : "bg-muted text-foreground chat-markdown"
         }`}>
-          {msg.content}
+          {isUser ? msg.content : (
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+          )}
         </div>
         {msg.proposals?.map((entry, j) => (
           <ProposalCard key={j} proposal={entry.proposal} status={entry.status}
@@ -109,6 +114,15 @@ export function ChatPanel() {
   const [loading, setLoading] = useState(false);
   const [toolLabel, setToolLabel] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    api.chatHistory().then(({ messages: history }) => {
+      if (history.length > 0) {
+        setMessages(history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })));
+        setTimeout(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight }), 100);
+      }
+    }).catch(() => {});
+  }, []);
 
   const scrollToBottom = () => {
     setTimeout(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" }), 50);
