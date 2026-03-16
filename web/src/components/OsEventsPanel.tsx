@@ -67,33 +67,35 @@ export function OsEventsPanel() {
   const setFilterAndLoad = (f: string) => { setFilter(f); load(1, f); };
 
   return (
-    <div className="space-y-4" data-testid="os-events-panel">
-      <div className="flex justify-between items-center gap-2">
-        <div className="flex items-center gap-3">
-          <SearchInput onSearch={setSearch} />
-          <div className="flex gap-1">
-            {[["", "All"], ["shell_command", "Commands"], ["browser_url", "URLs"]].map(([val, label]) => (
-              <Button key={val} variant={filter === val ? "default" : "outline"} size="sm" onClick={() => setFilterAndLoad(val)}>
-                {label}
-              </Button>
-            ))}
+    <div data-testid="os-events-panel">
+      <div className="p-6 space-y-4">
+        <div className="flex justify-between items-center gap-2">
+          <div className="flex items-center gap-3">
+            <SearchInput onSearch={setSearch} />
+            <div className="flex gap-1">
+              {[["", "All"], ["shell_command", "Commands"], ["browser_url", "URLs"]].map(([val, label]) => (
+                <Button key={val} variant={filter === val ? "default" : "outline"} size="sm" onClick={() => setFilterAndLoad(val)}>
+                  {label}
+                </Button>
+              ))}
+            </div>
           </div>
+          <Button variant="outline" size="sm" onClick={() => load(1)}>Refresh</Button>
         </div>
-        <Button variant="outline" size="sm" onClick={() => load(1)}>Refresh</Button>
-      </div>
 
-      {loading ? (
-        <p className="text-muted-foreground text-center py-12">Loading...</p>
-      ) : !events.length ? (
-        <div className="text-muted-foreground text-center py-12">
-          <p>No OS events captured yet</p>
-          <p className="text-xs mt-2">Shell commands and browser URLs will appear here</p>
-        </div>
-      ) : (
-        <div className="space-y-1">
-          {events.map((e) => <EventCard key={e.id} event={e} selected={sel.selected.has(e.id)} onSelect={() => sel.toggle(e.id)} />)}
-        </div>
-      )}
+        {loading ? (
+          <p className="text-muted-foreground text-center py-12">Loading...</p>
+        ) : !events.length ? (
+          <div className="text-muted-foreground text-center py-12">
+            <p>No OS events captured yet</p>
+            <p className="text-xs mt-2">Shell commands and browser URLs will appear here</p>
+          </div>
+        ) : (
+          <div className="space-y-1">
+            {events.map((e) => <EventCard key={e.id} event={e} selected={sel.selected.has(e.id)} onSelect={() => sel.toggle(e.id)} />)}
+          </div>
+        )}
+      </div>
 
       {sel.active ? (
         <SelectionBar count={sel.selected.size} allCount={events.length}

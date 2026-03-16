@@ -194,7 +194,7 @@ export default function App() {
       <Header />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar active={active} onSelect={setActive} />
-        <main className="flex-1 overflow-y-auto p-6" data-testid="main-content">
+        <main className="flex-1 overflow-y-auto" data-testid="main-content">
           {Panel && <Panel />}
         </main>
       </div>

@@ -100,23 +100,25 @@ export function FramesPanel() {
   useEffect(() => { load(1); }, [load]);
 
   return (
-    <div className="space-y-4" data-testid="frames-panel">
-      <div className="flex items-center justify-between">
-        <SearchInput onSearch={setSearch} />
-        <Button variant="outline" size="sm" onClick={() => load(1)}>Refresh</Button>
-      </div>
-      {loading ? (
-        <p className="text-muted-foreground text-center py-12">Loading...</p>
-      ) : !frames.length ? (
-        <p className="text-muted-foreground text-center py-12">No frames captured yet</p>
-      ) : (
-        <div className="space-y-2">
-          {frames.map((f) => (
-            <FrameCard key={f.id} frame={f} selected={sel.selected.has(f.id)}
-              onSelect={() => sel.toggle(f.id)} onOpen={() => setDetailFrame(f)} />
-          ))}
+    <div data-testid="frames-panel">
+      <div className="p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <SearchInput onSearch={setSearch} />
+          <Button variant="outline" size="sm" onClick={() => load(1)}>Refresh</Button>
         </div>
-      )}
+        {loading ? (
+          <p className="text-muted-foreground text-center py-12">Loading...</p>
+        ) : !frames.length ? (
+          <p className="text-muted-foreground text-center py-12">No frames captured yet</p>
+        ) : (
+          <div className="space-y-2">
+            {frames.map((f) => (
+              <FrameCard key={f.id} frame={f} selected={sel.selected.has(f.id)}
+                onSelect={() => sel.toggle(f.id)} onOpen={() => setDetailFrame(f)} />
+            ))}
+          </div>
+        )}
+      </div>
       {sel.active ? (
         <SelectionBar count={sel.selected.size} allCount={frames.length}
           onSelectAll={() => sel.toggleAll(frames.map((f) => f.id))} onClear={sel.clear}

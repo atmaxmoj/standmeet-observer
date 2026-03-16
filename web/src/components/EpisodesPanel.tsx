@@ -38,13 +38,14 @@ export function EpisodesPanel() {
   useEffect(() => { load(1); }, [load]);
 
   return (
-    <div className="space-y-4" data-testid="episodes-panel">
-      <div className="flex items-center justify-between">
-        <SearchInput onSearch={setSearch} />
-        <Button variant="outline" size="sm" onClick={() => load(1)}>Refresh</Button>
-      </div>
+    <div data-testid="episodes-panel">
+      <div className="p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <SearchInput onSearch={setSearch} />
+          <Button variant="outline" size="sm" onClick={() => load(1)}>Refresh</Button>
+        </div>
 
-      {loading ? (
+        {loading ? (
         <p className="text-muted-foreground text-center py-12">Loading...</p>
       ) : !episodes.length ? (
         <div className="text-muted-foreground text-center py-12">
@@ -71,7 +72,8 @@ export function EpisodesPanel() {
             </Card>
           ))}
         </div>
-      )}
+        )}
+      </div>
 
       {sel.active ? (
         <SelectionBar count={sel.selected.size} allCount={episodes.length}

@@ -108,7 +108,7 @@ export function UsagePanel() {
   if (!data) return <p className="text-muted-foreground text-center py-12">Failed to load</p>;
 
   return (
-    <div className="space-y-4" data-testid="usage-panel">
+    <div className="p-6 space-y-4" data-testid="usage-panel">
       <div className="flex justify-end">
         <Button variant="outline" size="sm" onClick={load}>Refresh</Button>
       </div>

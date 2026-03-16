@@ -79,31 +79,33 @@ export function LogsPanel() {
   useEffect(() => { load(1); }, [load]);
 
   return (
-    <div className="space-y-4" data-testid="logs-panel">
-      <div className="flex items-center justify-between">
-        <SearchInput onSearch={setSearch} />
-        <Button variant="outline" size="sm" onClick={() => load(page)}>Refresh</Button>
-      </div>
+    <div data-testid="logs-panel">
+      <div className="p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <SearchInput onSearch={setSearch} />
+          <Button variant="outline" size="sm" onClick={() => load(page)}>Refresh</Button>
+        </div>
 
-      {loading ? (
-        <p className="text-muted-foreground text-center py-12">Loading...</p>
-      ) : !logs.length ? (
-        <div className="text-muted-foreground text-center py-12">
-          <p>No pipeline logs yet</p>
-          <p className="text-xs mt-2">Logs appear after episode processing or distillation runs</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {logs.map((log) => (
-            <LogCard
-              key={log.id}
-              log={log}
-              expanded={expanded === log.id}
-              onToggle={() => setExpanded(expanded === log.id ? null : log.id)}
-            />
-          ))}
-        </div>
-      )}
+        {loading ? (
+          <p className="text-muted-foreground text-center py-12">Loading...</p>
+        ) : !logs.length ? (
+          <div className="text-muted-foreground text-center py-12">
+            <p>No pipeline logs yet</p>
+            <p className="text-xs mt-2">Logs appear after episode processing or distillation runs</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {logs.map((log) => (
+              <LogCard
+                key={log.id}
+                log={log}
+                expanded={expanded === log.id}
+                onToggle={() => setExpanded(expanded === log.id ? null : log.id)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
 
       <div className="sticky bottom-0 bg-background/80 backdrop-blur-sm border-t py-2 flex justify-center">
         <Pagination page={page} totalPages={totalPages} onPageChange={load} />
