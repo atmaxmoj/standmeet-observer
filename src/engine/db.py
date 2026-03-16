@@ -690,10 +690,18 @@ class DB:
     async def get_chat_messages(self) -> list[dict]:
         """Return up to CHAT_WINDOW_SIZE most recent messages, oldest first."""
         cursor = await self._conn.execute(
-            "SELECT role, content, proposals FROM chat_messages ORDER BY id ASC"
+            "SELECT id, role, content, proposals FROM chat_messages ORDER BY id ASC"
         )
         rows = await cursor.fetchall()
-        return [{"role": r["role"], "content": r["content"], "proposals": r["proposals"]} for r in rows]
+        return [{"id": r["id"], "role": r["role"], "content": r["content"], "proposals": r["proposals"]} for r in rows]
+
+    async def update_chat_proposals(self, msg_id: int, proposals_json: str):
+        """Update the proposals JSON for a specific chat message."""
+        await self._conn.execute(
+            "UPDATE chat_messages SET proposals = ? WHERE id = ?",
+            (proposals_json, msg_id),
+        )
+        await self._conn.commit()
 
     async def clear_chat_messages(self):
         """Delete all chat messages."""

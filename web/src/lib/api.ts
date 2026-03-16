@@ -165,6 +165,10 @@ export const api = {
   pipelineResume: () => post<{ paused: boolean }>("/engine/pipeline/resume"),
   chatHistory: () => get<{ messages: ChatMessage[] }>("/memory/chat/history"),
   chatClear: () => del_("/memory/chat/history"),
+  chatProposalStatus: (messageId: number, proposalIndex: number, status: string) =>
+    post<{ updated: boolean }>("/memory/chat/proposal-status", {
+      message_id: messageId, proposal_index: proposalIndex, status,
+    }),
   chat: async (
     messages: ChatMessage[],
     onToolCall: (name: string, label: string) => void,
@@ -206,6 +210,7 @@ export const api = {
 };
 
 export interface ChatMessage {
+  id?: number;
   role: "user" | "assistant";
   content: string;
   proposals?: string;

@@ -21,6 +21,7 @@ interface ProposalEntry {
 interface UIMessage {
   role: "user" | "assistant";
   content: string;
+  dbId?: number;
   proposals?: ProposalEntry[];
 }
 
@@ -164,8 +165,11 @@ function useLoadHistory(setMessages: React.Dispatch<React.SetStateAction<UIMessa
         setMessages(history.map((m) => {
           const props = typeof m.proposals === "string" ? JSON.parse(m.proposals || "[]") : (m.proposals || []);
           return {
-            role: m.role as "user" | "assistant", content: m.content,
-            proposals: props.map((p: Proposal) => ({ proposal: p, status: "pending" as const })),
+            role: m.role as "user" | "assistant", content: m.content, dbId: m.id,
+            proposals: props.map((p: Record<string, unknown>) => ({
+              proposal: p as unknown as Proposal,
+              status: (p.status as ProposalStatus) || "pending",
+            })),
           };
         }));
         setTimeout(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight }), 100);
@@ -225,6 +229,11 @@ export function ChatPanel() {
     scrollToBottom();
   }, [messages]);
 
+  const persistStatus = useCallback(async (msgIdx: number, propIdx: number, status: ProposalStatus) => {
+    const dbId = messages[msgIdx]?.dbId;
+    if (dbId) await api.chatProposalStatus(dbId, propIdx, status).catch(() => {});
+  }, [messages]);
+
   const handleApprove = useCallback(async (msgIdx: number, propIdx: number) => {
     const entry = messages[msgIdx]?.proposals?.[propIdx];
     if (!entry) return;
@@ -234,14 +243,17 @@ export function ChatPanel() {
       if (p.type === "delete" && p.table && p.ids) await api.batchDelete(p.table, p.ids);
       if (p.type === "update_playbook" && p.fields) await api.updatePlaybook(p.fields);
       setMessages((prev) => updateProposalStatus(prev, msgIdx, propIdx, "approved"));
+      await persistStatus(msgIdx, propIdx, "approved");
     } catch {
       setMessages((prev) => updateProposalStatus(prev, msgIdx, propIdx, "rejected"));
+      await persistStatus(msgIdx, propIdx, "rejected");
     }
-  }, [messages]);
+  }, [messages, persistStatus]);
 
-  const handleReject = useCallback((msgIdx: number, propIdx: number) => {
+  const handleReject = useCallback(async (msgIdx: number, propIdx: number) => {
     setMessages((prev) => updateProposalStatus(prev, msgIdx, propIdx, "rejected"));
-  }, []);
+    await persistStatus(msgIdx, propIdx, "rejected");
+  }, [persistStatus]);
 
   const handleClear = useCallback(async () => { await api.chatClear(); setMessages([]); }, []);
 

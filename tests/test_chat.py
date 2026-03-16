@@ -631,3 +631,78 @@ class TestProposalExecution:
                 "name": "nonexistent", "confidence": 0.5,
             })
         assert resp.json()["updated"] is False
+
+
+class TestProposalStatusPersistence:
+    """Test that approve/reject status survives page refresh."""
+
+    @pytest.mark.asyncio
+    async def test_approve_status_persisted(self, seeded_db):
+        """After approving a proposal, refreshing should show 'approved' not 'pending'."""
+        llm = MockLLMClient([
+            MessageResponse(
+                content=[ContentBlock(
+                    type="tool_use", tool_name="propose_delete",
+                    tool_input={"table": "episodes", "ids": [1], "reason": "test"},
+                    tool_use_id="t1",
+                )],
+                stop_reason="tool_use", input_tokens=50, output_tokens=20,
+            ),
+            MessageResponse(
+                content=[ContentBlock(type="text", text="Proposed.")],
+                stop_reason="end_turn", input_tokens=80, output_tokens=15,
+            ),
+        ])
+        app = _make_app(seeded_db, llm)
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            # Create chat with proposal
+            await client.post("/api/memory/chat", json={"messages": [
+                {"role": "user", "content": "delete it"},
+            ]})
+            # Get the message ID
+            history = (await client.get("/api/memory/chat/history")).json()["messages"]
+            msg_id = history[-1]["id"]
+
+            # Mark proposal as approved
+            resp = await client.post("/api/memory/chat/proposal-status", json={
+                "message_id": msg_id, "proposal_index": 0, "status": "approved",
+            })
+            assert resp.json()["updated"] is True
+
+            # Reload history — should show approved
+            history = (await client.get("/api/memory/chat/history")).json()["messages"]
+            proposals = json.loads(history[-1]["proposals"])
+            assert proposals[0]["status"] == "approved"
+
+    @pytest.mark.asyncio
+    async def test_reject_status_persisted(self, seeded_db):
+        """Rejected status should also persist."""
+        llm = MockLLMClient([
+            MessageResponse(
+                content=[ContentBlock(
+                    type="tool_use", tool_name="propose_update_playbook",
+                    tool_input={"name": "x", "confidence": 0.5, "reason": "test"},
+                    tool_use_id="t1",
+                )],
+                stop_reason="tool_use", input_tokens=50, output_tokens=20,
+            ),
+            MessageResponse(
+                content=[ContentBlock(type="text", text="Proposed.")],
+                stop_reason="end_turn", input_tokens=80, output_tokens=15,
+            ),
+        ])
+        app = _make_app(seeded_db, llm)
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            await client.post("/api/memory/chat", json={"messages": [
+                {"role": "user", "content": "update it"},
+            ]})
+            history = (await client.get("/api/memory/chat/history")).json()["messages"]
+            msg_id = history[-1]["id"]
+
+            await client.post("/api/memory/chat/proposal-status", json={
+                "message_id": msg_id, "proposal_index": 0, "status": "rejected",
+            })
+
+            history = (await client.get("/api/memory/chat/history")).json()["messages"]
+            proposals = json.loads(history[-1]["proposals"])
+            assert proposals[0]["status"] == "rejected"
