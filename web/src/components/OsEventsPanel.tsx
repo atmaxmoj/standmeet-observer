@@ -100,7 +100,7 @@ export function OsEventsPanel() {
           onSelectAll={() => sel.toggleAll(events.map((e) => e.id))} onClear={sel.clear}
           onDelete={sel.deleteSelected} deleting={sel.deleting} />
       ) : (
-        <div className="fixed bottom-0 left-0 right-0 bg-background/80 backdrop-blur-sm border-t py-2 flex justify-center z-50">
+        <div className="fixed bottom-0 left-48 right-0 bg-background/80 backdrop-blur-sm border-t py-2 flex justify-center z-50">
           <Pagination page={page} totalPages={totalPages} onPageChange={load} />
         </div>
       )}

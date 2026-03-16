@@ -6,7 +6,7 @@ export function SelectionBar({ count, allCount, onSelectAll, onClear, onDelete, 
   if (count === 0) return null;
   const allSelected = count === allCount && allCount > 0;
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 flex justify-center pb-3 px-4 pointer-events-none">
+    <div className="fixed bottom-0 left-48 right-0 z-50 flex justify-center pb-3 px-4 pointer-events-none">
       <div className="pointer-events-auto flex items-center gap-3 px-4 py-2.5 rounded-lg border border-border bg-background shadow-lg">
         <span className="text-xs tabular-nums text-muted-foreground" data-testid="selection-count">{count} selected</span>
         <div className="w-px h-4 bg-border" />
