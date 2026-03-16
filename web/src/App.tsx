@@ -169,8 +169,24 @@ function Sidebar({
 
 /* ── app ── */
 
+function readHash(fallback: string) {
+  const h = window.location.hash.slice(1);
+  return h in PANELS ? h : fallback;
+}
+
+function useHashNav(fallback: string) {
+  const [active, setActive] = useState(() => readHash(fallback));
+  useEffect(() => {
+    const onHash = () => setActive(readHash(fallback));
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, [fallback]);
+  const navigate = (key: string) => { window.location.hash = key; };
+  return [active, navigate] as const;
+}
+
 export default function App() {
-  const [active, setActive] = useState("frames");
+  const [active, setActive] = useHashNav("frames");
   const Panel = PANELS[active];
 
   return (
