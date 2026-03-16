@@ -76,7 +76,7 @@ async function seedTestData() {
 
 export default async function globalSetup() {
   console.log("[test] Starting test backend container...");
-  execSync(`docker compose -f ${COMPOSE_FILE} up -d --build --wait`, {
+  execSync(`docker compose -p bisimulator-test -f ${COMPOSE_FILE} up -d --build --wait`, {
     cwd: ROOT,
     stdio: "inherit",
   });

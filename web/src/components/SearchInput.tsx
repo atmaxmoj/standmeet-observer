@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 export function SearchInput({ onSearch }: { onSearch: (q: string) => void }) {
   const [value, setValue] = useState("");
-  const timer = useRef<ReturnType<typeof setTimeout>>();
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => {
     clearTimeout(timer.current);

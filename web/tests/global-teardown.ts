@@ -8,7 +8,7 @@ const COMPOSE_FILE = path.join(ROOT, "docker-compose.test.yml");
 
 export default async function globalTeardown() {
   console.log("[test] Stopping test backend container...");
-  execSync(`docker compose -f ${COMPOSE_FILE} down -v`, {
+  execSync(`docker compose -p bisimulator-test -f ${COMPOSE_FILE} down -v`, {
     cwd: ROOT,
     stdio: "inherit",
   });

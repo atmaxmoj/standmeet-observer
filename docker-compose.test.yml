@@ -1,3 +1,5 @@
+name: bisimulator-test
+
 services:
   engine-test:
     build: .
