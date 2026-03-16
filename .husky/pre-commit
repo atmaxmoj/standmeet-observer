@@ -10,6 +10,9 @@ PYTHONPATH=src uv run pytest tests/ -q || exit 1
 # Python: capture tests
 (cd capture && uv run pytest tests/ -q) || exit 1
 
+# JS/TS: TypeScript compile check
+(cd web && npx tsc -b) || exit 1
+
 # JS/TS: knip dead code
 (cd web && npx knip) || exit 1
 
