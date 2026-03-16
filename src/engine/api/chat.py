@@ -195,6 +195,17 @@ async def _handle_tool(db, name: str, args: dict) -> tuple[Any, dict | None]:
     return {"error": f"Unknown tool: {name}"}, None
 
 
+async def _record_usage(db, input_tokens: int, output_tokens: int):
+    """Record chat usage to token_usage table."""
+    from engine.config import TOKEN_COSTS, MODEL_FAST
+    costs = TOKEN_COSTS.get(MODEL_FAST, {})
+    cost = input_tokens * costs.get("input", 0) + output_tokens * costs.get("output", 0)
+    await db.record_usage(
+        model=MODEL_FAST, layer="chat",
+        input_tokens=input_tokens, output_tokens=output_tokens, cost_usd=cost,
+    )
+
+
 class ChatRequest(BaseModel):
     messages: list[dict]
 
@@ -239,6 +250,7 @@ async def memory_chat(request: Request, body: ChatRequest):
 
         if not tool_uses or response.stop_reason == "end_turn":
             reply = text_blocks[-1].text if text_blocks else ""
+            await _record_usage(db, total_input, total_output)
             return ChatResponse(
                 reply=reply,
                 proposals=proposals,
@@ -262,6 +274,7 @@ async def memory_chat(request: Request, body: ChatRequest):
 
     # Max turns reached
     reply = "I've reached the maximum number of steps. Please try a more specific question."
+    await _record_usage(db, total_input, total_output)
     return ChatResponse(
         reply=reply,
         proposals=proposals,
