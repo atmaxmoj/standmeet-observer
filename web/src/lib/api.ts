@@ -168,11 +168,13 @@ export const api = {
   chat: async (
     messages: ChatMessage[],
     onToolCall: (name: string, label: string) => void,
+    signal?: AbortSignal,
   ): Promise<ChatResult> => {
     const res = await fetch(`${BASE}/memory/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ messages }),
+      signal,
     });
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     const reader = res.body?.getReader();

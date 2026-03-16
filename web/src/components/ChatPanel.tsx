@@ -86,10 +86,10 @@ function updateProposalStatus(
   return next;
 }
 
-function MessageList({ messages, loading, toolLabel, onApprove, onReject, scrollRef }: {
+function MessageList({ messages, loading, toolLabel, onApprove, onReject, onStop, scrollRef }: {
   messages: UIMessage[]; loading: boolean; toolLabel: string;
   onApprove: (m: number, p: number) => void; onReject: (m: number, p: number) => void;
-  scrollRef: React.RefObject<HTMLDivElement | null>;
+  onStop: () => void; scrollRef: React.RefObject<HTMLDivElement | null>;
 }) {
   return (
     <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-4 max-w-3xl mx-auto w-full">
@@ -103,10 +103,14 @@ function MessageList({ messages, loading, toolLabel, onApprove, onReject, scroll
         <MessageBubble key={i} msg={msg} index={i} onApprove={onApprove} onReject={onReject} />
       ))}
       {loading && (
-        <div className="flex justify-start">
+        <div className="flex justify-start items-center gap-2">
           <div className="bg-muted rounded-lg px-3 py-2 text-sm text-muted-foreground animate-pulse">
             {toolLabel ? `${toolLabel}...` : "Thinking..."}
           </div>
+          <button onClick={onStop}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded border border-border">
+            Stop <span className="text-[10px] opacity-60">esc</span>
+          </button>
         </div>
       )}
     </div>
@@ -153,12 +157,7 @@ function ChatInputBar({ onSend, onClear, loading, hasMessages }: {
   );
 }
 
-export function ChatPanel() {
-  const [messages, setMessages] = useState<UIMessage[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [toolLabel, setToolLabel] = useState("");
-  const scrollRef = useRef<HTMLDivElement>(null);
-
+function useLoadHistory(setMessages: React.Dispatch<React.SetStateAction<UIMessage[]>>, scrollRef: React.RefObject<HTMLDivElement | null>) {
   useEffect(() => {
     api.chatHistory().then(({ messages: history }) => {
       if (history.length > 0) {
@@ -172,13 +171,33 @@ export function ChatPanel() {
         setTimeout(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight }), 100);
       }
     }).catch(() => {});
-  }, []);
+  }, [setMessages, scrollRef]);
+}
+
+export function ChatPanel() {
+  const [messages, setMessages] = useState<UIMessage[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [toolLabel, setToolLabel] = useState("");
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  useLoadHistory(setMessages, scrollRef);
 
   const scrollToBottom = () => {
     setTimeout(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" }), 50);
   };
 
+  const stop = useCallback(() => { abortRef.current?.abort(); }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && loading) stop(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [loading, stop]);
+
   const send = useCallback(async (text: string) => {
+    const controller = new AbortController();
+    abortRef.current = controller;
     const userMsg: UIMessage = { role: "user", content: text };
     setMessages((prev) => [...prev, userMsg]);
     setLoading(true);
@@ -186,16 +205,21 @@ export function ChatPanel() {
     scrollToBottom();
     try {
       const apiMessages: ChatMessage[] = [...messages, userMsg].map((m) => ({ role: m.role, content: m.content }));
-      const resp = await api.chat(apiMessages, (_name, label) => { setToolLabel(label); scrollToBottom(); });
+      const resp = await api.chat(apiMessages, (_name, label) => { setToolLabel(label); scrollToBottom(); }, controller.signal);
       setMessages((prev) => [...prev, {
         role: "assistant", content: resp.reply,
         proposals: resp.proposals.map((p) => ({ proposal: p, status: "pending" as const })),
       }]);
     } catch (e) {
-      setMessages((prev) => [...prev, {
-        role: "assistant", content: `Error: ${e instanceof Error ? e.message : "Something went wrong"}`,
-      }]);
+      if (e instanceof DOMException && e.name === "AbortError") {
+        setMessages((prev) => [...prev, { role: "assistant", content: "Stopped." }]);
+      } else {
+        setMessages((prev) => [...prev, {
+          role: "assistant", content: `Error: ${e instanceof Error ? e.message : "Something went wrong"}`,
+        }]);
+      }
     }
+    abortRef.current = null;
     setLoading(false);
     setToolLabel("");
     scrollToBottom();
@@ -224,7 +248,7 @@ export function ChatPanel() {
   return (
     <div className="flex flex-col flex-1 min-h-0" data-testid="chat-panel">
       <MessageList messages={messages} loading={loading} toolLabel={toolLabel}
-        onApprove={handleApprove} onReject={handleReject} scrollRef={scrollRef} />
+        onApprove={handleApprove} onReject={handleReject} onStop={stop} scrollRef={scrollRef} />
       <ChatInputBar onSend={send} onClear={handleClear} loading={loading} hasMessages={messages.length > 0} />
     </div>
   );
