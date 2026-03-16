@@ -155,10 +155,10 @@ test.describe("Dashboard", () => {
 
   test("sidebar navigation works", async ({ page }) => {
     await page.goto("/");
-    const keys = ["frames", "audio", "os-events", "episodes", "playbooks", "usage", "logs"];
+    const keys = ["frames", "audio", "os-events", "episodes", "playbooks", "chat", "usage", "logs"];
     const panels = [
       "frames-panel", "audio-panel", "os-events-panel",
-      "episodes-panel", "playbooks-panel", "usage-panel", "logs-panel",
+      "episodes-panel", "playbooks-panel", "chat-panel", "usage-panel", "logs-panel",
     ];
     for (let i = 0; i < keys.length; i++) {
       await nav(page, keys[i]);
@@ -194,5 +194,14 @@ test.describe("Dashboard", () => {
       await expect(pagination.getByRole("button", { name: "Prev" })).toBeEnabled();
       await page.screenshot({ path: "tests/screenshots/capture-page2.png", fullPage: true });
     }
+  });
+
+  test("Chat panel loads with input", async ({ page }) => {
+    await page.goto("/");
+    await nav(page, "chat");
+    const panel = page.getByTestId("chat-panel");
+    await expect(panel).toBeVisible({ timeout: 10000 });
+    await expect(panel.getByTestId("chat-input")).toBeVisible();
+    await expect(panel.getByRole("button", { name: "Send" })).toBeVisible();
   });
 });

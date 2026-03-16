@@ -6,6 +6,7 @@ import { PlaybooksPanel } from "@/components/PlaybooksPanel";
 import { OsEventsPanel } from "@/components/OsEventsPanel";
 import { UsagePanel } from "@/components/UsagePanel";
 import { LogsPanel } from "@/components/LogsPanel";
+import { ChatPanel } from "@/components/ChatPanel";
 import { api } from "@/lib/api";
 
 /* ── sidebar nav structure ── */
@@ -27,6 +28,7 @@ const NAV: NavGroup[] = [
     items: [
       { key: "episodes", label: "Episodes" },
       { key: "playbooks", label: "Playbook" },
+      { key: "chat", label: "Chat" },
     ],
   },
   {
@@ -47,6 +49,7 @@ const PANELS: Record<string, React.FC> = {
   playbooks: PlaybooksPanel,
   usage: UsagePanel,
   logs: LogsPanel,
+  chat: ChatPanel,
 };
 
 /* ── header ── */
@@ -194,7 +197,7 @@ export default function App() {
       <Header />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar active={active} onSelect={setActive} />
-        <main className="flex-1 overflow-y-auto" data-testid="main-content">
+        <main className="flex-1 overflow-y-auto flex flex-col min-h-0" data-testid="main-content">
           {Panel && <Panel />}
         </main>
       </div>

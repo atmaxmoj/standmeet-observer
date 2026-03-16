@@ -141,4 +141,26 @@ export const api = {
   pipeline: () => get<{ paused: boolean }>("/engine/pipeline"),
   pipelinePause: () => post<{ paused: boolean }>("/engine/pipeline/pause"),
   pipelineResume: () => post<{ paused: boolean }>("/engine/pipeline/resume"),
+  chat: (messages: ChatMessage[]) =>
+    post<ChatResponse>("/memory/chat", { messages }),
 };
+
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface Proposal {
+  type: "delete" | "update_playbook";
+  table?: string;
+  ids?: number[];
+  fields?: Record<string, unknown>;
+  reason: string;
+}
+
+interface ChatResponse {
+  reply: string;
+  proposals: Proposal[];
+  input_tokens: number;
+  output_tokens: number;
+}
