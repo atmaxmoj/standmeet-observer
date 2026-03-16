@@ -134,6 +134,7 @@ export function ChatPanel() {
           <div className="text-muted-foreground text-center py-12">
             <p>Ask me anything about your memory.</p>
             <p className="text-xs mt-2">I can search episodes, playbooks, frames, audio, and more.</p>
+            <p className="text-[10px] mt-4 text-muted-foreground/60">Chat history is lost on refresh. Approved changes are permanent.</p>
           </div>
         )}
         {messages.map((msg, i) => (
