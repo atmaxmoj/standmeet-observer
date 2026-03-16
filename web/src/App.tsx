@@ -51,13 +51,44 @@ const PANELS: Record<string, React.FC> = {
 
 /* ── header ── */
 
+function PipelineToggle({
+  online, captureAlive, paused, toggling, onToggle,
+}: {
+  online: boolean; captureAlive: boolean; paused: boolean; toggling: boolean; onToggle: () => void;
+}) {
+  const off = paused || !online || !captureAlive;
+  return (
+    <button
+      onClick={onToggle}
+      disabled={toggling || !online}
+      data-testid="pipeline-toggle"
+      className={`flex items-center gap-2 px-2.5 py-1 rounded-full border transition-colors disabled:opacity-50 ${
+        !online || !captureAlive ? "border-destructive/40"
+          : paused ? "border-yellow-500/40"
+          : "border-green-500/40"
+      }`}
+    >
+      <span className="flex items-center gap-1.5" data-testid="engine-status">
+        <span className={`w-2 h-2 rounded-full ${
+          !online ? "bg-destructive"
+            : !captureAlive ? "bg-destructive animate-pulse"
+            : paused ? "bg-yellow-500"
+            : "bg-green-500 animate-pulse"
+        }`} />
+        <span className="text-[10px]">
+          {!online ? "Offline" : !captureAlive ? "Capture down" : paused ? "Paused" : "Recording"}
+        </span>
+      </span>
+      <span className={`relative w-7 h-3.5 rounded-full transition-colors ${off ? "bg-muted" : "bg-green-500"}`}>
+        <span className={`absolute top-0.5 w-2.5 h-2.5 rounded-full bg-white shadow transition-transform ${off ? "left-0.5" : "left-[14px]"}`} />
+      </span>
+    </button>
+  );
+}
+
 function Header() {
   const [status, setStatus] = useState({
-    online: false,
-    episodes: 0,
-    playbooks: 0,
-    cost: 0,
-    captureAlive: false,
+    online: false, episodes: 0, playbooks: 0, cost: 0, captureAlive: false,
   });
   const [paused, setPaused] = useState(false);
   const [toggling, setToggling] = useState(false);
@@ -66,13 +97,7 @@ function Header() {
     const load = async () => {
       try {
         const [s, u, p] = await Promise.all([api.status(), api.usage(30), api.pipeline()]);
-        setStatus({
-          online: true,
-          episodes: s.episode_count,
-          playbooks: s.playbook_count,
-          cost: u.total_cost_usd,
-          captureAlive: s.capture_alive,
-        });
+        setStatus({ online: true, episodes: s.episode_count, playbooks: s.playbook_count, cost: u.total_cost_usd, captureAlive: s.capture_alive });
         setPaused(p.paused);
       } catch {
         setStatus((prev) => ({ ...prev, online: false }));
@@ -97,31 +122,10 @@ function Header() {
     <header className="fixed top-0 left-0 right-0 z-20 flex items-center justify-between px-6 py-4 border-b bg-background" data-testid="header">
       <h1 className="text-sm font-semibold tracking-wider">OBSERVER</h1>
       <div className="flex items-center gap-5 text-xs text-muted-foreground">
-        <span className="flex items-center gap-1.5" data-testid="engine-status">
-          <span className={`w-2 h-2 rounded-full ${
-            !status.online ? "bg-destructive"
-              : !status.captureAlive ? "bg-destructive animate-pulse"
-              : paused ? "bg-yellow-500"
-              : "bg-green-500 animate-pulse"
-          }`} />
-          <span className="text-[10px]">
-            {!status.online ? "Offline"
-              : !status.captureAlive ? "Capture down"
-              : paused ? "Paused"
-              : "Recording"}
-          </span>
-        </span>
+        <PipelineToggle online={status.online} captureAlive={status.captureAlive} paused={paused} toggling={toggling} onToggle={togglePipeline} />
         <span data-testid="episode-count">{status.episodes} episodes</span>
         <span data-testid="playbook-count">{status.playbooks} playbooks</span>
         <span className="font-medium text-primary" data-testid="total-cost">${status.cost.toFixed(4)}</span>
-        <button
-          onClick={togglePipeline}
-          disabled={toggling || !status.online}
-          data-testid="pipeline-toggle"
-          className={`relative w-8 h-4 rounded-full transition-colors disabled:opacity-50 ${paused ? "bg-muted" : "bg-primary"}`}
-        >
-          <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${paused ? "left-0.5" : "left-[18px]"}`} />
-        </button>
       </div>
     </header>
   );
