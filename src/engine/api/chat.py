@@ -13,6 +13,8 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from engine.config import MODEL_FAST
+from engine.pipeline.log_mutation import log_mutation
+from engine.pipeline.memory_file import write_playbook, delete_playbook
 
 logger = logging.getLogger(__name__)
 
@@ -255,8 +257,9 @@ class ProposalExecution(BaseModel):
     reason: str = ""
 
 
+@log_mutation("chat_delete")
 async def _exec_delete(db, table: str, ids: list[int]) -> dict:
-    """Execute delete, verify rows gone, log. Returns {success, result}."""
+    """Execute delete, verify rows gone. Returns {success, result}."""
     try:
         deleted = await db.delete_rows(table, ids)
     except ValueError as e:
@@ -271,19 +274,19 @@ async def _exec_delete(db, table: str, ids: list[int]) -> dict:
             still_exist.append(row_id)
 
     if still_exist:
-        logger.error("execute_proposal: delete failed, rows still exist: %s", still_exist)
         return {"success": False, "result": {"error": f"Rows still exist after delete: {still_exist}"}}
 
-    await db.insert_pipeline_log(
-        stage="chat_mutation", prompt=f"delete {ids} from {table}",
-        response=f"deleted {deleted}, verified gone",
-        model="", input_tokens=0, output_tokens=0, cost_usd=0,
-    )
+    # Delete memory files for playbook entries
+    if table == "playbook_entries":
+        for row_id in ids:
+            delete_playbook(str(row_id))
+
     return {"success": True, "result": {"deleted": deleted, "table": table, "ids": ids}}
 
 
+@log_mutation("chat_update_playbook")
 async def _exec_update_playbook(db, fields: dict) -> dict:
-    """Execute playbook update, verify fields changed, log. Returns {success, result}."""
+    """Execute playbook update, verify fields changed, write memory file."""
     name = fields.get("name")
     if not name:
         return {"success": False, "result": {"error": "Missing playbook name in fields"}}
@@ -291,7 +294,9 @@ async def _exec_update_playbook(db, fields: dict) -> dict:
     playbooks = await db.get_all_playbooks()
     existing = next((p for p in playbooks if p["name"] == name), None)
     if not existing:
-        return {"success": False, "result": {"error": f"Playbook '{name}' not found. Available: {[p['name'] for p in playbooks]}"}}
+        return {"success": False, "result": {
+            "error": f"Playbook '{name}' not found. Available: {[p['name'] for p in playbooks]}",
+        }}
 
     await db.upsert_playbook(
         name=name,
@@ -302,6 +307,7 @@ async def _exec_update_playbook(db, fields: dict) -> dict:
         maturity=fields.get("maturity", existing["maturity"]),
     )
 
+    # Verify
     playbooks_after = await db.get_all_playbooks()
     updated = next((p for p in playbooks_after if p["name"] == name), None)
     if not updated:
@@ -316,12 +322,9 @@ async def _exec_update_playbook(db, fields: dict) -> dict:
             return {"success": False, "result": {"error": f"Field '{key}' not updated: expected {val}, got {actual}"}}
         changes[key] = {"before": existing.get(key), "after": val}
 
-    await db.insert_pipeline_log(
-        stage="chat_mutation", prompt=f"update playbook '{name}': {fields}",
-        response=f"verified: {changes}",
-        model="", input_tokens=0, output_tokens=0, cost_usd=0,
-    )
-    return {"success": True, "result": {"name": name, "changes": changes}}
+    # Write memory file
+    file_path = write_playbook(updated)
+    return {"success": True, "result": {"name": name, "changes": changes, "file": str(file_path)}}
 
 
 @router.post("/memory/chat/execute-proposal")

@@ -6,6 +6,7 @@ import logging
 from engine.config import MODEL_DEEP
 from engine.db import DB
 from engine.llm import LLMClient
+from engine.pipeline.memory_file import write_playbook
 
 logger = logging.getLogger(__name__)
 
@@ -171,6 +172,11 @@ async def daily_distill(
                 evidence=json.dumps(entry.get("evidence", [])),
                 maturity=entry.get("maturity", "nascent"),
             )
+            # Write memory file
+            playbooks_after = await db.get_all_playbooks()
+            pb = next((p for p in playbooks_after if p["name"] == entry["name"]), None)
+            if pb:
+                write_playbook(pb)
             count += 1
 
         logger.info(

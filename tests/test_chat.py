@@ -1,6 +1,7 @@
 """Tests for memory chat tool dispatch, proposal logic, and endpoint integration."""
 
 import json
+import os
 
 import pytest
 import aiosqlite
@@ -9,6 +10,16 @@ from httpx import ASGITransport, AsyncClient
 from engine.db import DB
 from engine.api.chat import _read_tool, _handle_tool, _make_read_tools
 from engine.llm import ContentBlock, MessageResponse, LLMClient, LLMResponse
+
+
+@pytest.fixture(autouse=True)
+def _memory_dir(tmp_path):
+    """Point memory files to temp dir for all tests."""
+    import engine.pipeline.memory_file as mf
+    old = mf.MEMORY_DIR
+    mf.MEMORY_DIR = tmp_path / "memory"
+    yield
+    mf.MEMORY_DIR = old
 
 
 @pytest.fixture
@@ -649,9 +660,30 @@ class TestProposalExecution:
                 "reason": "test log",
             })
         logs, _ = await seeded_db.get_pipeline_logs(limit=10)
-        mutation_logs = [l for l in logs if l["stage"] == "chat_mutation"]
+        mutation_logs = [l for l in logs if l["stage"] == "chat_update_playbook"]
         assert len(mutation_logs) >= 1
-        assert "verified" in mutation_logs[0]["response"]
+
+    @pytest.mark.asyncio
+    async def test_update_writes_memory_file(self, seeded_db, tmp_path):
+        """Approving update should write a markdown memory file."""
+        import engine.pipeline.memory_file as mf
+        mf.MEMORY_DIR = tmp_path / "memory"
+
+        app = _make_app(seeded_db, MockLLMClient([]))
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post("/api/memory/chat/execute-proposal", json={
+                "type": "update_playbook",
+                "fields": {"name": "use-git-frequently", "confidence": 0.9},
+                "reason": "test",
+            })
+        assert resp.json()["success"] is True
+        assert resp.json()["result"]["file"] is not None
+
+        md_path = tmp_path / "memory" / "playbooks" / "use-git-frequently.md"
+        assert md_path.exists()
+        content = md_path.read_text()
+        assert "use-git-frequently" in content
+        assert "90%" in content
 
 
 class TestProposalStatusPersistence:

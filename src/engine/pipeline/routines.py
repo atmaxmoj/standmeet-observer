@@ -6,6 +6,7 @@ import logging
 from engine.config import MODEL_DEEP
 from engine.db import DB
 from engine.llm import LLMClient
+from engine.pipeline.memory_file import write_routine
 
 logger = logging.getLogger(__name__)
 
@@ -162,6 +163,10 @@ async def daily_routines(client: LLMClient, db: DB) -> int:
                 confidence=entry.get("confidence", 0.4),
                 maturity=entry.get("maturity", "nascent"),
             )
+            routines_after = await db.get_all_routines()
+            rt = next((r for r in routines_after if r["name"] == entry["name"]), None)
+            if rt:
+                write_routine(rt)
             count += 1
 
         logger.info("Routine extraction: %d routines from %d episodes", count, len(episodes))
