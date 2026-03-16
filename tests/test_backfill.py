@@ -21,7 +21,6 @@ import pytest
 from httpx import AsyncClient, ASGITransport
 from fastapi import FastAPI
 
-from engine.db import DB
 from engine.api.routes import router
 
 

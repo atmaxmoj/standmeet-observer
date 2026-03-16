@@ -5,13 +5,10 @@ These tests verify:
 2. Backfill produces reasonable window counts from historical data
 """
 
-import sqlite3
 import threading
 import time
 from datetime import datetime, timezone, timedelta
-from unittest.mock import patch
 
-import pytest
 
 from engine.pipeline.collector import Frame
 from engine.pipeline.filter import should_keep, detect_windows

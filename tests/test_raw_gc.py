@@ -1,6 +1,5 @@
 """Tests for raw data GC tools (frames, audio, os_events, pipeline_logs)."""
 
-import os
 import sqlite3
 import pytest
 from engine.pipeline.audit import (

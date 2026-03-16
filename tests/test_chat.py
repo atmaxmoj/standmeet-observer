@@ -1,10 +1,8 @@
 """Tests for memory chat tool dispatch, proposal logic, and endpoint integration."""
 
 import json
-import os
 
 import pytest
-import aiosqlite
 from httpx import ASGITransport, AsyncClient
 
 from engine.db import DB
@@ -660,7 +658,7 @@ class TestProposalExecution:
                 "reason": "test log",
             })
         logs, _ = await seeded_db.get_pipeline_logs(limit=10)
-        mutation_logs = [l for l in logs if l["stage"] == "chat_update_playbook"]
+        mutation_logs = [log for log in logs if log["stage"] == "chat_update_playbook"]
         assert len(mutation_logs) >= 1
 
     @pytest.mark.asyncio

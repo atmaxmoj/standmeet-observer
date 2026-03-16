@@ -3,7 +3,7 @@
 import sqlite3
 from datetime import datetime, timedelta, timezone
 import pytest
-from engine.pipeline.decay import decay_confidence, DECAY_DAYS, DECAY_FLOOR
+from engine.pipeline.decay import decay_confidence
 
 
 @pytest.fixture

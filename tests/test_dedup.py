@@ -1,6 +1,5 @@
 """Tests for playbook deduplication tools."""
 
-import json
 import sqlite3
 import pytest
 from engine.pipeline.dedup import find_similar_pairs, merge_entries

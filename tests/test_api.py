@@ -1,10 +1,9 @@
 """Tests for engine API: ingest endpoints, query endpoints, frame image serving, pipeline control."""
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 from httpx import AsyncClient, ASGITransport
 
-from engine.db import DB
 from engine.api.routes import router
 from fastapi import FastAPI
 

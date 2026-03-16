@@ -20,6 +20,17 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+_THINKING_RE = None
+
+
+def _clean_reply(text: str) -> str:
+    """Strip leaked thinking tags from LLM output."""
+    import re
+    global _THINKING_RE  # noqa: PLW0603
+    if _THINKING_RE is None:
+        _THINKING_RE = re.compile(r"</?thinking>", re.IGNORECASE)
+    return _THINKING_RE.sub("", text).strip()
+
 # Nice labels for tool names shown in the UI
 TOOL_LABELS = {
     "search_episodes": "Searching episodes",
@@ -395,7 +406,7 @@ async def _chat_stream(db, llm, messages: list[dict]) -> AsyncGenerator[str, Non
         logger.debug("chat: turn %d got %d tool_uses, stop=%s", _turn, len(tool_uses), resp.stop_reason)
 
         if not tool_uses or resp.stop_reason == "end_turn":
-            reply = text_blocks[-1].text if text_blocks else ""
+            reply = _clean_reply(text_blocks[-1].text if text_blocks else "")
             await db.append_chat_message("assistant", reply, json.dumps(proposals, default=str))
             await _record_usage(db, total_input, total_output)
             logger.info("chat: done, %d tokens in, %d out, %d proposals", total_input, total_output, len(proposals))

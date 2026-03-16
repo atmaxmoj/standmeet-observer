@@ -1,10 +1,9 @@
 """Tests for pipeline filter: noise removal + batch window detection."""
 
 from datetime import datetime, timezone, timedelta
-from unittest.mock import patch
 
 from engine.pipeline.collector import Frame
-from engine.pipeline.filter import should_keep, detect_windows, IGNORE_APPS
+from engine.pipeline.filter import should_keep, detect_windows
 
 
 def _frame(
