@@ -1,5 +1,10 @@
 import { test, expect } from "@playwright/test";
 
+/** Click a sidebar nav item by its data-testid */
+async function nav(page: import("@playwright/test").Page, key: string) {
+  await page.getByTestId(`nav-${key}`).click();
+}
+
 test.describe("Dashboard", () => {
   test("header shows engine status", async ({ page }) => {
     await page.goto("/");
@@ -10,9 +15,20 @@ test.describe("Dashboard", () => {
     await page.screenshot({ path: "tests/screenshots/header.png", fullPage: false });
   });
 
-  test("Capture tab shows frames with pagination", async ({ page }) => {
+  test("sidebar is visible with grouped navigation", async ({ page }) => {
     await page.goto("/");
-    await page.getByRole("tab", { name: "Capture" }).click();
+    const sidebar = page.getByTestId("sidebar");
+    await expect(sidebar).toBeVisible();
+    // Check category labels
+    await expect(sidebar).toContainText("Capture");
+    await expect(sidebar).toContainText("Memory");
+    await expect(sidebar).toContainText("Usage");
+    await expect(sidebar).toContainText("Logs");
+  });
+
+  test("Capture panel shows frames with pagination", async ({ page }) => {
+    await page.goto("/");
+    await nav(page, "frames");
     const panel = page.getByTestId("frames-panel");
     await expect(panel).toBeVisible({ timeout: 10000 });
 
@@ -30,34 +46,34 @@ test.describe("Dashboard", () => {
     await page.screenshot({ path: "tests/screenshots/capture.png", fullPage: true });
   });
 
-  test("Audio tab loads", async ({ page }) => {
+  test("Audio panel loads", async ({ page }) => {
     await page.goto("/");
-    await page.getByRole("tab", { name: "Audio" }).click();
+    await nav(page, "audio");
     const panel = page.getByTestId("audio-panel");
     await expect(panel).toBeVisible({ timeout: 10000 });
     await page.screenshot({ path: "tests/screenshots/audio.png", fullPage: true });
   });
 
-  test("Episodes tab loads", async ({ page }) => {
+  test("Episodes panel loads", async ({ page }) => {
     await page.goto("/");
-    await page.getByRole("tab", { name: "Episodes" }).click();
+    await nav(page, "episodes");
     const panel = page.getByTestId("episodes-panel");
     await expect(panel).toBeVisible({ timeout: 10000 });
     await page.screenshot({ path: "tests/screenshots/episodes.png", fullPage: true });
   });
 
-  test("Playbook tab loads", async ({ page }) => {
+  test("Playbook panel loads", async ({ page }) => {
     await page.goto("/");
-    await page.getByRole("tab", { name: "Playbook" }).click();
+    await nav(page, "playbooks");
     const panel = page.getByTestId("playbooks-panel");
     await expect(panel).toBeVisible({ timeout: 10000 });
     await expect(page.getByRole("button", { name: "Run Distill" })).toBeVisible();
     await page.screenshot({ path: "tests/screenshots/playbook.png", fullPage: true });
   });
 
-  test("Usage tab shows cost summary", async ({ page }) => {
+  test("Usage panel shows cost summary", async ({ page }) => {
     await page.goto("/");
-    await page.getByRole("tab", { name: "Usage" }).click();
+    await nav(page, "usage");
     const panel = page.getByTestId("usage-panel");
     await expect(panel).toBeVisible({ timeout: 10000 });
     await expect(panel.getByText("Total Cost")).toBeVisible();
@@ -67,17 +83,17 @@ test.describe("Dashboard", () => {
     await page.screenshot({ path: "tests/screenshots/usage.png", fullPage: true });
   });
 
-  test("OS Events tab loads", async ({ page }) => {
+  test("OS Events panel loads", async ({ page }) => {
     await page.goto("/");
-    await page.getByRole("tab", { name: "OS Events" }).click();
+    await nav(page, "os-events");
     const panel = page.getByTestId("os-events-panel");
     await expect(panel).toBeVisible({ timeout: 10000 });
     await page.screenshot({ path: "tests/screenshots/os-events.png", fullPage: true });
   });
 
-  test("Logs tab loads", async ({ page }) => {
+  test("Logs panel loads", async ({ page }) => {
     await page.goto("/");
-    await page.getByRole("tab", { name: "Logs" }).click();
+    await nav(page, "logs");
     const panel = page.getByTestId("logs-panel");
     await expect(panel).toBeVisible({ timeout: 10000 });
     await page.screenshot({ path: "tests/screenshots/logs.png", fullPage: true });
@@ -85,7 +101,7 @@ test.describe("Dashboard", () => {
 
   test("frame detail overlay opens on thumbnail click", async ({ page }) => {
     await page.goto("/");
-    await page.getByRole("tab", { name: "Capture" }).click();
+    await nav(page, "frames");
     const panel = page.getByTestId("frames-panel");
     await expect(panel.getByTestId("frame-card").first()).toBeVisible({ timeout: 10000 });
 
@@ -110,7 +126,7 @@ test.describe("Dashboard", () => {
 
   test("selection bar appears when selecting frames", async ({ page }) => {
     await page.goto("/");
-    await page.getByRole("tab", { name: "Capture" }).click();
+    await nav(page, "frames");
     const panel = page.getByTestId("frames-panel");
     const cards = panel.getByTestId("frame-card");
     await expect(cards.first()).toBeVisible({ timeout: 10000 });
@@ -137,20 +153,22 @@ test.describe("Dashboard", () => {
     await expect(page.getByTestId("pipeline-toggle")).toBeVisible();
   });
 
-  test("tab switching works", async ({ page }) => {
+  test("sidebar navigation works", async ({ page }) => {
     await page.goto("/");
-    for (const tab of ["Capture", "Audio", "OS Events", "Episodes", "Playbook", "Usage", "Logs"]) {
-      await page.getByRole("tab", { name: tab }).click();
-      await expect(page.getByRole("tab", { name: tab })).toHaveAttribute(
-        "aria-selected",
-        "true"
-      );
+    const keys = ["frames", "audio", "os-events", "episodes", "playbooks", "usage", "logs"];
+    const panels = [
+      "frames-panel", "audio-panel", "os-events-panel",
+      "episodes-panel", "playbooks-panel", "usage-panel", "logs-panel",
+    ];
+    for (let i = 0; i < keys.length; i++) {
+      await nav(page, keys[i]);
+      await expect(page.getByTestId(panels[i])).toBeVisible({ timeout: 10000 });
     }
   });
 
   test("Refresh button reloads data", async ({ page }) => {
     await page.goto("/");
-    await page.getByRole("tab", { name: "Capture" }).click();
+    await nav(page, "frames");
     const panel = page.getByTestId("frames-panel");
     await expect(panel).toBeVisible({ timeout: 10000 });
 
@@ -163,7 +181,7 @@ test.describe("Dashboard", () => {
 
   test("pagination navigates between pages", async ({ page }) => {
     await page.goto("/");
-    await page.getByRole("tab", { name: "Capture" }).click();
+    await nav(page, "frames");
     const panel = page.getByTestId("frames-panel");
     await expect(panel).toBeVisible({ timeout: 10000 });
 

@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FramesPanel } from "@/components/FramesPanel";
 import { AudioPanel } from "@/components/AudioPanel";
 import { EpisodesPanel } from "@/components/EpisodesPanel";
@@ -8,6 +7,49 @@ import { OsEventsPanel } from "@/components/OsEventsPanel";
 import { UsagePanel } from "@/components/UsagePanel";
 import { LogsPanel } from "@/components/LogsPanel";
 import { api } from "@/lib/api";
+
+/* ── sidebar nav structure ── */
+
+type NavItem = { key: string; label: string };
+type NavGroup = { title: string; items: NavItem[] };
+
+const NAV: NavGroup[] = [
+  {
+    title: "Capture",
+    items: [
+      { key: "frames", label: "Screen" },
+      { key: "audio", label: "Audio" },
+      { key: "os-events", label: "OS Events" },
+    ],
+  },
+  {
+    title: "Memory",
+    items: [
+      { key: "episodes", label: "Episodes" },
+      { key: "playbooks", label: "Playbook" },
+    ],
+  },
+  {
+    title: "Usage",
+    items: [{ key: "usage", label: "Cost & Tokens" }],
+  },
+  {
+    title: "Logs",
+    items: [{ key: "logs", label: "Pipeline Logs" }],
+  },
+];
+
+const PANELS: Record<string, React.FC> = {
+  frames: FramesPanel,
+  audio: AudioPanel,
+  "os-events": OsEventsPanel,
+  episodes: EpisodesPanel,
+  playbooks: PlaybooksPanel,
+  usage: UsagePanel,
+  logs: LogsPanel,
+};
+
+/* ── header ── */
 
 function Header() {
   const [status, setStatus] = useState({
@@ -52,7 +94,7 @@ function Header() {
   };
 
   return (
-    <header className="flex items-center justify-between px-6 py-4 border-b" data-testid="header">
+    <header className="fixed top-0 left-0 right-0 z-20 flex items-center justify-between px-6 py-4 border-b bg-background" data-testid="header">
       <h1 className="text-sm font-semibold tracking-wider">OBSERVER</h1>
       <div className="flex items-center gap-5 text-xs text-muted-foreground">
         <span className="flex items-center gap-1.5" data-testid="engine-status">
@@ -85,32 +127,55 @@ function Header() {
   );
 }
 
-export default function App() {
+/* ── sidebar ── */
+
+function Sidebar({
+  active,
+  onSelect,
+}: {
+  active: string;
+  onSelect: (key: string) => void;
+}) {
   return (
-    <div className="min-h-screen bg-background">
-      <Header />
-      <div className="p-6">
-        <Tabs defaultValue="frames">
-          <TabsList>
-            <TabsTrigger value="frames">Capture</TabsTrigger>
-            <TabsTrigger value="audio">Audio</TabsTrigger>
-            <TabsTrigger value="os-events">OS Events</TabsTrigger>
-            <TabsTrigger value="episodes">Episodes</TabsTrigger>
-            <TabsTrigger value="playbooks">Playbook</TabsTrigger>
-            <TabsTrigger value="usage">Usage</TabsTrigger>
-            <TabsTrigger value="logs">Logs</TabsTrigger>
-          </TabsList>
-          <div className="mt-4">
-            <TabsContent value="frames"><FramesPanel /></TabsContent>
-            <TabsContent value="audio"><AudioPanel /></TabsContent>
-            <TabsContent value="os-events"><OsEventsPanel /></TabsContent>
-            <TabsContent value="episodes"><EpisodesPanel /></TabsContent>
-            <TabsContent value="playbooks"><PlaybooksPanel /></TabsContent>
-            <TabsContent value="usage"><UsagePanel /></TabsContent>
-            <TabsContent value="logs"><LogsPanel /></TabsContent>
+    <nav className="fixed top-[53px] left-0 bottom-0 w-48 border-r overflow-y-auto py-4 bg-background z-10" data-testid="sidebar">
+      {NAV.map((group) => (
+        <div key={group.title} className="mb-4">
+          <div className="px-4 mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            {group.title}
           </div>
-        </Tabs>
-      </div>
+          {group.items.map((item) => (
+            <button
+              key={item.key}
+              onClick={() => onSelect(item.key)}
+              data-testid={`nav-${item.key}`}
+              className={`w-full text-left px-4 py-1.5 text-sm transition-colors ${
+                active === item.key
+                  ? "bg-accent text-accent-foreground font-medium"
+                  : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      ))}
+    </nav>
+  );
+}
+
+/* ── app ── */
+
+export default function App() {
+  const [active, setActive] = useState("frames");
+  const Panel = PANELS[active];
+
+  return (
+    <div className="min-h-screen bg-background pt-[53px]">
+      <Header />
+      <Sidebar active={active} onSelect={setActive} />
+      <main className="ml-48 p-6">
+        {Panel && <Panel />}
+      </main>
     </div>
   );
 }
