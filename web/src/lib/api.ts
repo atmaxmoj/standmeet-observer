@@ -141,8 +141,42 @@ export const api = {
   pipeline: () => get<{ paused: boolean }>("/engine/pipeline"),
   pipelinePause: () => post<{ paused: boolean }>("/engine/pipeline/pause"),
   pipelineResume: () => post<{ paused: boolean }>("/engine/pipeline/resume"),
-  chat: (messages: ChatMessage[]) =>
-    post<ChatResponse>("/memory/chat", { messages }),
+  chat: async (
+    messages: ChatMessage[],
+    onToolCall: (name: string, label: string) => void,
+  ): Promise<ChatResult> => {
+    const res = await fetch(`${BASE}/memory/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages }),
+    });
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error("No response body");
+
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const parts = buffer.split("\n\n");
+      buffer = parts.pop() || "";
+      for (const part of parts) {
+        const eventMatch = part.match(/^event: (\w+)/m);
+        const dataMatch = part.match(/^data: (.+)/m);
+        if (!eventMatch || !dataMatch) continue;
+        const [event, data] = [eventMatch[1], JSON.parse(dataMatch[1])];
+        if (event === "tool_call") onToolCall(data.name, data.label);
+        else if (event === "text") return {
+          reply: data.content, proposals: data.proposals || [],
+          input_tokens: data.input_tokens || 0, output_tokens: data.output_tokens || 0,
+        };
+        else if (event === "error") throw new Error(data.message);
+      }
+    }
+    throw new Error("Stream ended without response");
+  },
 };
 
 export interface ChatMessage {
@@ -158,7 +192,7 @@ export interface Proposal {
   reason: string;
 }
 
-interface ChatResponse {
+interface ChatResult {
   reply: string;
   proposals: Proposal[];
   input_tokens: number;

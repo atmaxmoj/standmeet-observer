@@ -17,8 +17,9 @@ import json
 import logging
 import os
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,25 @@ class ToolDef:
     description: str
     input_schema: dict
     handler: Callable[..., Any]
+
+
+@dataclass
+class ContentBlock:
+    """A block in a model response — text or tool_use."""
+    type: str  # "text" or "tool_use"
+    text: str = ""
+    tool_name: str = ""
+    tool_input: dict | None = None
+    tool_use_id: str = ""
+
+
+@dataclass
+class MessageResponse:
+    """Response from a single amessages_create call."""
+    content: list[ContentBlock]
+    stop_reason: str  # "end_turn" or "tool_use"
+    input_tokens: int = 0
+    output_tokens: int = 0
 
 
 @dataclass
@@ -54,6 +74,24 @@ class LLMClient(ABC):
         """Async version of complete."""
         ...
 
+    async def amessages_create(
+        self,
+        *,
+        messages: list[dict],
+        model: str,
+        tools: list[dict] | None = None,
+        system: str = "",
+        max_tokens: int = 4096,
+    ) -> MessageResponse:
+        """Single async API call with messages, tools, and system prompt.
+
+        Returns structured content blocks (text + tool_use).
+        Subclasses implement this; the tool-use loop is managed by callers.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support amessages_create"
+        )
+
     def complete_with_tools(
         self,
         prompt: str,
@@ -67,6 +105,69 @@ class LLMClient(ABC):
         )
 
 
+def _serialize_messages_to_prompt(
+    messages: list[dict],
+    tools: list[dict] | None = None,
+    system: str = "",
+) -> str:
+    """Serialize structured messages + tools into a text prompt for text-only backends."""
+    parts: list[str] = []
+    if system:
+        parts.append(f"<system>\n{system}\n</system>\n")
+    if tools:
+        tool_desc = json.dumps(tools, indent=2)
+        parts.append(
+            f"<available_tools>\n{tool_desc}\n</available_tools>\n\n"
+            "When you need to call a tool, respond with ONLY a JSON block in this exact format:\n"
+            '<tool_call>\n{"name": "tool_name", "input": {...}}\n</tool_call>\n\n'
+            "When you have your final answer, respond with plain text (no tool_call tags).\n"
+        )
+    for msg in messages:
+        role = msg.get("role", "user")
+        content = msg.get("content", "")
+        if isinstance(content, str):
+            parts.append(f"<{role}>\n{content}\n</{role}>")
+        elif isinstance(content, list):
+            # Tool results or multi-block content
+            texts = []
+            for block in content:
+                if isinstance(block, dict):
+                    if block.get("type") == "tool_result":
+                        texts.append(f"[Tool result: {block.get('content', '')}]")
+                    elif block.get("type") == "text":
+                        texts.append(block.get("text", ""))
+                    else:
+                        texts.append(json.dumps(block, default=str))
+                else:
+                    texts.append(str(block))
+            parts.append(f"<{role}>\n{''.join(texts)}\n</{role}>")
+    return "\n".join(parts)
+
+
+def _parse_tool_calls(text: str) -> list[ContentBlock]:
+    """Parse <tool_call> blocks from text response. Returns ContentBlocks."""
+    import re
+    blocks: list[ContentBlock] = []
+    pattern = r"<tool_call>\s*(\{.*?\})\s*</tool_call>"
+    matches = re.findall(pattern, text, re.DOTALL)
+    for i, match in enumerate(matches):
+        try:
+            parsed = json.loads(match)
+            blocks.append(ContentBlock(
+                type="tool_use",
+                tool_name=parsed["name"],
+                tool_input=parsed.get("input", {}),
+                tool_use_id=f"text_tool_{i}",
+            ))
+        except (json.JSONDecodeError, KeyError):
+            logger.warning("Failed to parse tool_call: %s", match)
+    # Also extract non-tool-call text
+    clean = re.sub(pattern, "", text, flags=re.DOTALL).strip()
+    if clean:
+        blocks.insert(0, ContentBlock(type="text", text=clean))
+    return blocks
+
+
 class AgentSDKClient(LLMClient):
     """Uses Claude Agent SDK — works with OAuth token or logged-in CLI session.
 
@@ -78,20 +179,19 @@ class AgentSDKClient(LLMClient):
     def __init__(self, auth_token: str = ""):
         self._auth_token = auth_token
 
+    def _build_env(self) -> dict:
+        env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
+        if self._auth_token:
+            env["CLAUDE_CODE_OAUTH_TOKEN"] = self._auth_token
+            env.pop("ANTHROPIC_AUTH_TOKEN", None)
+            env.pop("ANTHROPIC_API_KEY", None)
+        return env
+
     def complete(self, prompt: str, model: str) -> LLMResponse:
         return asyncio.run(self.acomplete(prompt, model))
 
     async def acomplete(self, prompt: str, model: str) -> LLMResponse:
         from claude_agent_sdk import query, ClaudeAgentOptions, ResultMessage
-
-        # Prevent nesting check when running inside Claude Code dev environment
-        env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
-
-        if self._auth_token:
-            # OAuth token: set CLAUDE_CODE_OAUTH_TOKEN, clear conflicting vars
-            env["CLAUDE_CODE_OAUTH_TOKEN"] = self._auth_token
-            env.pop("ANTHROPIC_AUTH_TOKEN", None)
-            env.pop("ANTHROPIC_API_KEY", None)
 
         result_text = ""
         cost_usd = None
@@ -103,7 +203,7 @@ class AgentSDKClient(LLMClient):
                 max_turns=1,
                 permission_mode="bypassPermissions",
                 tools=[],
-                env=env,
+                env=self._build_env(),
             ),
         ):
             if isinstance(msg, ResultMessage):
@@ -116,6 +216,29 @@ class AgentSDKClient(LLMClient):
             cost_usd=cost_usd,
             input_tokens=usage.get("input_tokens", 0),
             output_tokens=usage.get("output_tokens", 0),
+        )
+
+    async def amessages_create(
+        self,
+        *,
+        messages: list[dict],
+        model: str,
+        tools: list[dict] | None = None,
+        system: str = "",
+        max_tokens: int = 4096,
+    ) -> MessageResponse:
+        """Serialize to prompt, call query(), parse tool calls from response."""
+        prompt = _serialize_messages_to_prompt(messages, tools, system)
+        resp = await self.acomplete(prompt, model)
+        blocks = _parse_tool_calls(resp.text) if tools else [
+            ContentBlock(type="text", text=resp.text)
+        ]
+        has_tool_use = any(b.type == "tool_use" for b in blocks)
+        return MessageResponse(
+            content=blocks,
+            stop_reason="tool_use" if has_tool_use else "end_turn",
+            input_tokens=resp.input_tokens,
+            output_tokens=resp.output_tokens,
         )
 
 
@@ -153,6 +276,45 @@ class DirectAPIClient(LLMClient):
             text=raw,
             input_tokens=usage.input_tokens,
             output_tokens=usage.output_tokens,
+        )
+
+    async def amessages_create(
+        self,
+        *,
+        messages: list[dict],
+        model: str,
+        tools: list[dict] | None = None,
+        system: str = "",
+        max_tokens: int = 4096,
+    ) -> MessageResponse:
+        """Native Anthropic Messages API call with tool support."""
+        kwargs: dict[str, Any] = {
+            "model": model,
+            "max_tokens": max_tokens,
+            "messages": messages,
+        }
+        if tools:
+            kwargs["tools"] = tools
+        if system:
+            kwargs["system"] = system
+
+        response = await self._async.messages.create(**kwargs)
+        blocks = []
+        for b in response.content:
+            if b.type == "text":
+                blocks.append(ContentBlock(type="text", text=b.text))
+            elif b.type == "tool_use":
+                blocks.append(ContentBlock(
+                    type="tool_use",
+                    tool_name=b.name,
+                    tool_input=b.input,
+                    tool_use_id=b.id,
+                ))
+        return MessageResponse(
+            content=blocks,
+            stop_reason=response.stop_reason,
+            input_tokens=response.usage.input_tokens,
+            output_tokens=response.usage.output_tokens,
         )
 
     def complete_with_tools(

@@ -76,10 +76,39 @@ function updateProposalStatus(
   return next;
 }
 
+function MessageList({ messages, loading, toolLabel, onApprove, onReject, scrollRef }: {
+  messages: UIMessage[]; loading: boolean; toolLabel: string;
+  onApprove: (m: number, p: number) => void; onReject: (m: number, p: number) => void;
+  scrollRef: React.RefObject<HTMLDivElement | null>;
+}) {
+  return (
+    <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-4">
+      {messages.length === 0 && (
+        <div className="text-muted-foreground text-center py-12">
+          <p>Ask me anything about your memory.</p>
+          <p className="text-xs mt-2">I can search episodes, playbooks, frames, audio, and more.</p>
+          <p className="text-[10px] mt-4 text-muted-foreground/60">Chat history is lost on refresh. Approved changes are permanent.</p>
+        </div>
+      )}
+      {messages.map((msg, i) => (
+        <MessageBubble key={i} msg={msg} index={i} onApprove={onApprove} onReject={onReject} />
+      ))}
+      {loading && (
+        <div className="flex justify-start">
+          <div className="bg-muted rounded-lg px-3 py-2 text-sm text-muted-foreground animate-pulse">
+            {toolLabel ? `${toolLabel}...` : "Thinking..."}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ChatPanel() {
   const [messages, setMessages] = useState<UIMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [toolLabel, setToolLabel] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -93,10 +122,11 @@ export function ChatPanel() {
     const userMsg: UIMessage = { role: "user", content: text };
     setMessages((prev) => [...prev, userMsg]);
     setLoading(true);
+    setToolLabel("");
     scrollToBottom();
     try {
       const apiMessages: ChatMessage[] = [...messages, userMsg].map((m) => ({ role: m.role, content: m.content }));
-      const resp = await api.chat(apiMessages);
+      const resp = await api.chat(apiMessages, (_name, label) => { setToolLabel(label); scrollToBottom(); });
       setMessages((prev) => [...prev, {
         role: "assistant", content: resp.reply,
         proposals: resp.proposals.map((p) => ({ proposal: p, status: "pending" as const })),
@@ -107,6 +137,7 @@ export function ChatPanel() {
       }]);
     }
     setLoading(false);
+    setToolLabel("");
     scrollToBottom();
   }, [input, loading, messages]);
 
@@ -129,23 +160,8 @@ export function ChatPanel() {
 
   return (
     <div className="flex flex-col flex-1 min-h-0" data-testid="chat-panel">
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-4">
-        {messages.length === 0 && (
-          <div className="text-muted-foreground text-center py-12">
-            <p>Ask me anything about your memory.</p>
-            <p className="text-xs mt-2">I can search episodes, playbooks, frames, audio, and more.</p>
-            <p className="text-[10px] mt-4 text-muted-foreground/60">Chat history is lost on refresh. Approved changes are permanent.</p>
-          </div>
-        )}
-        {messages.map((msg, i) => (
-          <MessageBubble key={i} msg={msg} index={i} onApprove={handleApprove} onReject={handleReject} />
-        ))}
-        {loading && (
-          <div className="flex justify-start">
-            <div className="bg-muted rounded-lg px-3 py-2 text-sm text-muted-foreground animate-pulse">Thinking...</div>
-          </div>
-        )}
-      </div>
+      <MessageList messages={messages} loading={loading} toolLabel={toolLabel}
+        onApprove={handleApprove} onReject={handleReject} scrollRef={scrollRef} />
       <div className="border-t p-4 flex gap-2">
         <input type="text" value={input} onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}

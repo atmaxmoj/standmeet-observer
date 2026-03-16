@@ -1,11 +1,15 @@
-"""Memory chat endpoint — agent with read tools + mutation proposals."""
+"""Memory chat endpoint — agent with read tools + mutation proposals.
+
+Uses SSE streaming so the frontend can show tool-use throbbing in real time.
+"""
 
 import json
 import logging
+from collections.abc import AsyncGenerator
 from typing import Any
 
-import anthropic
 from fastapi import APIRouter, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from engine.config import MODEL_FAST
@@ -13,6 +17,20 @@ from engine.config import MODEL_FAST
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# Nice labels for tool names shown in the UI
+TOOL_LABELS = {
+    "search_episodes": "Searching episodes",
+    "get_recent_episodes": "Getting recent episodes",
+    "get_playbooks": "Getting playbooks",
+    "get_playbook_history": "Getting playbook history",
+    "get_frames": "Getting frames",
+    "get_audio": "Getting audio",
+    "get_os_events": "Getting OS events",
+    "get_usage": "Getting usage stats",
+    "propose_delete": "Proposing deletion",
+    "propose_update_playbook": "Proposing playbook update",
+}
 
 SYSTEM_PROMPT = """You are the memory assistant for an observation system that captures screen frames, audio transcriptions, OS events, and distills them into episodes and behavioral playbook entries.
 
@@ -206,78 +224,86 @@ async def _record_usage(db, input_tokens: int, output_tokens: int):
     )
 
 
+def _sse(event: str, data: dict) -> str:
+    """Format a Server-Sent Event."""
+    return f"event: {event}\ndata: {json.dumps(data, default=str)}\n\n"
+
+
 class ChatRequest(BaseModel):
     messages: list[dict]
-
-
-class ChatResponse(BaseModel):
-    reply: str
-    proposals: list[dict]
-    input_tokens: int = 0
-    output_tokens: int = 0
 
 
 @router.post("/memory/chat")
 async def memory_chat(request: Request, body: ChatRequest):
     db = request.app.state.db
-    settings = request.app.state.settings
+    llm = request.app.state.llm
 
-    api_key = settings.anthropic_api_key
-    if not api_key:
-        return ChatResponse(reply="No API key configured.", proposals=[])
+    async def stream() -> AsyncGenerator[str, None]:
+        tools = _make_read_tools(db)
+        messages = list(body.messages)
+        proposals: list[dict] = []
+        total_input = 0
+        total_output = 0
 
-    client = anthropic.AsyncAnthropic(api_key=api_key)
-    tools = _make_read_tools(db)
-    messages = body.messages
-    proposals: list[dict] = []
-    total_input = 0
-    total_output = 0
+        for _turn in range(8):
+            try:
+                resp = await llm.amessages_create(
+                    messages=messages,
+                    model=MODEL_FAST,
+                    tools=tools,
+                    system=SYSTEM_PROMPT,
+                )
+            except NotImplementedError:
+                yield _sse("error", {"message": "LLM backend does not support chat."})
+                return
 
-    for _turn in range(8):
-        response = await client.messages.create(
-            model=MODEL_FAST,
-            max_tokens=4096,
-            system=SYSTEM_PROMPT,
-            messages=messages,
-            tools=tools,
-        )
+            total_input += resp.input_tokens
+            total_output += resp.output_tokens
 
-        total_input += response.usage.input_tokens
-        total_output += response.usage.output_tokens
+            tool_uses = [b for b in resp.content if b.type == "tool_use"]
+            text_blocks = [b for b in resp.content if b.type == "text"]
 
-        tool_uses = [b for b in response.content if b.type == "tool_use"]
-        text_blocks = [b for b in response.content if b.type == "text"]
+            if not tool_uses or resp.stop_reason == "end_turn":
+                reply = text_blocks[-1].text if text_blocks else ""
+                await _record_usage(db, total_input, total_output)
+                yield _sse("text", {"content": reply, "proposals": proposals,
+                                    "input_tokens": total_input, "output_tokens": total_output})
+                return
 
-        if not tool_uses or response.stop_reason == "end_turn":
-            reply = text_blocks[-1].text if text_blocks else ""
-            await _record_usage(db, total_input, total_output)
-            return ChatResponse(
-                reply=reply,
-                proposals=proposals,
-                input_tokens=total_input,
-                output_tokens=total_output,
-            )
+            # Build assistant message content for conversation history
+            assistant_content = []
+            for b in resp.content:
+                if b.type == "text":
+                    assistant_content.append({"type": "text", "text": b.text})
+                elif b.type == "tool_use":
+                    assistant_content.append({
+                        "type": "tool_use", "id": b.tool_use_id,
+                        "name": b.tool_name, "input": b.tool_input,
+                    })
+            messages.append({"role": "assistant", "content": assistant_content})
 
-        # Execute tools
-        messages.append({"role": "assistant", "content": response.content})
-        tool_results = []
-        for tu in tool_uses:
-            result, proposal = await _handle_tool(db, tu.name, tu.input)
-            if proposal:
-                proposals.append(proposal)
-            tool_results.append({
-                "type": "tool_result",
-                "tool_use_id": tu.id,
-                "content": json.dumps(result, default=str),
-            })
-        messages.append({"role": "user", "content": tool_results})
+            # Execute tool calls with SSE events
+            tool_results = []
+            for tu in tool_uses:
+                label = TOOL_LABELS.get(tu.tool_name, tu.tool_name)
+                yield _sse("tool_call", {"name": tu.tool_name, "label": label})
 
-    # Max turns reached
-    reply = "I've reached the maximum number of steps. Please try a more specific question."
-    await _record_usage(db, total_input, total_output)
-    return ChatResponse(
-        reply=reply,
-        proposals=proposals,
-        input_tokens=total_input,
-        output_tokens=total_output,
-    )
+                result, proposal = await _handle_tool(db, tu.tool_name, tu.tool_input or {})
+                if proposal:
+                    proposals.append(proposal)
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": tu.tool_use_id,
+                    "content": json.dumps(result, default=str),
+                })
+            messages.append({"role": "user", "content": tool_results})
+
+        # Max turns
+        await _record_usage(db, total_input, total_output)
+        yield _sse("text", {
+            "content": "I've reached the maximum number of steps. Please try a more specific question.",
+            "proposals": proposals,
+            "input_tokens": total_input, "output_tokens": total_output,
+        })
+
+    return StreamingResponse(stream(), media_type="text/event-stream")
