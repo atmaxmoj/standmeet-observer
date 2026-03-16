@@ -35,7 +35,7 @@ export function AudioPanel() {
   useEffect(() => { load(1); }, [load]);
 
   return (
-    <div className="space-y-4 pb-16" data-testid="audio-panel">
+    <div className="space-y-4" data-testid="audio-panel">
       <div className="flex items-center justify-between">
         <SearchInput onSearch={setSearch} />
         <Button variant="outline" size="sm" onClick={() => load(1)}>Refresh</Button>
@@ -78,7 +78,7 @@ export function AudioPanel() {
           onSelectAll={() => sel.toggleAll(frames.map((f) => f.id))} onClear={sel.clear}
           onDelete={sel.deleteSelected} deleting={sel.deleting} />
       ) : (
-        <div className="fixed bottom-0 left-48 right-0 bg-background/80 backdrop-blur-sm border-t py-2 flex justify-center z-50">
+        <div className="sticky bottom-0 bg-background/80 backdrop-blur-sm border-t py-2 flex justify-center">
           <Pagination page={page} totalPages={totalPages} onPageChange={load} />
         </div>
       )}

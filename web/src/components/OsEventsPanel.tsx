@@ -67,7 +67,7 @@ export function OsEventsPanel() {
   const setFilterAndLoad = (f: string) => { setFilter(f); load(1, f); };
 
   return (
-    <div className="space-y-4 pb-16" data-testid="os-events-panel">
+    <div className="space-y-4" data-testid="os-events-panel">
       <div className="flex justify-between items-center gap-2">
         <div className="flex items-center gap-3">
           <SearchInput onSearch={setSearch} />
@@ -100,7 +100,7 @@ export function OsEventsPanel() {
           onSelectAll={() => sel.toggleAll(events.map((e) => e.id))} onClear={sel.clear}
           onDelete={sel.deleteSelected} deleting={sel.deleting} />
       ) : (
-        <div className="fixed bottom-0 left-48 right-0 bg-background/80 backdrop-blur-sm border-t py-2 flex justify-center z-50">
+        <div className="sticky bottom-0 bg-background/80 backdrop-blur-sm border-t py-2 flex justify-center">
           <Pagination page={page} totalPages={totalPages} onPageChange={load} />
         </div>
       )}

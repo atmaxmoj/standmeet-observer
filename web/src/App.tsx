@@ -119,7 +119,7 @@ function Header() {
   };
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-20 flex items-center justify-between px-6 py-4 border-b bg-background" data-testid="header">
+    <header className="shrink-0 flex items-center justify-between px-6 py-4 border-b bg-background" data-testid="header">
       <h1 className="text-sm font-semibold tracking-wider">OBSERVER</h1>
       <div className="flex items-center gap-5 text-xs text-muted-foreground">
         <PipelineToggle online={status.online} captureAlive={status.captureAlive} paused={paused} toggling={toggling} onToggle={togglePipeline} />
@@ -141,7 +141,7 @@ function Sidebar({
   onSelect: (key: string) => void;
 }) {
   return (
-    <nav className="fixed top-[53px] left-0 bottom-0 w-48 border-r overflow-y-auto py-4 bg-background z-10" data-testid="sidebar">
+    <nav className="w-48 shrink-0 border-r overflow-y-auto py-4 bg-background" data-testid="sidebar">
       {NAV.map((group) => (
         <div key={group.title} className="mb-4">
           <div className="px-4 mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -190,12 +190,14 @@ export default function App() {
   const Panel = PANELS[active];
 
   return (
-    <div className="min-h-screen bg-background pt-[53px]">
+    <div className="h-screen bg-background flex flex-col overflow-hidden">
       <Header />
-      <Sidebar active={active} onSelect={setActive} />
-      <main className="ml-48 p-6">
-        {Panel && <Panel />}
-      </main>
+      <div className="flex flex-1 overflow-hidden">
+        <Sidebar active={active} onSelect={setActive} />
+        <main className="flex-1 overflow-y-auto p-6" data-testid="main-content">
+          {Panel && <Panel />}
+        </main>
+      </div>
     </div>
   );
 }

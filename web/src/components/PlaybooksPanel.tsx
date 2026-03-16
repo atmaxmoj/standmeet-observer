@@ -43,7 +43,7 @@ export function PlaybooksPanel() {
   useEffect(() => { load(); }, [load]);
 
   return (
-    <div className="space-y-4 pb-16" data-testid="playbooks-panel">
+    <div className="space-y-4" data-testid="playbooks-panel">
       <div className="flex justify-between items-center">
         <div className="flex items-center gap-3">
           <SearchInput onSearch={setSearch} />
