@@ -76,6 +76,18 @@ export interface Playbook {
   updated_at: string;
 }
 
+export interface Routine {
+  id: number;
+  name: string;
+  trigger: string;
+  goal: string;
+  steps: string;
+  uses: string;
+  confidence: number;
+  maturity: string;
+  updated_at: string;
+}
+
 export interface UsageSummary {
   days: number;
   total_cost_usd: number;
@@ -141,6 +153,8 @@ export const api = {
   usage: (days = 30) => get<UsageSummary>(`/engine/usage?days=${days}`),
   logs: (limit = 20, offset = 0, search = "") =>
     get<{ logs: PipelineLog[]; total: number }>(`/engine/logs?${qs({ limit, offset, search })}`),
+  routines: (search = "") =>
+    get<{ routines: Routine[] }>(`/memory/routines/?${qs({ search })}`),
   distill: () => post<{ playbook_entries_updated: number }>("/engine/distill"),
   batchDelete: (table: string, ids: number[]) =>
     post<{ deleted: number }>("/batch/delete", { table, ids }),

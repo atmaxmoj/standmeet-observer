@@ -116,6 +116,19 @@ CREATE TABLE IF NOT EXISTS playbook_history (
 
 CREATE INDEX IF NOT EXISTS idx_playbook_history_name ON playbook_history(playbook_name);
 
+CREATE TABLE IF NOT EXISTS routines (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    trigger TEXT NOT NULL DEFAULT '',
+    goal TEXT NOT NULL DEFAULT '',
+    steps TEXT NOT NULL DEFAULT '[]',
+    uses TEXT NOT NULL DEFAULT '[]',
+    confidence REAL NOT NULL DEFAULT 0.0,
+    maturity TEXT NOT NULL DEFAULT 'nascent',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS chat_messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     role TEXT NOT NULL,
@@ -628,6 +641,34 @@ class DB:
             "capture_alive": capture_alive,
             "last_frame_at": last_frame_at,
         }
+
+    # ── Routines ──
+
+    async def upsert_routine(
+        self, name: str, trigger: str, goal: str,
+        steps: str, uses: str, confidence: float, maturity: str = "nascent",
+    ):
+        await self._conn.execute(
+            "INSERT INTO routines (name, trigger, goal, steps, uses, confidence, maturity, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now')) "
+            "ON CONFLICT(name) DO UPDATE SET "
+            "trigger=excluded.trigger, goal=excluded.goal, steps=excluded.steps, "
+            "uses=excluded.uses, confidence=excluded.confidence, maturity=excluded.maturity, "
+            "updated_at=datetime('now')",
+            (name, trigger, goal, steps, uses, confidence, maturity),
+        )
+        await self._conn.commit()
+
+    async def get_all_routines(self, search: str = "") -> list[dict]:
+        clauses, params = [], []
+        if search:
+            clauses.append("(name LIKE ? OR trigger LIKE ? OR goal LIKE ?)")
+            params.extend([f"%{search}%"] * 3)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        async with self._conn.execute(
+            f"SELECT * FROM routines {where} ORDER BY confidence DESC", params
+        ) as cur:
+            return [dict(r) for r in await cur.fetchall()]
 
     # ── Chat messages ──
 

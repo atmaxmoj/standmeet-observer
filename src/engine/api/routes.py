@@ -258,6 +258,23 @@ async def trigger_distill(request: Request):
     return {"playbook_entries_updated": count}
 
 
+@router.get("/memory/routines/")
+async def list_routines(request: Request, search: str = ""):
+    db = request.app.state.db
+    routines = await db.get_all_routines(search)
+    return {"routines": routines}
+
+
+@router.post("/engine/routines")
+async def trigger_routines(request: Request):
+    from engine.pipeline.routines import daily_routines
+
+    llm = request.app.state.llm
+    db = request.app.state.db
+    count = await daily_routines(llm, db)
+    return {"routines_updated": count}
+
+
 @router.post("/engine/backfill")
 async def backfill(request: Request):
     """Reset all frames to unprocessed and re-trigger pipeline.

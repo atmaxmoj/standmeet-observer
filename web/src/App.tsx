@@ -7,6 +7,7 @@ import { OsEventsPanel } from "@/components/OsEventsPanel";
 import { UsagePanel } from "@/components/UsagePanel";
 import { LogsPanel } from "@/components/LogsPanel";
 import { ChatPanel } from "@/components/ChatPanel";
+import { RoutinesPanel } from "@/components/RoutinesPanel";
 import { api } from "@/lib/api";
 
 /* ── sidebar nav structure ── */
@@ -28,6 +29,7 @@ const NAV: NavGroup[] = [
     items: [
       { key: "episodes", label: "Episodes" },
       { key: "playbooks", label: "Playbook" },
+      { key: "routines", label: "Routines" },
       { key: "chat", label: "Chat" },
     ],
   },
@@ -47,6 +49,7 @@ const PANELS: Record<string, React.FC> = {
   "os-events": OsEventsPanel,
   episodes: EpisodesPanel,
   playbooks: PlaybooksPanel,
+  routines: RoutinesPanel,
   usage: UsagePanel,
   logs: LogsPanel,
   chat: ChatPanel,

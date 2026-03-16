@@ -155,10 +155,10 @@ test.describe("Dashboard", () => {
 
   test("sidebar navigation works", async ({ page }) => {
     await page.goto("/");
-    const keys = ["frames", "audio", "os-events", "episodes", "playbooks", "chat", "usage", "logs"];
+    const keys = ["frames", "audio", "os-events", "episodes", "playbooks", "routines", "chat", "usage", "logs"];
     const panels = [
       "frames-panel", "audio-panel", "os-events-panel",
-      "episodes-panel", "playbooks-panel", "chat-panel", "usage-panel", "logs-panel",
+      "episodes-panel", "playbooks-panel", "routines-panel", "chat-panel", "usage-panel", "logs-panel",
     ];
     for (let i = 0; i < keys.length; i++) {
       await nav(page, keys[i]);

@@ -19,6 +19,7 @@ from engine.llm import create_client
 from engine.pipeline.collector import Frame
 from engine.pipeline.episode import EPISODE_PROMPT
 from engine.pipeline.distill import DISTILL_PROMPT
+from engine.pipeline.routines import ROUTINE_PROMPT
 from engine.pipeline.filter import should_keep, detect_windows
 from engine.pipeline.validate import validate_episodes, validate_playbooks, with_retry
 from engine.pipeline.budget import check_daily_budget
@@ -473,6 +474,119 @@ def daily_distill_task():
 
     except Exception:
         logger.exception("daily distill failed")
+    finally:
+        conn.close()
+
+
+# -- Daily routine extraction (runs after distill) --
+
+
+@huey.periodic_task(crontab(hour="3", minute="30"))
+def daily_routines_task():
+    """Daily routine extraction with Opus. Runs at 3:30am (after distill at 3am)."""
+    conn = _get_conn()
+    try:
+        if not check_daily_budget(conn, DAILY_COST_CAP_USD):
+            logger.warning("daily routines: daily budget exceeded, skipping")
+            return
+
+        episodes = conn.execute(
+            "SELECT * FROM episodes WHERE created_at >= datetime('now', '-1 days') "
+            "ORDER BY created_at",
+        ).fetchall()
+
+        if not episodes:
+            logger.info("daily routines: no episodes, skipping")
+            return
+
+        playbooks = conn.execute(
+            "SELECT * FROM playbook_entries ORDER BY confidence DESC",
+        ).fetchall()
+
+        existing_routines = conn.execute(
+            "SELECT * FROM routines ORDER BY confidence DESC",
+        ).fetchall()
+
+        episodes_text = "\n\n".join(
+            f"Episode #{e['id']} ({e['started_at']} to {e['ended_at']}):\n{e['summary']}"
+            for e in episodes
+        )
+
+        playbooks_text = (
+            "\n".join(
+                f"- **{p['name']}** ({p['confidence']:.1f}): {p['context']} → {p['action']}"
+                for p in playbooks
+            )
+            if playbooks
+            else "(no playbook entries yet)"
+        )
+
+        routines_text = (
+            "\n\n".join(
+                f"- **{r['name']}** (confidence: {r['confidence']}, maturity: {r['maturity']})\n"
+                f"  Trigger: {r['trigger']}\n  Goal: {r['goal']}\n"
+                f"  Steps: {r['steps']}\n  Uses: {r['uses']}"
+                for r in existing_routines
+            )
+            if existing_routines
+            else "(none yet)"
+        )
+
+        prompt = ROUTINE_PROMPT.format(
+            playbooks=playbooks_text, routines=routines_text, episodes=episodes_text,
+        )
+
+        resp = _llm.complete(prompt, MODEL_DEEP)
+        cost = resp.cost_usd or 0
+
+        conn.execute(
+            "INSERT INTO token_usage (model, layer, input_tokens, output_tokens, cost_usd) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (MODEL_DEEP, "routines", resp.input_tokens, resp.output_tokens, cost),
+        )
+        conn.execute(
+            "INSERT INTO pipeline_logs (stage, prompt, response, model, input_tokens, output_tokens, cost_usd) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            ("routines", prompt, resp.text, MODEL_DEEP, resp.input_tokens, resp.output_tokens, cost),
+        )
+
+        text = resp.text.strip()
+        if text.startswith("```"):
+            text = text.split("\n", 1)[1]
+            text = text.rsplit("```", 1)[0]
+        entries = json.loads(text)
+        if not isinstance(entries, list):
+            entries = [entries]
+
+        count = 0
+        for entry in entries:
+            conn.execute(
+                "INSERT INTO routines (name, trigger, goal, steps, uses, confidence, maturity, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now')) "
+                "ON CONFLICT(name) DO UPDATE SET "
+                "trigger=excluded.trigger, goal=excluded.goal, steps=excluded.steps, "
+                "uses=excluded.uses, confidence=excluded.confidence, maturity=excluded.maturity, "
+                "updated_at=datetime('now')",
+                (
+                    entry["name"],
+                    entry.get("trigger", ""),
+                    entry.get("goal", ""),
+                    json.dumps(entry.get("steps", []), ensure_ascii=False),
+                    json.dumps(entry.get("uses", []), ensure_ascii=False),
+                    entry.get("confidence", 0.4),
+                    entry.get("maturity", "nascent"),
+                ),
+            )
+            count += 1
+
+        conn.commit()
+        logger.info(
+            "daily routines: %d routines from %d episodes, cost=$%.4f",
+            count, len(episodes), cost,
+        )
+
+    except Exception:
+        logger.exception("daily routines failed")
     finally:
         conn.close()
 
