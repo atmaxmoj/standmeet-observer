@@ -247,6 +247,94 @@ async def clear_chat_history(request: Request):
     return {"cleared": True}
 
 
+class ProposalExecution(BaseModel):
+    type: str
+    table: str | None = None
+    ids: list[int] | None = None
+    fields: dict | None = None
+    reason: str = ""
+
+
+async def _exec_delete(db, table: str, ids: list[int]) -> dict:
+    """Execute delete, verify rows gone, log. Returns {success, result}."""
+    try:
+        deleted = await db.delete_rows(table, ids)
+    except ValueError as e:
+        return {"success": False, "result": {"error": str(e)}}
+
+    still_exist = []
+    for row_id in ids:
+        cursor = await db._conn.execute(
+            f"SELECT id FROM {table} WHERE id = ?", (row_id,),  # noqa: S608
+        )
+        if await cursor.fetchone():
+            still_exist.append(row_id)
+
+    if still_exist:
+        logger.error("execute_proposal: delete failed, rows still exist: %s", still_exist)
+        return {"success": False, "result": {"error": f"Rows still exist after delete: {still_exist}"}}
+
+    await db.insert_pipeline_log(
+        stage="chat_mutation", prompt=f"delete {ids} from {table}",
+        response=f"deleted {deleted}, verified gone",
+        model="", input_tokens=0, output_tokens=0, cost_usd=0,
+    )
+    return {"success": True, "result": {"deleted": deleted, "table": table, "ids": ids}}
+
+
+async def _exec_update_playbook(db, fields: dict) -> dict:
+    """Execute playbook update, verify fields changed, log. Returns {success, result}."""
+    name = fields.get("name")
+    if not name:
+        return {"success": False, "result": {"error": "Missing playbook name in fields"}}
+
+    playbooks = await db.get_all_playbooks()
+    existing = next((p for p in playbooks if p["name"] == name), None)
+    if not existing:
+        return {"success": False, "result": {"error": f"Playbook '{name}' not found. Available: {[p['name'] for p in playbooks]}"}}
+
+    await db.upsert_playbook(
+        name=name,
+        context=fields.get("context", existing["context"]),
+        action=fields.get("action", existing["action"]),
+        confidence=fields.get("confidence", existing["confidence"]),
+        evidence=existing["evidence"],
+        maturity=fields.get("maturity", existing["maturity"]),
+    )
+
+    playbooks_after = await db.get_all_playbooks()
+    updated = next((p for p in playbooks_after if p["name"] == name), None)
+    if not updated:
+        return {"success": False, "result": {"error": f"Playbook '{name}' disappeared after update"}}
+
+    changes = {}
+    for key, val in fields.items():
+        if key == "name":
+            continue
+        actual = updated.get(key)
+        if actual != val:
+            return {"success": False, "result": {"error": f"Field '{key}' not updated: expected {val}, got {actual}"}}
+        changes[key] = {"before": existing.get(key), "after": val}
+
+    await db.insert_pipeline_log(
+        stage="chat_mutation", prompt=f"update playbook '{name}': {fields}",
+        response=f"verified: {changes}",
+        model="", input_tokens=0, output_tokens=0, cost_usd=0,
+    )
+    return {"success": True, "result": {"name": name, "changes": changes}}
+
+
+@router.post("/memory/chat/execute-proposal")
+async def execute_proposal(request: Request, body: ProposalExecution):
+    """Execute a proposal, verify the result, and log it."""
+    db = request.app.state.db
+    if body.type == "delete" and body.table and body.ids:
+        return await _exec_delete(db, body.table, body.ids)
+    if body.type == "update_playbook" and body.fields:
+        return await _exec_update_playbook(db, body.fields)
+    return {"success": False, "result": {"error": f"Unknown proposal type: {body.type}"}}
+
+
 class ProposalStatusUpdate(BaseModel):
     message_id: int
     proposal_index: int

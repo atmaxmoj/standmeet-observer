@@ -568,69 +568,90 @@ class TestChatPersistence:
 
 
 class TestProposalExecution:
-    """Test that approving proposals actually executes mutations."""
+    """Test execute-proposal endpoint: execute + verify + log."""
 
     @pytest.mark.asyncio
-    async def test_approve_delete_executes(self, seeded_db):
-        """Approving a delete proposal should actually delete rows."""
-        # Verify episode exists
-        episodes = await seeded_db.get_all_episodes()
-        assert len(episodes) == 1
-
-        from engine.api.routes import router as routes_router
-        from fastapi import FastAPI
-        from engine.api.chat import router as chat_router
-        app = FastAPI()
-        app.include_router(chat_router, prefix="/api")
-        app.include_router(routes_router, prefix="")
-        app.state.db = seeded_db
-        app.state.llm = MockLLMClient([])
-
+    async def test_delete_executes_and_verifies(self, seeded_db):
+        """Delete proposal should delete rows and verify they're gone."""
+        assert len(await seeded_db.get_all_episodes()) == 1
+        app = _make_app(seeded_db, MockLLMClient([]))
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            resp = await client.post("/batch/delete", json={"table": "episodes", "ids": [1]})
-        assert resp.json()["deleted"] == 1
-        episodes = await seeded_db.get_all_episodes()
-        assert len(episodes) == 0
-
-    @pytest.mark.asyncio
-    async def test_approve_update_playbook_executes(self, seeded_db):
-        """Approving an update_playbook proposal should actually update the entry."""
-        # Verify initial state
-        playbooks = await seeded_db.get_all_playbooks()
-        assert playbooks[0]["confidence"] == 0.8
-
-        from engine.api.routes import router as routes_router
-        from fastapi import FastAPI
-        from engine.api.chat import router as chat_router
-        app = FastAPI()
-        app.include_router(chat_router, prefix="/api")
-        app.include_router(routes_router, prefix="")
-        app.state.db = seeded_db
-        app.state.llm = MockLLMClient([])
-
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            resp = await client.post("/batch/update-playbook", json={
-                "name": "use-git-frequently", "confidence": 0.95,
+            resp = await client.post("/api/memory/chat/execute-proposal", json={
+                "type": "delete", "table": "episodes", "ids": [1], "reason": "test",
             })
-        assert resp.json()["updated"] is True
-        playbooks = await seeded_db.get_all_playbooks()
-        assert playbooks[0]["confidence"] == 0.95
+        data = resp.json()
+        assert data["success"] is True
+        assert data["result"]["deleted"] == 1
+        assert len(await seeded_db.get_all_episodes()) == 0
 
     @pytest.mark.asyncio
-    async def test_update_nonexistent_playbook_returns_error(self, seeded_db):
-        """Updating a playbook that doesn't exist should return error."""
-        from engine.api.routes import router as routes_router
-        from fastapi import FastAPI
-        app = FastAPI()
-        app.include_router(routes_router, prefix="")
-        app.state.db = seeded_db
-        app.state.llm = MockLLMClient([])
-
+    async def test_update_playbook_executes_and_verifies(self, seeded_db):
+        """Update proposal should update and verify fields changed."""
+        assert (await seeded_db.get_all_playbooks())[0]["confidence"] == 0.8
+        app = _make_app(seeded_db, MockLLMClient([]))
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            resp = await client.post("/batch/update-playbook", json={
-                "name": "nonexistent", "confidence": 0.5,
+            resp = await client.post("/api/memory/chat/execute-proposal", json={
+                "type": "update_playbook",
+                "fields": {"name": "use-git-frequently", "confidence": 0.95},
+                "reason": "more evidence",
             })
-        assert resp.json()["updated"] is False
+        data = resp.json()
+        assert data["success"] is True
+        assert data["result"]["changes"]["confidence"]["before"] == 0.8
+        assert data["result"]["changes"]["confidence"]["after"] == 0.95
+        assert (await seeded_db.get_all_playbooks())[0]["confidence"] == 0.95
+
+    @pytest.mark.asyncio
+    async def test_update_nonexistent_playbook_fails_with_detail(self, seeded_db):
+        """Updating nonexistent playbook returns detailed error."""
+        app = _make_app(seeded_db, MockLLMClient([]))
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post("/api/memory/chat/execute-proposal", json={
+                "type": "update_playbook",
+                "fields": {"name": "nonexistent", "confidence": 0.5},
+                "reason": "test",
+            })
+        data = resp.json()
+        assert data["success"] is False
+        assert "not found" in data["result"]["error"]
+
+    @pytest.mark.asyncio
+    async def test_delete_invalid_table_fails(self, seeded_db):
+        """Deleting from invalid table returns error."""
+        app = _make_app(seeded_db, MockLLMClient([]))
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post("/api/memory/chat/execute-proposal", json={
+                "type": "delete", "table": "nonexistent_table", "ids": [1], "reason": "test",
+            })
+        data = resp.json()
+        assert data["success"] is False
+
+    @pytest.mark.asyncio
+    async def test_unknown_proposal_type_fails(self, seeded_db):
+        """Unknown proposal type returns error."""
+        app = _make_app(seeded_db, MockLLMClient([]))
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post("/api/memory/chat/execute-proposal", json={
+                "type": "unknown_type", "reason": "test",
+            })
+        data = resp.json()
+        assert data["success"] is False
+        assert "Unknown proposal type" in data["result"]["error"]
+
+    @pytest.mark.asyncio
+    async def test_execution_creates_pipeline_log(self, seeded_db):
+        """Successful execution should create a pipeline_log entry."""
+        app = _make_app(seeded_db, MockLLMClient([]))
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            await client.post("/api/memory/chat/execute-proposal", json={
+                "type": "update_playbook",
+                "fields": {"name": "use-git-frequently", "confidence": 0.9},
+                "reason": "test log",
+            })
+        logs, _ = await seeded_db.get_pipeline_logs(limit=10)
+        mutation_logs = [l for l in logs if l["stage"] == "chat_mutation"]
+        assert len(mutation_logs) >= 1
+        assert "verified" in mutation_logs[0]["response"]
 
 
 class TestProposalStatusPersistence:

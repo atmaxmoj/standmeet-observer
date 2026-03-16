@@ -239,11 +239,14 @@ export function ChatPanel() {
     if (!entry) return;
     setMessages((prev) => updateProposalStatus(prev, msgIdx, propIdx, "executing"));
     try {
-      const p = entry.proposal;
-      if (p.type === "delete" && p.table && p.ids) await api.batchDelete(p.table, p.ids);
-      if (p.type === "update_playbook" && p.fields) await api.updatePlaybook(p.fields);
-      setMessages((prev) => updateProposalStatus(prev, msgIdx, propIdx, "approved"));
-      await persistStatus(msgIdx, propIdx, "approved");
+      const res = await api.executeProposal(entry.proposal);
+      if (res.success) {
+        setMessages((prev) => updateProposalStatus(prev, msgIdx, propIdx, "approved"));
+        await persistStatus(msgIdx, propIdx, "approved");
+      } else {
+        setMessages((prev) => updateProposalStatus(prev, msgIdx, propIdx, "rejected"));
+        await persistStatus(msgIdx, propIdx, "rejected");
+      }
     } catch {
       setMessages((prev) => updateProposalStatus(prev, msgIdx, propIdx, "rejected"));
       await persistStatus(msgIdx, propIdx, "rejected");

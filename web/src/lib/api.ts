@@ -165,6 +165,8 @@ export const api = {
   pipelineResume: () => post<{ paused: boolean }>("/engine/pipeline/resume"),
   chatHistory: () => get<{ messages: ChatMessage[] }>("/memory/chat/history"),
   chatClear: () => del_("/memory/chat/history"),
+  executeProposal: (proposal: Proposal) =>
+    post<{ success: boolean; result: Record<string, unknown> }>("/memory/chat/execute-proposal", proposal),
   chatProposalStatus: (messageId: number, proposalIndex: number, status: string) =>
     post<{ updated: boolean }>("/memory/chat/proposal-status", {
       message_id: messageId, proposal_index: proposalIndex, status,
