@@ -124,9 +124,10 @@ function ChatInputBar({ onSend, onClear, loading, hasMessages }: {
       </div>
       <div className="flex items-center justify-center gap-2 mt-2 text-[11px] text-muted-foreground/50">
         <span>Memory chat — manages your observation data via AI. Only the last 20 messages are kept.</span>
+        {hasMessages && <span>·</span>}
         {hasMessages && (
           <button onClick={onClear} disabled={loading}
-            className="hover:text-muted-foreground transition-colors underline">Clear</button>
+            className="text-muted-foreground hover:text-foreground transition-colors underline underline-offset-2">Clear chat</button>
         )}
       </div>
     </div>

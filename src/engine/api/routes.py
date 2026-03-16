@@ -200,6 +200,12 @@ async def batch_delete(request: Request, body: BatchDelete):
         deleted = await db.delete_rows(body.table, body.ids)
     except ValueError as e:
         return {"error": str(e), "deleted": 0}
+    await db.insert_pipeline_log(
+        stage="chat_mutation",
+        prompt=f"delete {len(body.ids)} from {body.table}",
+        response=f"deleted {deleted}",
+        model="", input_tokens=0, output_tokens=0, cost_usd=0,
+    )
     return {"deleted": deleted}
 
 
@@ -219,6 +225,7 @@ async def update_playbook(request: Request, body: PlaybookUpdate):
     existing = next((p for p in playbooks if p["name"] == body.name), None)
     if not existing:
         return {"error": f"Playbook entry '{body.name}' not found", "updated": False}
+    changes = {k: v for k, v in body.model_dump(exclude_none=True).items() if k != "name"}
     await db.upsert_playbook(
         name=body.name,
         context=body.context if body.context is not None else existing["context"],
@@ -226,6 +233,12 @@ async def update_playbook(request: Request, body: PlaybookUpdate):
         confidence=body.confidence if body.confidence is not None else existing["confidence"],
         evidence=existing["evidence"],
         maturity=body.maturity if body.maturity is not None else existing["maturity"],
+    )
+    await db.insert_pipeline_log(
+        stage="chat_mutation",
+        prompt=f"update playbook '{body.name}': {changes}",
+        response="updated",
+        model="", input_tokens=0, output_tokens=0, cost_usd=0,
     )
     return {"updated": True}
 
