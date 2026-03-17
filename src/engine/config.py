@@ -13,7 +13,7 @@ MODEL_FAST = "claude-haiku-4-5-20251001"
 MODEL_DEEP = "claude-opus-4-6"
 
 # Budget cap
-DAILY_COST_CAP_USD = 2.0
+DAILY_COST_CAP_USD = 10.0
 
 # Per-token pricing (USD) — 2026-03
 TOKEN_COSTS = {

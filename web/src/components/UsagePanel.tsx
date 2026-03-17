@@ -92,6 +92,56 @@ function DailyCallsChart({ days }: { days: UsageSummary["by_day"] }) {
   );
 }
 
+function BudgetCard() {
+  const [spend, setSpend] = useState(0);
+  const [cap, setCap] = useState(10);
+  const [editing, setEditing] = useState(false);
+  const [input, setInput] = useState("");
+
+  useEffect(() => {
+    api.budget().then((b) => { setSpend(b.daily_spend_usd); setCap(b.daily_cap_usd); }).catch(() => {});
+  }, []);
+
+  const save = async () => {
+    const val = parseFloat(input);
+    if (isNaN(val) || val <= 0) return;
+    await api.setBudget(val);
+    setCap(val);
+    setEditing(false);
+  };
+
+  const pct = cap > 0 ? Math.min(100, (spend / cap) * 100) : 0;
+  const color = pct > 90 ? "bg-red-500" : pct > 70 ? "bg-yellow-500" : "bg-primary";
+
+  return (
+    <Card>
+      <CardContent className="pt-6">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-sm font-medium">Daily Budget</span>
+          {editing ? (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">$</span>
+              <input type="number" step="0.5" value={input} onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && save()}
+                className="w-20 h-7 rounded border bg-background px-2 text-sm" autoFocus />
+              <Button size="sm" className="h-7 text-xs" onClick={save}>Save</Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setEditing(false)}>Cancel</Button>
+            </div>
+          ) : (
+            <button onClick={() => { setInput(String(cap)); setEditing(true); }}
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+              ${spend.toFixed(2)} / ${cap.toFixed(2)}
+            </button>
+          )}
+        </div>
+        <div className="h-2 bg-secondary rounded-full overflow-hidden">
+          <div className={`h-full rounded-full ${color} transition-all`} style={{ width: `${pct}%` }} />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function UsagePanel() {
   const [data, setData] = useState<UsageSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -112,6 +162,7 @@ export function UsagePanel() {
       <div className="flex justify-end">
         <Button variant="outline" size="sm" onClick={load}>Refresh</Button>
       </div>
+      <BudgetCard />
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <StatCard value={`$${data.total_cost_usd.toFixed(4)}`} label={`Total Cost (${data.days}d)`} />
         <StatCard value={fmtTokens(data.total_input_tokens)} label="Input Tokens" />

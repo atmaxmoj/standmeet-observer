@@ -2,7 +2,7 @@
 
 import sqlite3
 import pytest
-from engine.pipeline.budget import check_daily_budget, get_daily_spend
+from engine.pipeline.budget import check_daily_budget, get_daily_spend, get_budget_cap
 
 
 @pytest.fixture
@@ -22,6 +22,7 @@ def conn(tmp_path):
         )
     """)
     c.execute("CREATE INDEX IF NOT EXISTS idx_token_usage_created_at ON token_usage(created_at)")
+    c.execute("CREATE TABLE IF NOT EXISTS state (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
     c.commit()
     yield c
     c.close()
@@ -113,3 +114,37 @@ class TestGetDailySpend:
         )
         conn.commit()
         assert get_daily_spend(conn) == pytest.approx(0.50)
+
+
+class TestGetBudgetCap:
+    def test_default_when_no_state(self, conn):
+        assert get_budget_cap(conn, default=2.0) == 2.0
+
+    def test_reads_from_state_table(self, conn):
+        conn.execute(
+            "INSERT INTO state (key, value) VALUES ('daily_cost_cap_usd', '5.0')"
+        )
+        conn.commit()
+        assert get_budget_cap(conn, default=2.0) == 5.0
+
+    def test_check_budget_uses_db_cap(self, conn):
+        """check_daily_budget should use DB cap over the passed default."""
+        conn.execute(
+            "INSERT INTO state (key, value) VALUES ('daily_cost_cap_usd', '10.0')"
+        )
+        conn.execute(
+            "INSERT INTO token_usage (model, layer, input_tokens, output_tokens, cost_usd) "
+            "VALUES ('opus', 'distill', 1000, 500, 5.0)",
+        )
+        conn.commit()
+        # Default cap=2.0 would reject, but DB cap=10.0 allows
+        assert check_daily_budget(conn, cap_usd=2.0) is True
+
+    def test_check_budget_falls_back_to_default(self, conn):
+        """No DB state → use passed default."""
+        conn.execute(
+            "INSERT INTO token_usage (model, layer, input_tokens, output_tokens, cost_usd) "
+            "VALUES ('opus', 'distill', 1000, 500, 5.0)",
+        )
+        conn.commit()
+        assert check_daily_budget(conn, cap_usd=2.0) is False

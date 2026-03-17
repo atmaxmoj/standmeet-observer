@@ -240,12 +240,18 @@ async def engine_status(request: Request):
     return status
 
 
+BUDGET_STATE_KEY = "daily_cost_cap_usd"
+
+
 @router.get("/engine/budget")
 async def engine_budget(request: Request):
     """Get current daily spend vs budget cap."""
     import sqlite3
     from engine.config import Settings, DAILY_COST_CAP_USD
     from engine.pipeline.budget import get_daily_spend
+
+    db = request.app.state.db
+    cap = await db.get_state_float(BUDGET_STATE_KEY, DAILY_COST_CAP_USD)
 
     settings = Settings()
     conn = sqlite3.connect(settings.db_path)
@@ -256,9 +262,21 @@ async def engine_budget(request: Request):
         conn.close()
     return {
         "daily_spend_usd": round(spend, 4),
-        "daily_cap_usd": DAILY_COST_CAP_USD,
-        "under_budget": spend < DAILY_COST_CAP_USD,
+        "daily_cap_usd": cap,
+        "under_budget": spend < cap,
     }
+
+
+class BudgetUpdate(BaseModel):
+    daily_cap_usd: float
+
+
+@router.put("/engine/budget")
+async def set_engine_budget(request: Request, body: BudgetUpdate):
+    """Set daily budget cap."""
+    db = request.app.state.db
+    await db.set_state_float(BUDGET_STATE_KEY, body.daily_cap_usd)
+    return {"daily_cap_usd": body.daily_cap_usd}
 
 
 class TryPromptRequest(BaseModel):

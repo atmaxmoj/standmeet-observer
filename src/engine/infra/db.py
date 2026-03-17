@@ -338,6 +338,21 @@ class DB:
         await self._conn.commit()
         logger.debug("set_state(%s) = %d", key, value)
 
+    async def get_state_float(self, key: str, default: float = 0.0) -> float:
+        async with self._conn.execute(
+            "SELECT value FROM state WHERE key = ?", (key,)
+        ) as cur:
+            row = await cur.fetchone()
+            return float(row["value"]) if row else default
+
+    async def set_state_float(self, key: str, value: float):
+        await self._conn.execute(
+            "INSERT INTO state (key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (key, str(value)),
+        )
+        await self._conn.commit()
+
     # -- episodes --
 
     async def insert_episode(

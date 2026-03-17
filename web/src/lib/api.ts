@@ -12,6 +12,16 @@ async function del_<T>(path: string): Promise<T> {
   return res.json();
 }
 
+async function put<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  return res.json();
+}
+
 async function post<T>(path: string, body?: unknown): Promise<T> {
   const opts: RequestInit = { method: "POST" };
   if (body !== undefined) {
@@ -151,6 +161,8 @@ export const api = {
       `/capture/os-events?${qs({ limit, offset, event_type: eventType, search })}`
     ),
   usage: (days = 30) => get<UsageSummary>(`/engine/usage?days=${days}`),
+  budget: () => get<{ daily_spend_usd: number; daily_cap_usd: number; under_budget: boolean }>("/engine/budget"),
+  setBudget: (cap: number) => put<{ daily_cap_usd: number }>("/engine/budget", { daily_cap_usd: cap }),
   logs: (limit = 20, offset = 0, search = "") =>
     get<{ logs: PipelineLog[]; total: number }>(`/engine/logs?${qs({ limit, offset, search })}`),
   routines: (search = "") =>

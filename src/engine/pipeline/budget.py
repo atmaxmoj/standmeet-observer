@@ -19,12 +19,26 @@ def get_daily_spend(conn: sqlite3.Connection) -> float:
     return float(row["total"] if isinstance(row, sqlite3.Row) else row[0])
 
 
+def get_budget_cap(conn: sqlite3.Connection, default: float) -> float:
+    """Read budget cap from state table, fallback to default."""
+    row = conn.execute(
+        "SELECT value FROM state WHERE key = 'daily_cost_cap_usd'",
+    ).fetchone()
+    if row:
+        return float(row["value"] if isinstance(row, sqlite3.Row) else row[0])
+    return default
+
+
 def check_daily_budget(conn: sqlite3.Connection, cap_usd: float) -> bool:
-    """Return True if today's spend is under the cap, False otherwise."""
+    """Return True if today's spend is under the cap, False otherwise.
+
+    Reads actual cap from DB state table (UI-settable), falls back to cap_usd.
+    """
+    actual_cap = get_budget_cap(conn, cap_usd)
     spend = get_daily_spend(conn)
-    if spend >= cap_usd:
+    if spend >= actual_cap:
         logger.warning(
-            "Daily budget exceeded: $%.4f >= $%.2f cap", spend, cap_usd,
+            "Daily budget exceeded: $%.4f >= $%.2f cap", spend, actual_cap,
         )
         return False
     return True
