@@ -246,20 +246,11 @@ BUDGET_STATE_KEY = "daily_cost_cap_usd"
 @router.get("/engine/budget")
 async def engine_budget(request: Request):
     """Get current daily spend vs budget cap."""
-    import sqlite3
-    from engine.config import Settings, DAILY_COST_CAP_USD
-    from engine.pipeline.budget import get_daily_spend
+    from engine.config import DAILY_COST_CAP_USD
 
     db = request.app.state.db
     cap = await db.get_state_float(BUDGET_STATE_KEY, DAILY_COST_CAP_USD)
-
-    settings = Settings()
-    conn = sqlite3.connect(settings.db_path)
-    conn.row_factory = sqlite3.Row
-    try:
-        spend = get_daily_spend(conn)
-    finally:
-        conn.close()
+    spend = await db.get_daily_spend()
     return {
         "daily_spend_usd": round(spend, 4),
         "daily_cap_usd": cap,

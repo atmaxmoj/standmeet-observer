@@ -451,3 +451,37 @@ class TestBatchDelete:
     async def test_delete_empty_ids(self, client):
         resp = await client.post("/batch/delete", json={"table": "frames", "ids": []})
         assert resp.json()["deleted"] == 0
+
+
+@pytest.mark.asyncio
+class TestBudgetAPI:
+    async def test_get_budget_default(self, client):
+        resp = await client.get("/engine/budget")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "daily_cap_usd" in data
+        assert "daily_spend_usd" in data
+        assert "under_budget" in data
+        assert data["daily_spend_usd"] == 0.0
+        assert data["under_budget"] is True
+
+    async def test_set_and_get_budget(self, client):
+        resp = await client.put("/engine/budget", json={"daily_cap_usd": 5.0})
+        assert resp.status_code == 200
+        assert resp.json()["daily_cap_usd"] == 5.0
+
+        resp = await client.get("/engine/budget")
+        assert resp.json()["daily_cap_usd"] == 5.0
+
+    async def test_budget_reflects_spend(self, client, db):
+        await db.record_usage(model="haiku", layer="episode",
+                              input_tokens=100, output_tokens=50, cost_usd=1.5)
+        resp = await client.get("/engine/budget")
+        assert resp.json()["daily_spend_usd"] == 1.5
+
+    async def test_budget_under_budget_false_when_exceeded(self, client, db):
+        await client.put("/engine/budget", json={"daily_cap_usd": 1.0})
+        await db.record_usage(model="opus", layer="distill",
+                              input_tokens=1000, output_tokens=500, cost_usd=2.0)
+        resp = await client.get("/engine/budget")
+        assert resp.json()["under_budget"] is False

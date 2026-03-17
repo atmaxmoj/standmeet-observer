@@ -522,6 +522,15 @@ class DB:
             model, layer, input_tokens, output_tokens, cost_usd,
         )
 
+    async def get_daily_spend(self) -> float:
+        """Sum today's LLM costs."""
+        async with self._conn.execute(
+            "SELECT COALESCE(SUM(cost_usd), 0.0) as total "
+            "FROM token_usage WHERE created_at >= datetime('now', '-1 days')",
+        ) as cur:
+            row = await cur.fetchone()
+            return float(row["total"])
+
     async def get_usage_summary(self, days: int = 7) -> dict:
         """Get token usage breakdown by layer and model for the past N days."""
         rows_by_layer = []
