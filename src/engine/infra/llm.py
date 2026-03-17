@@ -218,6 +218,65 @@ class AgentSDKClient(LLMClient):
             output_tokens=usage.get("output_tokens", 0),
         )
 
+    def complete_with_tools(
+        self,
+        prompt: str,
+        model: str,
+        tools: list[ToolDef],
+        max_turns: int = 5,
+    ) -> LLMResponse:
+        """Multi-turn tool-use loop via text-based <tool_call> parsing."""
+        api_tools = [
+            {"name": t.name, "description": t.description, "input_schema": t.input_schema}
+            for t in tools
+        ]
+        tool_handlers = {t.name: t.handler for t in tools}
+
+        messages: list[dict] = [{"role": "user", "content": prompt}]
+        total_input = 0
+        total_output = 0
+        final_text = ""
+
+        for _turn in range(max_turns):
+            text_prompt = _serialize_messages_to_prompt(messages, api_tools)
+            resp = self.complete(text_prompt, model)
+            total_input += resp.input_tokens
+            total_output += resp.output_tokens
+
+            blocks = _parse_tool_calls(resp.text)
+            text_blocks = [b for b in blocks if b.type == "text"]
+            tool_uses = [b for b in blocks if b.type == "tool_use"]
+
+            if text_blocks:
+                final_text = text_blocks[-1].text
+
+            if not tool_uses:
+                break
+
+            messages.append({"role": "assistant", "content": resp.text})
+            tool_results = []
+            for tu in tool_uses:
+                handler = tool_handlers.get(tu.tool_name)
+                if handler:
+                    try:
+                        result = handler(**(tu.tool_input or {}))
+                        tool_results.append(
+                            f"[Tool result for {tu.tool_name}: "
+                            f"{json.dumps(result, default=str)[:2000]}]"
+                        )
+                    except Exception as e:
+                        logger.warning("Tool %s failed: %s", tu.tool_name, e)
+                        tool_results.append(f"[Tool {tu.tool_name} error: {e}]")
+                else:
+                    tool_results.append(f"[Unknown tool: {tu.tool_name}]")
+            messages.append({"role": "user", "content": "\n".join(tool_results)})
+
+        return LLMResponse(
+            text=final_text,
+            input_tokens=total_input,
+            output_tokens=total_output,
+        )
+
     async def amessages_create(
         self,
         *,
