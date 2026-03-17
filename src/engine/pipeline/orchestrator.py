@@ -100,40 +100,76 @@ def run_distill(
 
 
 def _run_distill_agentic(llm: LLMClient, conn: sqlite3.Connection) -> int:
-    """Agentic distill: LLM uses tools to investigate episodes and write playbook entries."""
+    """Agentic distill: LLM uses MCP tools to investigate episodes and write playbook entries.
+
+    Uses Agent SDK query() with in-process MCP server — works with OAuth tokens + Opus.
+    """
+    import asyncio
+    import os
+    from claude_agent_sdk import query as sdk_query, ClaudeAgentOptions, ResultMessage
     from engine.domain.prompts.playbook_agent import PLAYBOOK_AGENT_PROMPT
-    from engine.pipeline.stages.distill_tools import make_distill_tools
+    from engine.pipeline.stages.distill_mcp import create_distill_mcp_server
 
-    tools = make_distill_tools(conn)
-    logger.info("run_distill (agentic): starting with %d tools", len(tools))
+    mcp_server = create_distill_mcp_server(conn)
+    logger.info("run_distill (agentic): starting with MCP server")
 
-    resp = llm.complete_with_tools(
-        PLAYBOOK_AGENT_PROMPT,
-        MODEL_DEEP,
-        tools,
-        max_turns=15,
-    )
+    env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
+    token = os.environ.get("CLAUDE_CODE_OAUTH_TOKEN", "")
+    if token:
+        env["CLAUDE_CODE_OAUTH_TOKEN"] = token
+        env.pop("ANTHROPIC_AUTH_TOKEN", None)
+        env.pop("ANTHROPIC_API_KEY", None)
 
-    cost = resp.cost_usd or 0
+    result_text = ""
+    cost_usd = None
+    usage: dict = {}
+
+    async def _run():
+        nonlocal result_text, cost_usd, usage
+        async for msg in sdk_query(
+            prompt=PLAYBOOK_AGENT_PROMPT,
+            options=ClaudeAgentOptions(
+                model=MODEL_DEEP,
+                max_turns=15,
+                permission_mode="bypassPermissions",
+                mcp_servers={
+                    "distill": {
+                        "type": "sdk",
+                        "name": "distill-tools",
+                        "instance": mcp_server._mcp_server,
+                    },
+                },
+                env=env,
+            ),
+        ):
+            if isinstance(msg, ResultMessage):
+                result_text = msg.result or ""
+                cost_usd = msg.total_cost_usd
+                usage = msg.usage or {}
+
+    asyncio.run(_run())
+
+    input_tokens = usage.get("input_tokens", 0)
+    output_tokens = usage.get("output_tokens", 0)
+    cost = cost_usd or 0
+
     conn.execute(
         "INSERT INTO token_usage (model, layer, input_tokens, output_tokens, cost_usd) "
         "VALUES (?, ?, ?, ?, ?)",
-        (MODEL_DEEP, "distill_agentic", resp.input_tokens, resp.output_tokens, cost),
+        (MODEL_DEEP, "distill_agentic", input_tokens, output_tokens, cost),
     )
     conn.execute(
         "INSERT INTO pipeline_logs (stage, prompt, response, model, input_tokens, output_tokens, cost_usd) "
         "VALUES (?, ?, ?, ?, ?, ?, ?)",
-        ("distill_agentic", PLAYBOOK_AGENT_PROMPT, resp.text, MODEL_DEEP,
-         resp.input_tokens, resp.output_tokens, cost),
+        ("distill_agentic", PLAYBOOK_AGENT_PROMPT, result_text[:5000], MODEL_DEEP,
+         input_tokens, output_tokens, cost),
     )
 
-    # Count entries written by the agent
     count = conn.execute(
         "SELECT COUNT(*) FROM playbook_entries WHERE updated_at >= datetime('now', '-1 hours')",
     ).fetchone()[0]
 
-    logger.info("run_distill (agentic): %d entries updated, cost=$%.4f, %d turns",
-                count, cost, resp.input_tokens)
+    logger.info("run_distill (agentic): %d entries, cost=$%.4f", count, cost)
     return count
 
 

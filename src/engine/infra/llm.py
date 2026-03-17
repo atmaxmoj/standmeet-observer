@@ -218,6 +218,36 @@ class AgentSDKClient(LLMClient):
             output_tokens=usage.get("output_tokens", 0),
         )
 
+    def _get_direct_client(self) -> "DirectAPIClient":
+        """Create a DirectAPIClient using OAuth token with Bearer auth.
+
+        OpenClaw pattern: OAuth tokens work with Anthropic Messages API
+        via Authorization: Bearer header (not x-api-key).
+        """
+        if not self._auth_token:
+            raise NotImplementedError(
+                "AgentSDKClient tool-use requires an OAuth token"
+            )
+        import anthropic
+        # OAuth requires Claude Code identity headers (from pi-ai/anthropic.ts)
+        oauth_headers = {
+            "anthropic-beta": "claude-code-20250219,oauth-2025-04-20",
+            "user-agent": "claude-cli/2.1.75",
+            "x-app": "cli",
+        }
+        client = DirectAPIClient.__new__(DirectAPIClient)
+        client._sync = anthropic.Anthropic(
+            api_key=None,
+            auth_token=self._auth_token,
+            default_headers=oauth_headers,
+        )
+        client._async = anthropic.AsyncAnthropic(
+            api_key=None,
+            auth_token=self._auth_token,
+            default_headers=oauth_headers,
+        )
+        return client
+
     def complete_with_tools(
         self,
         prompt: str,
@@ -225,57 +255,9 @@ class AgentSDKClient(LLMClient):
         tools: list[ToolDef],
         max_turns: int = 5,
     ) -> LLMResponse:
-        """Multi-turn tool-use loop via text-based <tool_call> parsing."""
-        api_tools = [
-            {"name": t.name, "description": t.description, "input_schema": t.input_schema}
-            for t in tools
-        ]
-        tool_handlers = {t.name: t.handler for t in tools}
-
-        messages: list[dict] = [{"role": "user", "content": prompt}]
-        total_input = 0
-        total_output = 0
-        final_text = ""
-
-        for _turn in range(max_turns):
-            text_prompt = _serialize_messages_to_prompt(messages, api_tools)
-            resp = self.complete(text_prompt, model)
-            total_input += resp.input_tokens
-            total_output += resp.output_tokens
-
-            blocks = _parse_tool_calls(resp.text)
-            text_blocks = [b for b in blocks if b.type == "text"]
-            tool_uses = [b for b in blocks if b.type == "tool_use"]
-
-            if text_blocks:
-                final_text = text_blocks[-1].text
-
-            if not tool_uses:
-                break
-
-            messages.append({"role": "assistant", "content": resp.text})
-            tool_results = []
-            for tu in tool_uses:
-                handler = tool_handlers.get(tu.tool_name)
-                if handler:
-                    try:
-                        result = handler(**(tu.tool_input or {}))
-                        tool_results.append(
-                            f"[Tool result for {tu.tool_name}: "
-                            f"{json.dumps(result, default=str)[:2000]}]"
-                        )
-                    except Exception as e:
-                        logger.warning("Tool %s failed: %s", tu.tool_name, e)
-                        tool_results.append(f"[Tool {tu.tool_name} error: {e}]")
-                else:
-                    tool_results.append(f"[Unknown tool: {tu.tool_name}]")
-            messages.append({"role": "user", "content": "\n".join(tool_results)})
-
-        return LLMResponse(
-            text=final_text,
-            input_tokens=total_input,
-            output_tokens=total_output,
-        )
+        """Multi-turn tool-use via native Anthropic API with OAuth Bearer auth."""
+        direct = self._get_direct_client()
+        return direct.complete_with_tools(prompt, model, tools, max_turns)
 
     async def amessages_create(
         self,
@@ -401,12 +383,29 @@ class DirectAPIClient(LLMClient):
         final_text = ""
 
         for turn in range(max_turns):
-            response = self._sync.messages.create(
-                model=model,
-                max_tokens=8192,
-                messages=messages,
-                tools=api_tools,
+            logger.debug(
+                "complete_with_tools turn=%d model=%s max_tokens=8192 tools=%d msg_count=%d msg_roles=%s",
+                turn, model, len(api_tools), len(messages),
+                [m["role"] for m in messages],
             )
+            try:
+                kwargs: dict[str, Any] = {
+                    "model": model,
+                    "max_tokens": 16384,
+                    "messages": messages,
+                    "tools": api_tools,
+                }
+                # Opus 4.6 / Sonnet 4.6 require adaptive thinking
+                if "opus-4-6" in model or "sonnet-4-6" in model:
+                    kwargs["thinking"] = {"type": "adaptive"}
+                response = self._sync.messages.create(**kwargs)
+            except Exception as e:
+                logger.error(
+                    "complete_with_tools FAILED turn=%d model=%s tools=%s prompt_len=%d: %s",
+                    turn, model, [t["name"] for t in api_tools],
+                    sum(len(str(m.get("content", ""))) for m in messages), e,
+                )
+                raise
 
             total_input += response.usage.input_tokens
             total_output += response.usage.output_tokens

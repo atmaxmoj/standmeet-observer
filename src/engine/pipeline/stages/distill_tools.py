@@ -102,7 +102,7 @@ def make_distill_tools(conn: sqlite3.Connection) -> list[ToolDef]:
                 "type": "object",
                 "properties": {
                     "query": {"type": "string"},
-                    "limit": {"type": "integer", "default": 10},
+                    "limit": {"type": "integer", "description": "Max results (default 10)"},
                 },
                 "required": ["query"],
             },
@@ -125,7 +125,7 @@ def make_distill_tools(conn: sqlite3.Connection) -> list[ToolDef]:
                 "type": "object",
                 "properties": {
                     "episode_id": {"type": "integer"},
-                    "limit": {"type": "integer", "default": 10},
+                    "limit": {"type": "integer", "description": "Max results (default 10)"},
                 },
                 "required": ["episode_id"],
             },
@@ -144,7 +144,7 @@ def make_distill_tools(conn: sqlite3.Connection) -> list[ToolDef]:
         ToolDef(
             name="get_all_playbook_entries",
             description="List all current playbook entries with their confidence and maturity.",
-            input_schema={"type": "object", "properties": {}, "required": []},
+            input_schema={"type": "object", "properties": {}},
             handler=_logged(conn, "get_all_playbook_entries", lambda **kw: get_all_playbook_entries()),
         ),
         ToolDef(
