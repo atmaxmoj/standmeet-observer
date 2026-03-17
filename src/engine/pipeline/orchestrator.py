@@ -77,8 +77,12 @@ def run_distill(
     llm: LLMClient,
     conn: sqlite3.Connection,
     prompt_template: str = PLAYBOOK_PROMPT,
+    agentic: bool = False,
 ) -> int:
-    """Sync distill pipeline: read episodes → infer → validate → store playbooks.
+    """Sync distill pipeline: read episodes → infer → store playbooks.
+
+    If agentic=True, uses multi-turn tool-use loop (LLM investigates data autonomously).
+    If agentic=False, uses one-shot prompt (backwards compat).
 
     Returns count of entries created/updated. Caller must conn.commit().
     """
@@ -89,6 +93,52 @@ def run_distill(
         logger.info("run_distill: no episodes, skipping")
         return 0
 
+    if agentic:
+        return _run_distill_agentic(llm, conn)
+
+    return _run_distill_oneshot(llm, conn, episodes, prompt_template)
+
+
+def _run_distill_agentic(llm: LLMClient, conn: sqlite3.Connection) -> int:
+    """Agentic distill: LLM uses tools to investigate episodes and write playbook entries."""
+    from engine.domain.prompts.playbook_agent import PLAYBOOK_AGENT_PROMPT
+    from engine.pipeline.stages.distill_tools import make_distill_tools
+
+    tools = make_distill_tools(conn)
+    logger.info("run_distill (agentic): starting with %d tools", len(tools))
+
+    resp = llm.complete_with_tools(
+        PLAYBOOK_AGENT_PROMPT,
+        MODEL_DEEP,
+        tools,
+        max_turns=15,
+    )
+
+    cost = resp.cost_usd or 0
+    conn.execute(
+        "INSERT INTO token_usage (model, layer, input_tokens, output_tokens, cost_usd) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (MODEL_DEEP, "distill_agentic", resp.input_tokens, resp.output_tokens, cost),
+    )
+    conn.execute(
+        "INSERT INTO pipeline_logs (stage, prompt, response, model, input_tokens, output_tokens, cost_usd) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        ("distill_agentic", PLAYBOOK_AGENT_PROMPT, resp.text, MODEL_DEEP,
+         resp.input_tokens, resp.output_tokens, cost),
+    )
+
+    # Count entries written by the agent
+    count = conn.execute(
+        "SELECT COUNT(*) FROM playbook_entries WHERE updated_at >= datetime('now', '-1 hours')",
+    ).fetchone()[0]
+
+    logger.info("run_distill (agentic): %d entries updated, cost=$%.4f, %d turns",
+                count, cost, resp.input_tokens)
+    return count
+
+
+def _run_distill_oneshot(llm, conn, episodes, prompt_template) -> int:
+    """One-shot distill: single prompt → JSON response."""
     existing = conn.execute("SELECT * FROM playbook_entries ORDER BY confidence DESC").fetchall()
 
     episodes_list = [dict(e) for e in episodes]
