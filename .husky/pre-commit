@@ -1,3 +1,6 @@
+# Secret scanning
+gitleaks protect --staged --verbose || exit 1
+
 # Python: ruff lint
 uv run ruff check src/ capture/src/ audio/src/ cli.py || exit 1
 

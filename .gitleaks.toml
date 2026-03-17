@@ -1,0 +1,20 @@
+[extend]
+useDefault = true
+
+[[rules]]
+id = "anthropic-oauth-token"
+description = "Anthropic Claude OAuth token"
+regex = '''sk-ant-oat\d{2}-[A-Za-z0-9_-]{40,}'''
+keywords = ["sk-ant-oat"]
+
+[[rules]]
+id = "anthropic-api-key"
+description = "Anthropic Claude API key"
+regex = '''sk-ant-api\d{2}-[A-Za-z0-9_-]{40,}'''
+keywords = ["sk-ant-api"]
+
+[allowlist]
+paths = [
+    '''.env.example''',
+    '''.*\.lock''',
+]
