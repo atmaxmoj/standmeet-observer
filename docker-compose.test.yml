@@ -3,8 +3,6 @@ name: bisimulator-test
 services:
   engine-test:
     build: .
-    ports:
-      - "5002:5000"
     volumes:
       - engine-test-data:/data
     environment:
@@ -17,6 +15,23 @@ services:
       timeout: 3s
       retries: 10
       start_period: 5s
+
+  playwright:
+    build:
+      context: .
+      dockerfile: web/Dockerfile.test
+    depends_on:
+      engine-test:
+        condition: service_healthy
+    environment:
+      - VITE_API_TARGET=http://engine-test:5000
+      - PW_BASE_URL=http://localhost:5173
+    command: >
+      sh -c "
+        npx vite --host 0.0.0.0 --port 5173 &
+        sleep 3 &&
+        npx playwright test
+      "
 
 volumes:
   engine-test-data:

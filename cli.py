@@ -327,9 +327,16 @@ def cmd_test():
         results.append(("engine", r.returncode))
 
     if suite in ("web", "all"):
-        print("\n==> Running Playwright tests...")
-        r = run(["npx", "playwright", "test"], cwd=ROOT / "web")
+        print("\n==> Running Playwright tests (Docker)...")
+        compose_test = str(ROOT / "docker-compose.test.yml")
+        # Start containers, run playwright, then tear down
+        run(["docker", "compose", "-p", "bisimulator-test", "-f", compose_test,
+             "up", "-d", "--build", "--wait", "engine-test"], cwd=ROOT)
+        r = run(["docker", "compose", "-p", "bisimulator-test", "-f", compose_test,
+                 "run", "--rm", "playwright"], cwd=ROOT)
         results.append(("web", r.returncode))
+        run(["docker", "compose", "-p", "bisimulator-test", "-f", compose_test,
+             "down", "-v"], cwd=ROOT)
 
     if not results:
         print(f"Unknown suite: {suite}. Available: capture, audio, web, all")

@@ -1,17 +1,15 @@
 import { defineConfig } from "@playwright/test";
 
+const baseURL = process.env.PW_BASE_URL || "http://localhost:5173";
+const apiURL = process.env.VITE_API_TARGET || "http://localhost:5001";
+
 export default defineConfig({
   testDir: "./tests",
   timeout: 30000,
   globalSetup: "./tests/global-setup.ts",
-  globalTeardown: "./tests/global-teardown.ts",
   use: {
-    baseURL: "http://localhost:5175",
+    baseURL,
     screenshot: "on",
   },
-  webServer: {
-    command: "VITE_API_TARGET=http://localhost:5002 npx vite --port 5175",
-    port: 5175,
-    reuseExistingServer: false,
-  },
+  // No webServer — Vite is started by docker-compose or the developer
 });
