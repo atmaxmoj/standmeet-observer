@@ -197,13 +197,51 @@ def _make_read_tools(db) -> list[dict]:
     ]
 
 
-def _web_search(query: str, max_results: int = 5) -> list[dict]:
-    """Search the web via DuckDuckGo. Returns list of {title, href, body}."""
+async def _web_search(query: str, max_results: int = 5) -> list[dict]:
+    """Search the web using Claude Code's built-in WebSearch.
+
+    No separate search API key needed — uses the same OAuth token as the LLM.
+    Makes a separate Agent SDK query() call with tools enabled.
+    """
     try:
-        from duckduckgo_search import DDGS
-        with DDGS() as ddgs:
-            results = list(ddgs.text(query, max_results=max_results))
-            return [{"title": r["title"], "url": r["href"], "snippet": r["body"]} for r in results]
+        import os
+        from claude_agent_sdk import query, ClaudeAgentOptions, ResultMessage
+
+        env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
+        token = os.environ.get("CLAUDE_CODE_OAUTH_TOKEN", "")
+        if token:
+            env["CLAUDE_CODE_OAUTH_TOKEN"] = token
+            env.pop("ANTHROPIC_AUTH_TOKEN", None)
+            env.pop("ANTHROPIC_API_KEY", None)
+
+        prompt = (
+            f"Search the web for: {query}\n\n"
+            f"Return the top {max_results} results as a JSON array with fields: title, url, snippet.\n"
+            f"Output ONLY the JSON array."
+        )
+
+        result_text = ""
+        async for msg in query(
+            prompt=prompt,
+            options=ClaudeAgentOptions(
+                model="claude-haiku-4-5-20251001",
+                max_turns=3,
+                permission_mode="bypassPermissions",
+                env=env,
+                # No tools=[] — let Claude Code use its built-in WebSearch
+            ),
+        ):
+            if isinstance(msg, ResultMessage):
+                result_text = msg.result or ""
+
+        # Parse results
+        text = result_text.strip()
+        if text.startswith("```"):
+            text = text.split("\n", 1)[1].rsplit("```", 1)[0]
+        results = json.loads(text)
+        if isinstance(results, list):
+            return results[:max_results]
+        return [{"error": "Unexpected response format", "raw": result_text[:200]}]
     except Exception as e:
         logger.warning("web_search failed: %s", e)
         return [{"error": str(e)}]
@@ -212,7 +250,7 @@ def _web_search(query: str, max_results: int = 5) -> list[dict]:
 async def _read_tool(db, name: str, args: dict) -> Any:
     """Execute a read-only tool. Returns result or None if not a read tool."""
     if name == "web_search":
-        return _web_search(args["query"], args.get("max_results", 5))
+        return await _web_search(args["query"], args.get("max_results", 5))
 
     handlers = {
         "search_episodes": lambda: db.search_episodes_by_keyword(args["query"], args.get("limit", 10)),
