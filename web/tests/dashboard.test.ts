@@ -204,4 +204,28 @@ test.describe("Dashboard", () => {
     await expect(panel.getByTestId("chat-input")).toBeVisible();
     await expect(panel.getByRole("button", { name: "Send" })).toBeVisible();
   });
+
+  test("Chat web search shows throbbing and returns result", async ({ page }) => {
+    await page.goto("/");
+    await nav(page, "chat");
+    const panel = page.getByTestId("chat-panel");
+    await expect(panel).toBeVisible({ timeout: 10000 });
+
+    // Type and send a search query
+    const input = panel.getByTestId("chat-input");
+    await input.fill("search the web for what is SearXNG");
+    await panel.getByRole("button", { name: "Send" }).click();
+
+    // Should see throbbing (Thinking... or Searching the web...)
+    await expect(panel.getByText(/Thinking|Searching/)).toBeVisible({ timeout: 10000 });
+
+    // Wait for assistant response (may take a while with real LLM)
+    const assistantMsg = panel.locator(".bg-muted.text-foreground");
+    await expect(assistantMsg.first()).toBeVisible({ timeout: 120000 });
+
+    // Response should contain actual content (not an error)
+    const text = await assistantMsg.first().textContent();
+    expect(text).toBeTruthy();
+    expect(text!.length).toBeGreaterThan(20);
+  });
 });

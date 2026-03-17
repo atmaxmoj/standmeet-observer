@@ -314,6 +314,9 @@ def cmd_test():
         r = run(["uv", "run", "--extra", "test", "pytest", "-v"], cwd=ROOT / "audio")
         results.append(("audio", r.returncode))
 
+    results_dir = ROOT / "tests" / "results"
+    results_dir.mkdir(parents=True, exist_ok=True)
+
     if suite in ("engine", "all"):
         print("\n==> Running engine pytest...")
         test_env = {
@@ -322,21 +325,38 @@ def cmd_test():
             "ANTHROPIC_API_KEY": os.environ.get("ANTHROPIC_API_KEY", "sk-fake-test-key"),
             "ANTHROPIC_AUTH_TOKEN": os.environ.get("ANTHROPIC_AUTH_TOKEN", ""),
         }
-        r = run(["uv", "run", "--extra", "test", "pytest", "-v"],
-                cwd=ROOT, env=test_env)
+        engine_log = results_dir / "engine.log"
+        with open(engine_log, "w") as log:
+            r = subprocess.run(
+                ["uv", "run", "--extra", "test", "pytest", "-v",
+                 f"--junitxml={results_dir / 'engine.xml'}"],
+                cwd=ROOT, env=test_env, stdout=log, stderr=subprocess.STDOUT,
+            )
         results.append(("engine", r.returncode))
+        if r.returncode != 0:
+            print(f"  See {engine_log}")
 
     if suite in ("web", "all"):
         print("\n==> Running Playwright tests (Docker)...")
         compose_test = str(ROOT / "docker-compose.test.yml")
-        # Start containers, run playwright, then tear down
         run(["docker", "compose", "-p", "bisimulator-test", "-f", compose_test,
              "up", "-d", "--build", "--wait", "engine-test"], cwd=ROOT)
-        r = run(["docker", "compose", "-p", "bisimulator-test", "-f", compose_test,
-                 "run", "--rm", "playwright"], cwd=ROOT)
+        web_log = results_dir / "web.log"
+        with open(web_log, "w") as log:
+            r = subprocess.run(
+                ["docker", "compose", "-p", "bisimulator-test", "-f", compose_test,
+                 "run", "--rm", "playwright"],
+                cwd=ROOT, stdout=log, stderr=subprocess.STDOUT,
+            )
         results.append(("web", r.returncode))
+        # Copy Playwright report from container if available
+        run(["docker", "compose", "-p", "bisimulator-test", "-f", compose_test,
+             "cp", "engine-test:/data/.", str(results_dir / "web-data")],
+            cwd=ROOT)
         run(["docker", "compose", "-p", "bisimulator-test", "-f", compose_test,
              "down", "-v"], cwd=ROOT)
+        if r.returncode != 0:
+            print(f"  See {web_log}")
 
     if not results:
         print(f"Unknown suite: {suite}. Available: capture, audio, web, all")
@@ -514,21 +534,28 @@ def cmd_test_integration():
          str(integration_dir) + "/.", "engine:/app/tests/integration"], cwd=ROOT)
 
     # Run each test file
+    results_dir = ROOT / "tests" / "results"
+    results_dir.mkdir(parents=True, exist_ok=True)
+    integration_log = results_dir / "integration.log"
+
     test_files = sorted(integration_dir.glob("test_*.py"))
     failed = []
-    for tf in test_files:
-        print(f"==> Running {tf.name}...")
-        r = run([
-            "docker", "compose", "exec", "-T", "-u", "engine", "engine",
-            "uv", "run", "python", "-u", f"/app/tests/integration/{tf.name}",
-        ], cwd=ROOT)
-        if r.returncode != 0:
-            failed.append(tf.name)
+    with open(integration_log, "w") as log:
+        for tf in test_files:
+            print(f"==> Running {tf.name}...")
+            r = subprocess.run([
+                "docker", "compose", "exec", "-T", "-u", "engine", "engine",
+                "uv", "run", "python", "-u", f"/app/tests/integration/{tf.name}",
+            ], cwd=ROOT, stdout=log, stderr=subprocess.STDOUT)
+            if r.returncode != 0:
+                failed.append(tf.name)
 
     if failed:
         print(f"\n==> FAILED: {', '.join(failed)}")
+        print(f"  See {integration_log}")
         sys.exit(1)
     print(f"\n==> All {len(test_files)} integration tests passed")
+    print(f"  Log: {integration_log}")
 
 
 COMMANDS = {

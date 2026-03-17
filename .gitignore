@@ -7,3 +7,4 @@ capture/.venv/
 node_modules/
 tests/experiments/fixtures/
 tests/experiments/results/
+tests/results/

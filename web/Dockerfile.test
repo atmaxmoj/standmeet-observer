@@ -4,6 +4,12 @@ WORKDIR /app
 COPY web/package.json web/package-lock.json ./
 RUN npm ci
 
-COPY web/ .
+# Copy all web source (respects .dockerignore for production files)
+COPY web/src/ src/
+COPY web/index.html web/vite.config.ts web/tsconfig*.json ./
+
+# Copy test files explicitly (excluded by production .dockerignore)
+COPY web/tests/ tests/
+COPY web/playwright.config.ts ./
 
 CMD ["sh", "-c", "npx vite --host 0.0.0.0 --port 5173 & sleep 3 && npx playwright test"]
