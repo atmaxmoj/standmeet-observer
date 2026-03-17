@@ -1,0 +1,54 @@
+You are extracting reusable behavioral rules from someone's work journal.
+
+Extract DECISION RULES — executable if-then rules that predict behavior. Rules should be SPECIFIC enough to be actionable, not so generic they apply to everyone.
+
+## Quality bar
+
+GOOD rule (specific, actionable, falsifiable):
+- "When docker cp fails with 'No such file': mkdir -p the target dir first, then retry"
+- "When editing Python files that use .format(): check for literal braces in template strings before choosing placeholder syntax"
+- "When a build fails: read the LAST error first (not the first), it's usually the root cause"
+
+BAD rule (generic, obvious, unfalsifiable):
+- "Reviews code before committing" (everyone should)
+- "Uses version control" (not a decision)
+- "Prefers simple solutions" (too vague to act on)
+
+## Three types of rules
+
+**Action rules**: when X happens, do Y
+**Recovery rules**: when X fails, respond with Y
+**Tradeoff rules**: when forced to choose between X and Y, prefer X because Z
+
+## Existing rules
+{playbooks}
+
+## Recent episodes
+{episodes}
+
+## Analysis approach
+
+1. Look at `decisions` — each one with `implies` field is direct evidence
+2. Look at `failures` — each `recovery` strategy is a candidate recovery rule
+3. Look at `tradeoffs` — each is a candidate tradeoff rule
+4. Cross-reference `avoided` across episodes for anti-pattern rules
+5. Extract from SPECIFIC details — if the episode mentions a specific command, file, or tool, the rule should too
+
+Be aggressive — extract rules even from single episodes. Mark single-episode rules as confidence 0.2.
+
+## Output
+
+[
+  {
+    "name": "kebab-case-name",
+    "when": "Specific trigger (WHEN does this fire?)",
+    "then": "Specific action (what EXACTLY do they do?)",
+    "because": "Why — specific reason, not platitude",
+    "boundary": "When this does NOT apply (null if unknown)",
+    "confidence": 0.0,
+    "maturity": "nascent|developing|mature|mastered",
+    "evidence": [1, 2, 3]
+  }
+]
+
+Output ONLY the JSON array.

@@ -1,0 +1,63 @@
+You are a cognitive scientist studying someone's work through their screen activity, audio, and system events. Your job is to identify distinct tasks AND extract the reasoning patterns behind each task.
+
+Data sources:
+- **[capture]** — screen captures with OCR text
+- **[audio]** — microphone transcriptions
+- **[os_event]** — shell commands and browser URLs
+
+A "task" = a coherent unit of work toward one goal. App switches within the same goal = same task.
+
+For each task, extract:
+
+1. **What happened** — tools, sequence, outcome
+2. **How they approached it** — the STRATEGY, not the steps. Examples:
+   - "evidence-first debugging: collected logs before forming hypothesis"
+   - "safety-net workflow: created branch before risky change"
+   - "iterative refinement: small change → test → small change → test"
+3. **Decision points** — moments where they chose X over Y:
+   - What were the options?
+   - What did they choose?
+   - What does the choice reveal about their priorities?
+4. **What they avoided** — tools/steps available but not used, and what that implies
+5. **Failures and recovery** — did anything go wrong? How did they respond?
+   - Did they debug systematically or guess-and-check?
+   - Did they abandon the approach or persist?
+   - What was their recovery strategy?
+6. **Tradeoffs made** — where did they sacrifice one thing for another?
+   - Speed vs thoroughness
+   - Simplicity vs completeness
+   - Exploration vs exploitation
+
+Activity log:
+{context}
+
+Output valid JSON array:
+[
+  {
+    "summary": "2-3 sentences: what, how, outcome",
+    "approach": "Their problem-solving strategy (not steps, but methodology)",
+    "decisions": [
+      {
+        "situation": "What they were facing",
+        "choice": "What they did",
+        "alternative": "What they could have done instead",
+        "implies": "What this reveals about their values/priorities"
+      }
+    ],
+    "failures": [
+      {
+        "what_failed": "What went wrong",
+        "response": "How they reacted",
+        "recovery": "What strategy they used to get past it"
+      }
+    ],
+    "tradeoffs": ["Speed over thoroughness: skipped X to save time"],
+    "avoided": ["What was available but not used — and likely why"],
+    "under_pressure": false,
+    "apps": ["App1", "App2"],
+    "started_at": "...",
+    "ended_at": "..."
+  }
+]
+
+Output ONLY the JSON array.

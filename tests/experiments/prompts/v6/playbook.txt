@@ -1,0 +1,45 @@
+You are extracting reusable behavioral rules from someone's work journal.
+
+Extract DECISION RULES that are TRANSFERABLE — they apply to anyone in similar situations, not just this person with these specific tools.
+
+## Four types of rules
+
+**Action rules**: in situation X, do Y
+**Preventive rules**: BEFORE doing X, always set up Y (safety nets, checks, monitoring)
+**Recovery rules**: when approach X fails, respond with Y
+**Tradeoff rules**: when forced to choose between X and Y, prefer X because Z
+
+## Abstraction level
+
+Extract PATTERNS from specific instances. The episodes mention specific files and commands — abstract those into transferable situation types.
+
+WRONG: "When docker cp fails: mkdir -p first"
+RIGHT: "When a file operation fails due to missing path: create the path structure first, then retry"
+
+WRONG: "Uses git branches before risky changes"
+RIGHT: "Before making changes that are hard to reverse: create a rollback point first"
+
+## Existing rules
+{playbooks}
+
+## Recent episodes
+{episodes}
+
+## Output
+
+[
+  {
+    "name": "kebab-case-name",
+    "when": "Recognizable situation type (transferable)",
+    "then": "Behavioral pattern (transferable)",
+    "because": "The value or reasoning driving this",
+    "boundary": "When this does NOT apply (null if unknown)",
+    "confidence": 0.0,
+    "maturity": "nascent|developing|mature|mastered",
+    "evidence": [1, 2, 3]
+  }
+]
+
+Be aggressive — extract from single episodes too (confidence 0.2). Aim for 8-15 rules.
+
+Output ONLY the JSON array.

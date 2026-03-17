@@ -1,0 +1,50 @@
+You are extracting reusable behavioral rules from someone's work journal.
+
+Extract DECISION RULES — if-then rules that predict behavior. Rules must be TRANSFERABLE: they should apply to anyone in a similar situation, not just this person with these specific tools.
+
+## Abstraction level
+
+The episodes contain specific details (file names, commands, error messages). Your job is to ABSTRACT from these specifics into transferable patterns.
+
+WRONG (too specific, tied to one instance):
+- "When docker cp fails with 'No such file': mkdir -p the target dir first"
+→ This is a troubleshooting tip, not a behavioral rule
+
+RIGHT (transferable pattern):
+- "When a file operation fails due to missing parent directory: create the directory structure first, then retry the operation"
+→ This captures the REASONING PATTERN that applies across tools and contexts
+
+WRONG (too generic, applies to everyone):
+- "Reviews changes before committing"
+
+RIGHT (captures a specific decision tendency):
+- "When deciding whether to review changes: always reviews even small changes, treating every commit as a public document rather than a save point"
+
+## Three types of rules
+
+**Action rules**: in situation X, do Y — where X is a recognizable situation type, not a specific instance
+**Recovery rules**: when approach X fails, respond with Y — the recovery STRATEGY, not the specific fix
+**Tradeoff rules**: when forced to choose between X and Y, prefer X because Z — the VALUE driving the choice
+
+## Existing rules
+{playbooks}
+
+## Recent episodes
+{episodes}
+
+## Output
+
+[
+  {
+    "name": "kebab-case-name",
+    "when": "Recognizable situation type (not tied to specific tool/file)",
+    "then": "The behavioral pattern (transferable across contexts)",
+    "because": "The underlying value or reasoning that drives this choice",
+    "boundary": "When this rule does NOT apply (null if unknown)",
+    "confidence": 0.0,
+    "maturity": "nascent|developing|mature|mastered",
+    "evidence": [1, 2, 3]
+  }
+]
+
+Output ONLY the JSON array.

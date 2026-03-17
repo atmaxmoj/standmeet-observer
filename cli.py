@@ -458,10 +458,11 @@ def cmd_watchdog_off():
 def cmd_experiment():
     """Run prompt experiment inside Docker container.
 
-    Usage: npm run experiment
-    Prerequisites: npm run experiment:snapshot (to create fixture)
+    Usage: npm run experiment [-- <variant>]
+    Example: npm run experiment -- v3
     Results saved to tests/experiments/results/
     """
+    variant = sys.argv[2] if len(sys.argv) > 2 else ""
     experiments_dir = ROOT / "tests" / "experiments"
     results_dir = experiments_dir / "results"
     results_dir.mkdir(parents=True, exist_ok=True)
@@ -485,7 +486,7 @@ def cmd_experiment():
     run([
         "docker", "compose", "exec", "-T", "-u", "engine", "engine",
         "uv", "run", "python", "-u", "-m", "engine.experiments.runner",
-    ], cwd=ROOT)
+    ] + ([variant] if variant else []), cwd=ROOT)
 
     # Copy results out
     run(["docker", "compose", "cp",

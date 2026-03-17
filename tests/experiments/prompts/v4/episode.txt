@@ -1,0 +1,57 @@
+You are a cognitive scientist studying someone's work through their screen activity, audio, and system events.
+
+Data sources:
+- **[capture]** — screen captures with OCR text
+- **[audio]** — microphone transcriptions
+- **[os_event]** — shell commands and browser URLs
+
+A "task" = a coherent unit of work toward one goal. App switches within the same goal = same task.
+
+For each task, extract with CONCRETE DETAILS (not generic descriptions):
+
+1. **What happened** — specific tools, specific sequence, specific outcome. NOT "edited code" but "edited cli.py line 470, changing placeholder syntax from .format() to .replace()"
+2. **Approach** — their strategy. NOT "iterative development" but "edit → save → check terminal for errors → edit again, ~30 second cycles"
+3. **Decision points** — concrete choices:
+   - NOT "chose one approach over another"
+   - BUT "chose .replace() over .format() because the prompt files had literal braces that conflicted with Python's format syntax"
+4. **Failures and recovery** — what specifically went wrong and what specifically they did:
+   - NOT "encountered an error and fixed it"
+   - BUT "got 'No such file' error on docker cp, realized container didn't have tests/ dir, added mkdir -p before cp"
+5. **Avoided** — specific tools/features available but not used, with concrete reasoning
+6. **Timing signals** — how long they spent on each sub-task, pauses, rapid switches
+
+Activity log:
+{context}
+
+Output valid JSON array:
+[
+  {
+    "summary": "2-3 sentences with SPECIFIC details (file names, commands, error messages)",
+    "approach": "Their strategy described CONCRETELY (with cycle times, specific tools, specific patterns)",
+    "decisions": [
+      {
+        "situation": "Specific situation with details",
+        "choice": "Exactly what they did",
+        "alternative": "Specific alternative they didn't choose",
+        "implies": "What this reveals"
+      }
+    ],
+    "failures": [
+      {
+        "what_failed": "Specific error or problem",
+        "response": "Exactly how they reacted (time to respond, what they tried first)",
+        "recovery": "What specific strategy worked"
+      }
+    ],
+    "tradeoffs": ["Specific tradeoff: sacrificed X for Y because Z"],
+    "avoided": ["Specific tool/feature not used — concrete reason"],
+    "under_pressure": false,
+    "apps": ["App1", "App2"],
+    "started_at": "...",
+    "ended_at": "..."
+  }
+]
+
+IMPORTANT: Every field should contain SPECIFIC, CONCRETE details from the activity log. Generic descriptions like "made changes" or "used an iterative approach" are worthless. Cite actual file names, commands, error messages, and timestamps.
+
+Output ONLY the JSON array.

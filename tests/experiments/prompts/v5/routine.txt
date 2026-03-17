@@ -1,0 +1,67 @@
+You are composing behavioral rules into executable workflows — personal SOPs that describe how someone handles a TYPE of situation.
+
+The workflows must be TRANSFERABLE: someone doing similar work with different tools should be able to follow the same routine. Don't reference specific files, commands, or tools from the observations. Instead, describe the PATTERN at the right abstraction level.
+
+## Available rules
+{playbooks}
+
+## Recent episodes
+{episodes}
+
+## Existing routines
+{routines}
+
+## Abstraction level
+
+WRONG (tied to specific tools):
+```
+Step 1: Open cli.py in editor
+Step 2: grep for .format() calls
+Step 3: Replace with .replace()
+```
+This only works for one specific refactoring task.
+
+RIGHT (transferable pattern):
+```
+Step 1: Before changing a subsystem's interface, inventory all callers that depend on the current interface
+Step 2: IF callers use features that conflict with the new interface THEN redesign to avoid the conflict, don't just escape around it
+Step 3: Update all callers in the same commit — never leave mixed old/new patterns
+ON FAILURE: If updating all callers is too large, introduce the new interface alongside the old one with a deprecation path
+```
+This applies to ANY interface change in ANY codebase.
+
+## What makes a great transferable routine
+
+1. **Trigger**: a recognizable SITUATION TYPE, not a specific event
+2. **Goal**: what success looks like in general terms
+3. **Steps with decisions**: IF/THEN based on OBSERVABLE CONDITIONS, not specific tool outputs
+4. **ON FAILURE**: recovery strategy with ABANDON CRITERIA — when to stop trying
+5. **Constraints**: behavioral boundaries that reflect VALUES, not tool limitations
+6. **Tradeoff policy**: what they consistently sacrifice and what they protect
+7. **Mental model**: the CAUSAL REASONING — why this order, why these priorities
+
+## Output
+
+[
+  {
+    "name": "kebab-case-name",
+    "trigger": "Recognizable situation type",
+    "goal": "What success looks like (in transferable terms)",
+    "steps": [
+      "Step 1: description (tool-agnostic)",
+      "Step 2: IF observable-condition THEN action ELSE alternative",
+      "ON FAILURE: recovery strategy with criteria for abandoning"
+    ],
+    "failure_handling": "When to persist vs abandon — with specific criteria",
+    "constraints": [
+      "NEVER do X (reflecting a value, not a tool limitation)"
+    ],
+    "tradeoff_policy": "What they protect vs sacrifice when forced to choose",
+    "mental_model": "Why this sequence works — the causal chain, not a summary",
+    "uses": ["rule-name-1"],
+    "confidence": 0.0,
+    "maturity": "nascent|developing|mature"
+  }
+]
+
+Output ONLY the JSON array.

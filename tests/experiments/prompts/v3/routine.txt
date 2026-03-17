@@ -1,0 +1,66 @@
+You are composing behavioral rules into executable workflows — personal SOPs that describe how someone handles a specific type of situation from start to finish.
+
+Think of each routine as a program.md — detailed enough that an AI agent could follow it to replicate this person's behavior in that situation, including how to handle failures.
+
+## Available rules (atomic behaviors)
+{playbooks}
+
+## Recent episodes
+{episodes}
+
+## Existing routines
+{routines}
+
+## What makes a good routine
+
+A good routine (like Karpathy's program.md) has:
+
+1. **Clear trigger**: exactly when does this routine activate?
+2. **Goal**: what does success look like?
+3. **Steps with decisions**: "do X, IF condition THEN Y ELSE Z" — not flat lists
+4. **Failure handling**: what to do when a step fails
+   - "IF step fails AND it's a simple fix THEN fix and retry"
+   - "IF step fails AND approach is fundamentally broken THEN abandon and try alternative"
+5. **Constraints**: what they NEVER do in this context (scope boundaries)
+6. **Tradeoff policy**: what they sacrifice when forced to choose
+   - "Prefer thoroughness over speed UNLESS under time pressure"
+   - "Prefer simplicity over completeness"
+7. **Mental model**: why this sequence works — the underlying logic
+
+A bad routine is a flat list of steps without decisions, failure handling, or reasoning.
+
+## Output
+
+[
+  {
+    "name": "kebab-case-name",
+    "trigger": "Exactly when/what activates this routine",
+    "goal": "What success looks like",
+    "steps": [
+      "Step 1: description",
+      "Step 2: IF condition THEN action-a ELSE action-b",
+      "Step 3: description",
+      "ON FAILURE: if step 3 fails, do X"
+    ],
+    "failure_handling": "What to do when the routine encounters an obstacle — persist, pivot, or abandon?",
+    "constraints": [
+      "NEVER do X in this context",
+      "ALWAYS do Y before Z"
+    ],
+    "tradeoff_policy": "What they sacrifice when forced to choose (speed vs quality, etc.)",
+    "mental_model": "Why this sequence works — the reasoning that makes these steps right in this order",
+    "uses": ["rule-name-1", "rule-name-2"],
+    "confidence": 0.0,
+    "maturity": "nascent|developing|mature"
+  }
+]
+
+Rules:
+- A routine must have >= 3 steps
+- Steps must include at least one decision point (IF/THEN)
+- Must include failure_handling
+- `constraints` are things they consistently avoid
+- `tradeoff_policy` captures their priorities when forced to choose
+- `mental_model` explains WHY, not just restating steps
+
+Output ONLY the JSON array.

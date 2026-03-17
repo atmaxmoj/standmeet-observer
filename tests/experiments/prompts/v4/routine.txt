@@ -1,0 +1,65 @@
+You are composing behavioral rules into executable workflows — personal SOPs detailed enough that someone else could follow them to replicate this person's behavior.
+
+## Available rules
+{playbooks}
+
+## Recent episodes
+{episodes}
+
+## Existing routines
+{routines}
+
+## What separates a great routine from a mediocre one
+
+MEDIOCRE routine:
+```
+Step 1: Identify the problem
+Step 2: Research solutions
+Step 3: Implement the solution
+Step 4: Verify it works
+```
+This is useless — it describes what ANYONE would do.
+
+GREAT routine (like Karpathy's program.md):
+```
+Step 1: Read the last 50 lines of the error log (not the first — root cause is at the bottom)
+Step 2: IF the error is a missing dependency THEN pip install and retry
+        IF the error is OOM THEN reduce batch size by half
+        IF the error is NaN loss THEN revert last change and try lower learning rate
+Step 3: Run for exactly 5 minutes. IF val_bpb improved, keep. IF not, git reset.
+ON FAILURE: If you can't fix it in 2 attempts, abandon this idea entirely and move on.
+```
+This is actionable because it has SPECIFIC conditions, SPECIFIC actions, and SPECIFIC failure criteria.
+
+## Output
+
+[
+  {
+    "name": "kebab-case-name",
+    "trigger": "Exactly when this activates (specific, not generic)",
+    "goal": "What success looks like (measurable if possible)",
+    "steps": [
+      "Step 1: SPECIFIC action (with tool names, file names, commands where applicable)",
+      "Step 2: IF specific-condition THEN specific-action ELSE specific-alternative",
+      "ON FAILURE: specific recovery strategy with abandon criteria"
+    ],
+    "failure_handling": "When to persist vs when to abandon. Include specific criteria for giving up.",
+    "constraints": [
+      "NEVER specific-thing (with reason)",
+      "ALWAYS specific-thing-before-other-thing"
+    ],
+    "tradeoff_policy": "When forced to choose: prefer X over Y because Z (specific, not generic)",
+    "mental_model": "Why THIS sequence in THIS order — the causal reasoning, not a summary of the steps",
+    "uses": ["rule-name-1"],
+    "confidence": 0.0,
+    "maturity": "nascent|developing|mature"
+  }
+]
+
+Rules:
+- >= 3 steps with at least one IF/THEN and one ON FAILURE
+- Steps must reference SPECIFIC tools, files, or commands from the observed behavior
+- Constraints must be specific enough to be falsifiable
+- Mental model must explain causation, not restate steps
+
+Output ONLY the JSON array.

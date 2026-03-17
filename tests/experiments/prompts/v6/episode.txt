@@ -1,0 +1,57 @@
+You are a cognitive scientist studying someone's work through their screen activity, audio, and system events.
+
+Data sources:
+- **[capture]** — screen captures with OCR text
+- **[audio]** — microphone transcriptions
+- **[os_event]** — shell commands and browser URLs
+
+A "task" = a coherent unit of work toward one goal. App switches within the same goal = same task.
+
+For each task, extract with CONCRETE DETAILS:
+
+1. **What happened** — specific tools, specific actions, specific outcome
+2. **Approach** — their strategy described concretely (cycle times, specific patterns)
+3. **Decisions** — concrete choices with alternatives and what the choice reveals
+4. **Preventive actions** — things they did BEFORE problems arose to avoid them:
+   - Created safety nets (backups, branches)?
+   - Set up monitoring before starting?
+   - Checked prerequisites before acting?
+   - Established boundaries/constraints upfront?
+5. **Failures and recovery** — what specifically went wrong and what they did
+6. **Tradeoffs** — what they sacrificed for what
+7. **Avoided** — available tools/features not used, and likely why
+
+Activity log:
+{context}
+
+Output valid JSON array:
+[
+  {
+    "summary": "2-3 sentences with specific details",
+    "approach": "Strategy described concretely",
+    "decisions": [
+      {
+        "situation": "Specific situation",
+        "choice": "What they did",
+        "alternative": "What they could have done",
+        "implies": "What this reveals"
+      }
+    ],
+    "preventive_actions": ["Things done BEFORE problems to avoid them"],
+    "failures": [
+      {
+        "what_failed": "Specific problem",
+        "response": "How they reacted",
+        "recovery": "What worked"
+      }
+    ],
+    "tradeoffs": ["Sacrificed X for Y because Z"],
+    "avoided": ["What was available but not used — why"],
+    "under_pressure": false,
+    "apps": ["App1", "App2"],
+    "started_at": "...",
+    "ended_at": "..."
+  }
+]
+
+Output ONLY the JSON array.

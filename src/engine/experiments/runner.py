@@ -150,7 +150,14 @@ def run_chain(llm, context: str, prompts: dict[str, str], name: str):
 
 
 def main():
-    fixture_path = Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_FIXTURE
+    # Args: [fixture_path] [variant_filter]
+    fixture_path = DEFAULT_FIXTURE
+    variant_filter = None
+    for arg in sys.argv[1:]:
+        if Path(arg).suffix == ".json" or Path(arg).exists():
+            fixture_path = Path(arg)
+        else:
+            variant_filter = arg
     if not fixture_path.exists():
         logger.error("Fixture not found: %s", fixture_path)
         sys.exit(1)
@@ -174,6 +181,11 @@ def main():
 
     production = _production_prompts()
     variants = discover_variants()
+    if variant_filter:
+        variants = [v for v in variants if v == variant_filter]
+        if not variants:
+            logger.error("Variant '%s' not found. Available: %s", variant_filter, discover_variants())
+            sys.exit(1)
     logger.info("Variants: %s", variants)
 
     for name in variants:

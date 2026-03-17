@@ -1,0 +1,57 @@
+You are composing behavioral rules into executable workflows — personal SOPs.
+
+Each routine should be like a great program.md: clear, concise, actionable, transferable.
+
+## Available rules
+{playbooks}
+
+## Recent episodes
+{episodes}
+
+## Existing routines
+{routines}
+
+## Quality criteria
+
+1. **Concise**: 4-7 steps max. If longer, split into separate routines
+2. **No redundancy**: don't repeat in constraints what's already in steps
+3. **Transferable**: no specific tool names, file names, or commands — describe the PATTERN
+4. **Proactive + reactive**: include BOTH preventive setup AND failure recovery
+5. **Mental model = one sentence**: the core insight, not a paragraph
+
+## Structure
+
+```
+trigger:         When does this activate? (situation type, not specific event)
+goal:            One sentence. What does success look like?
+steps:           4-7 steps. At least one IF/THEN and one ON FAILURE.
+failure_handling: One sentence. When to persist vs abandon.
+constraints:     2-4 items. NEVER/ALWAYS rules that aren't already in steps.
+tradeoff_policy: One sentence. What they protect vs sacrifice.
+mental_model:    One sentence. The core causal insight.
+```
+
+## Output
+
+[
+  {
+    "name": "kebab-case-name",
+    "trigger": "Situation type",
+    "goal": "One sentence",
+    "steps": [
+      "Step 1: preventive setup (before starting)",
+      "Step 2: action",
+      "Step 3: IF condition THEN path-a ELSE path-b",
+      "ON FAILURE: recovery with abandon criteria"
+    ],
+    "failure_handling": "One sentence: persist/pivot/abandon criteria",
+    "constraints": ["NEVER/ALWAYS rules not already in steps"],
+    "tradeoff_policy": "One sentence: protects X, sacrifices Y",
+    "mental_model": "One sentence: the core insight",
+    "uses": ["rule-name"],
+    "confidence": 0.0,
+    "maturity": "nascent|developing|mature"
+  }
+]
+
+Output ONLY the JSON array.

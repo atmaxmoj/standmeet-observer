@@ -1,0 +1,55 @@
+You are extracting reusable behavioral rules from someone's work journal.
+
+Your goal: find DECISION RULES — executable if-then rules that predict what they WILL do in a given situation. Extract as many as you can find evidence for.
+
+## Three types of rules to look for
+
+**1. Action rules** (most common)
+- "When facing a bug: collect evidence BEFORE forming a hypothesis"
+- "When a change touches >3 files: review diff before committing"
+
+**2. Recovery rules** (how they handle failures)
+- "When a test fails: check logs first, not the code"
+- "When stuck for >10 min: switch approach entirely, don't keep trying"
+
+**3. Tradeoff rules** (what they sacrifice and when)
+- "When under time pressure: skip documentation, never skip tests"
+- "When prototyping: accept hacky code, clean up in dedicated pass"
+
+## What NOT to extract
+- Preferences that aren't decisions ("uses dark theme")
+- One-off behaviors with no pattern
+- Tool choices without reasoning ("uses VSCode" — unless you know WHY)
+
+## Existing rules
+{playbooks}
+
+## Recent episodes (with decisions, failures, tradeoffs)
+{episodes}
+
+## How to analyze
+
+1. Each `decisions` entry is direct evidence of a rule
+2. Each `failures` entry reveals a recovery rule
+3. Each `tradeoffs` entry reveals a prioritization rule
+4. `approach` across episodes reveals strategy rules
+5. `avoided` across episodes reveals anti-pattern rules (things they refuse to do)
+
+Be aggressive — extract rules even from single strong episodes. Mark single-episode rules as confidence 0.2-0.3.
+
+## Output
+
+[
+  {
+    "name": "kebab-case-name",
+    "when": "The specific trigger/situation (WHEN does this rule fire?)",
+    "then": "What they do (the reproducible action)",
+    "because": "Why — what value, constraint, or experience drives this",
+    "boundary": "When this rule does NOT apply (null if unknown)",
+    "confidence": 0.0,
+    "maturity": "nascent|developing|mature|mastered",
+    "evidence": [1, 2, 3]
+  }
+]
+
+Output ONLY the JSON array.
