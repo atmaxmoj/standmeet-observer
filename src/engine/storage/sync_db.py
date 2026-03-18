@@ -8,6 +8,7 @@ import logging
 from sqlalchemy import select, func, update
 from sqlalchemy.orm import Session
 
+from engine.storage.session import ago
 from engine.storage.models import (
     Frame, AudioFrame, OsEvent, Episode, PlaybookEntry,
     TokenUsage, State, PipelineLog, Routine,
@@ -72,7 +73,7 @@ class SyncDB:
     def get_recent_episodes(self, days: int = 1) -> list[dict]:
         stmt = (
             select(Episode)
-            .where(Episode.created_at >= func.datetime("now", f"-{days} days"))
+            .where(Episode.created_at >= ago(days=days))
             .order_by(Episode.created_at)
         )
         rows = self.session.execute(stmt).scalars().all()
@@ -98,7 +99,7 @@ class SyncDB:
             existing.confidence = confidence
             existing.maturity = maturity
             existing.evidence = evidence
-            existing.updated_at = func.datetime("now")
+            existing.updated_at = func.now()
         else:
             self.session.add(PlaybookEntry(
                 name=name, context=context, action=action,
@@ -108,7 +109,7 @@ class SyncDB:
 
     def count_recent_playbooks(self, hours: int = 1) -> int:
         stmt = select(func.count()).select_from(PlaybookEntry).where(
-            PlaybookEntry.updated_at >= func.datetime("now", f"-{hours} hours")
+            PlaybookEntry.updated_at >= ago(hours=hours)
         )
         return self.session.execute(stmt).scalar() or 0
 
@@ -133,7 +134,7 @@ class SyncDB:
             existing.uses = uses
             existing.confidence = confidence
             existing.maturity = maturity
-            existing.updated_at = func.datetime("now")
+            existing.updated_at = func.now()
         else:
             self.session.add(Routine(
                 name=name, trigger=trigger, goal=goal,
@@ -144,7 +145,7 @@ class SyncDB:
 
     def count_recent_routines(self, hours: int = 1) -> int:
         stmt = select(func.count()).select_from(Routine).where(
-            Routine.updated_at >= func.datetime("now", f"-{hours} hours")
+            Routine.updated_at >= ago(hours=hours)
         )
         return self.session.execute(stmt).scalar() or 0
 
@@ -174,7 +175,7 @@ class SyncDB:
 
     def get_daily_spend(self) -> float:
         stmt = select(func.coalesce(func.sum(TokenUsage.cost_usd), 0.0)).where(
-            TokenUsage.created_at >= func.datetime("now", "-1 days")
+            TokenUsage.created_at >= ago(days=1)
         )
         return float(self.session.execute(stmt).scalar())
 

@@ -75,7 +75,7 @@ async def client(app):
 def patch_settings(db):
     """Patch Settings so backfill uses the test DB path."""
     mock_settings = MagicMock()
-    mock_settings.return_value.db_path = db.path
+    mock_settings.return_value.database_url_sync = f"sqlite:///{db.path}"
     mock_settings.return_value.anthropic_api_key = ""
     mock_settings.return_value.claude_code_oauth_token = ""
     mock_settings.return_value.openai_api_key = ""

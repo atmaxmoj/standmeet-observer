@@ -29,7 +29,7 @@ class Frame(Base):
     image_hash: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
     image_path: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
     processed: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
-    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=func.datetime("now"))
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=func.now())
 
     __table_args__ = (
         Index("idx_frames_id", "id"),
@@ -48,7 +48,7 @@ class AudioFrame(Base):
     source: Mapped[str] = mapped_column(Text, nullable=False, default="mic", server_default="mic")
     chunk_path: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
     processed: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
-    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=func.datetime("now"))
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=func.now())
 
     __table_args__ = (
         Index("idx_audio_frames_id", "id"),
@@ -65,7 +65,7 @@ class OsEvent(Base):
     source: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
     data: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
     processed: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
-    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=func.datetime("now"))
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=func.now())
 
     __table_args__ = (
         Index("idx_os_events_id", "id"),
@@ -86,7 +86,7 @@ class Episode(Base):
     frame_id_min: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     frame_id_max: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     frame_source: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
-    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=func.datetime("now"))
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=func.now())
 
 
 class PlaybookEntry(Base):
@@ -100,8 +100,8 @@ class PlaybookEntry(Base):
     maturity: Mapped[str] = mapped_column(Text, nullable=False, default="nascent", server_default="nascent")
     evidence: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
     last_evidence_at: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=func.datetime("now"))
-    updated_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=func.datetime("now"))
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=func.now())
+    updated_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=func.now())
 
 
 class TokenUsage(Base):
@@ -113,7 +113,7 @@ class TokenUsage(Base):
     input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     output_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     cost_usd: Mapped[float] = mapped_column(Float, nullable=False, default=0.0, server_default="0.0")
-    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=func.datetime("now"))
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=func.now())
 
     __table_args__ = (
         Index("idx_token_usage_created_at", "created_at"),
@@ -138,7 +138,7 @@ class PipelineLog(Base):
     input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     output_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     cost_usd: Mapped[float] = mapped_column(Float, nullable=False, default=0.0, server_default="0.0")
-    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=func.datetime("now"))
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=func.now())
 
     __table_args__ = (
         Index("idx_pipeline_logs_stage", "stage"),
@@ -155,7 +155,7 @@ class PlaybookHistory(Base):
     maturity: Mapped[str] = mapped_column(Text, nullable=False, default="nascent", server_default="nascent")
     evidence: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
     change_reason: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
-    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=func.datetime("now"))
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=func.now())
 
     __table_args__ = (
         Index("idx_playbook_history_name", "playbook_name"),
@@ -173,8 +173,8 @@ class Routine(Base):
     uses: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
     confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.0, server_default="0.0")
     maturity: Mapped[str] = mapped_column(Text, nullable=False, default="nascent", server_default="nascent")
-    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=func.datetime("now"))
-    updated_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=func.datetime("now"))
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=func.now())
+    updated_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=func.now())
 
 
 class ChatMessage(Base):
@@ -184,4 +184,4 @@ class ChatMessage(Base):
     role: Mapped[str] = mapped_column(Text, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
     proposals: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
-    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=func.datetime("now"))
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=func.now())

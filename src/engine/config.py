@@ -30,8 +30,12 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     openai_base_url: str = ""
 
-    # Engine storage
-    db_path: str = "/data/engine.db"
+    # Database
+    database_url: str = "sqlite+aiosqlite:///data/engine.db"
+    database_url_sync: str = "sqlite:///data/engine.db"
+
+    # Huey task queue (always SQLite, separate from engine data)
+    huey_db_dir: str = "/data"
 
     # Frames directory (for image access during episode processing)
     frames_base_dir: str = "/data/frames"

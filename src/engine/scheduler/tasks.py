@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 settings = Settings()
 
 huey = SqliteHuey(
-    filename=str(Path(settings.db_path).parent / "huey.db"),
+    filename=str(Path(settings.huey_db_dir) / "huey.db"),
 )
 
 _llm = create_client(
@@ -36,17 +36,19 @@ _llm = create_client(
 )
 
 
-def _get_conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(settings.db_path)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
+def _get_conn():
+    """Get a sync DB connection via SQLAlchemy."""
+    from sqlalchemy import create_engine
+    engine = create_engine(settings.database_url_sync)
+    conn = engine.raw_connection()
+    conn.row_factory = sqlite3.Row if "sqlite" in settings.database_url_sync else None
     return conn
 
 
 def _get_session():
     """Get a SQLAlchemy session for ORM operations."""
     from engine.storage.engine import get_sync_session_factory
-    factory = get_sync_session_factory(settings.db_path)
+    factory = get_sync_session_factory(settings.database_url_sync)
     return factory()
 
 

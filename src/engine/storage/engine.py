@@ -1,39 +1,29 @@
 """SQLAlchemy engine + session factories."""
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine as _create_engine
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.orm import sessionmaker, Session
 
 from engine.storage.models import Base
 
 
-def create_sync_engine(db_path: str):
-    """Create a sync SQLAlchemy engine for SQLite."""
-    engine = create_engine(
-        f"sqlite:///{db_path}",
-        connect_args={"check_same_thread": False},
-        echo=False,
-    )
+def create_sync_engine(url: str):
+    """Create a sync SQLAlchemy engine from a URL."""
+    kwargs = {}
+    if url.startswith("sqlite"):
+        kwargs["connect_args"] = {"check_same_thread": False}
+    engine = _create_engine(url, echo=False, **kwargs)
     Base.metadata.create_all(engine)
     return engine
 
 
-def create_async_engine_sqlite(db_path: str):
-    """Create an async SQLAlchemy engine for SQLite (aiosqlite)."""
-    engine = create_async_engine(
-        f"sqlite+aiosqlite:///{db_path}",
-        echo=False,
-    )
-    return engine
-
-
-def get_sync_session_factory(db_path: str) -> sessionmaker[Session]:
-    """Create a sync session factory."""
-    engine = create_sync_engine(db_path)
+def get_sync_session_factory(url: str) -> sessionmaker[Session]:
+    """Create a sync session factory from a URL."""
+    engine = create_sync_engine(url)
     return sessionmaker(bind=engine)
 
 
-def get_async_session_factory(db_path: str) -> async_sessionmaker[AsyncSession]:
-    """Create an async session factory."""
-    engine = create_async_engine_sqlite(db_path)
+def get_async_session_factory(url: str) -> async_sessionmaker[AsyncSession]:
+    """Create an async session factory from a URL."""
+    engine = create_async_engine(url, echo=False)
     return async_sessionmaker(bind=engine, expire_on_commit=False)

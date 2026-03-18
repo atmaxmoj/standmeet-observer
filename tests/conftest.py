@@ -18,7 +18,7 @@ def event_loop():
 async def db(tmp_path):
     """Create a fresh in-memory-like DB for each test."""
     db_path = str(tmp_path / "test.db")
-    database = DB(db_path)
+    database = DB(f"sqlite+aiosqlite:///{db_path}")
     await database.connect()
     yield database
     await database.close()

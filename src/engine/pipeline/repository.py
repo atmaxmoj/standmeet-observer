@@ -2,6 +2,9 @@
 
 import sqlite3
 
+from engine.storage.session import ago
+
+
 def get_all_playbooks_for_decay(conn: sqlite3.Connection) -> list[dict]:
     rows = conn.execute(
         "SELECT id, name, confidence, last_evidence_at FROM playbook_entries"
@@ -10,7 +13,6 @@ def get_all_playbooks_for_decay(conn: sqlite3.Connection) -> list[dict]:
 
 
 def update_confidence(conn: sqlite3.Connection, entry_id: int, confidence: float):
-    # Use raw conn here because decay_confidence does conn.commit() after batch
     conn.execute(
         "UPDATE playbook_entries SET confidence = ? WHERE id = ?",
         (confidence, entry_id),
@@ -18,9 +20,11 @@ def update_confidence(conn: sqlite3.Connection, entry_id: int, confidence: float
 
 
 def get_daily_spend(conn: sqlite3.Connection) -> float:
+    cutoff = ago(days=1)
     row = conn.execute(
         "SELECT COALESCE(SUM(cost_usd), 0.0) as total "
-        "FROM token_usage WHERE created_at >= datetime('now', '-1 days')",
+        "FROM token_usage WHERE created_at >= ?",
+        (cutoff,),
     ).fetchone()
     return float(row["total"] if isinstance(row, sqlite3.Row) else row[0])
 

@@ -42,7 +42,7 @@ def _start_huey_consumer():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = Settings()
-    db = DB(settings.db_path)
+    db = DB(settings.database_url)
     await db.connect()
 
     llm = create_client(

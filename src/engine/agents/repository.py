@@ -10,7 +10,7 @@ import sqlite3
 
 from sqlalchemy import select, func, delete
 
-from engine.storage.session import get_session
+from engine.storage.session import get_session, ago
 from engine.storage.models import (
     Frame as FrameModel, AudioFrame, OsEvent, Episode,
     PlaybookEntry, PlaybookHistory, Routine, PipelineLog,
@@ -40,7 +40,7 @@ def get_recent_episodes(conn: sqlite3.Connection, hours: int = 24) -> list[dict]
     s = get_session(conn)
     rows = s.execute(
         select(Episode.id, Episode.summary, Episode.app_names, Episode.started_at, Episode.ended_at)
-        .where(Episode.created_at >= func.datetime("now", f"-{hours} hours"))
+        .where(Episode.created_at >= ago(hours=hours))
         .order_by(Episode.created_at.desc())
     ).all()
     s.close()
@@ -96,7 +96,7 @@ def get_recent_frames(conn: sqlite3.Connection, hours: int = 24, limit: int = 50
         select(FrameModel.id, FrameModel.timestamp, FrameModel.app_name,
                FrameModel.window_name, func.substr(FrameModel.text, 1, 300).label("text"),
                FrameModel.display_id)
-        .where(FrameModel.created_at >= func.datetime("now", f"-{hours} hours"))
+        .where(FrameModel.created_at >= ago(hours=hours))
         .order_by(FrameModel.id.desc()).limit(limit)
     ).all()
     s.close()
@@ -123,7 +123,7 @@ def get_recent_audio(conn: sqlite3.Connection, hours: int = 24, limit: int = 50)
     rows = s.execute(
         select(AudioFrame.id, AudioFrame.timestamp, AudioFrame.text,
                AudioFrame.language, AudioFrame.duration_seconds, AudioFrame.source)
-        .where(AudioFrame.created_at >= func.datetime("now", f"-{hours} hours"))
+        .where(AudioFrame.created_at >= ago(hours=hours))
         .order_by(AudioFrame.id.desc()).limit(limit)
     ).all()
     s.close()
@@ -135,7 +135,7 @@ def get_recent_os_events(conn: sqlite3.Connection, hours: int = 24, limit: int =
     s = get_session(conn)
     rows = s.execute(
         select(OsEvent.id, OsEvent.timestamp, OsEvent.event_type, OsEvent.source, OsEvent.data)
-        .where(OsEvent.created_at >= func.datetime("now", f"-{hours} hours"))
+        .where(OsEvent.created_at >= ago(hours=hours))
         .order_by(OsEvent.id.desc()).limit(limit)
     ).all()
     s.close()
@@ -197,7 +197,7 @@ def write_playbook_entry(
         existing.confidence = confidence
         existing.maturity = maturity
         existing.evidence = evidence
-        existing.updated_at = func.datetime("now")
+        existing.updated_at = func.now()
     else:
         s.add(PlaybookEntry(
             name=name, context=context, action=action,
@@ -288,7 +288,7 @@ def write_routine(
         existing.uses = uses
         existing.confidence = confidence
         existing.maturity = maturity
-        existing.updated_at = func.datetime("now")
+        existing.updated_at = func.now()
     else:
         s.add(Routine(
             name=name, trigger=trigger, goal=goal,
@@ -306,7 +306,7 @@ def get_stale_entries(conn: sqlite3.Connection, days: int = 14) -> list[dict]:
     rows = s.execute(
         select(PlaybookEntry)
         .where((PlaybookEntry.last_evidence_at.is_(None))
-               | (PlaybookEntry.last_evidence_at < func.datetime("now", f"-{days} days")))
+               | (PlaybookEntry.last_evidence_at < ago(days=days)))
         .order_by(PlaybookEntry.confidence.desc())
     ).scalars().all()
     result = [
@@ -383,7 +383,7 @@ def merge_entries(conn: sqlite3.Connection, keep_id: int, remove_id: int) -> dic
     new_conf = max(keep.confidence, remove.confidence)
     keep.confidence = new_conf
     keep.evidence = json.dumps(merged)
-    keep.updated_at = func.datetime("now")
+    keep.updated_at = func.now()
     s.delete(remove)
     s.commit()
     logger.info("Merged: kept %s (id=%d), removed %s (id=%d)", keep.name, keep_id, remove.name, remove_id)
@@ -450,7 +450,7 @@ def deprecate_entry(conn: sqlite3.Connection, entry_id: int, reason: str = "") -
                              row.evidence or "[]", reason=f"deprecated: {reason}")
     row.confidence = 0.0
     row.maturity = "nascent"
-    row.updated_at = func.datetime("now")
+    row.updated_at = func.now()
     s.commit()
     logger.info("Deprecated %s (id=%d): %s", row.name, entry_id, reason)
     s.close()
@@ -494,7 +494,7 @@ def purge_processed_frames(conn: sqlite3.Connection, older_than_days: int) -> di
     rows = s.execute(
         select(FrameModel.id, FrameModel.image_path)
         .where(FrameModel.processed == 1,
-               FrameModel.created_at < func.datetime("now", f"-{older_than_days} days"))
+               FrameModel.created_at < ago(days=older_than_days))
     ).all()
     if not rows:
         s.close()
@@ -519,7 +519,7 @@ def purge_processed_audio(conn: sqlite3.Connection, older_than_days: int) -> dic
     rows = s.execute(
         select(AudioFrame.id, AudioFrame.chunk_path)
         .where(AudioFrame.processed == 1,
-               AudioFrame.created_at < func.datetime("now", f"-{older_than_days} days"))
+               AudioFrame.created_at < ago(days=older_than_days))
     ).all()
     if not rows:
         s.close()
@@ -544,7 +544,7 @@ def purge_processed_os_events(conn: sqlite3.Connection, older_than_days: int) ->
     result = s.execute(
         delete(OsEvent).where(
             OsEvent.processed == 1,
-            OsEvent.created_at < func.datetime("now", f"-{older_than_days} days"))
+            OsEvent.created_at < ago(days=older_than_days))
     )
     s.commit()
     count = result.rowcount
@@ -556,7 +556,7 @@ def purge_pipeline_logs(conn: sqlite3.Connection, older_than_days: int) -> dict:
     s = get_session(conn)
     result = s.execute(
         delete(PipelineLog).where(
-            PipelineLog.created_at < func.datetime("now", f"-{older_than_days} days"))
+            PipelineLog.created_at < ago(days=older_than_days))
     )
     s.commit()
     count = result.rowcount

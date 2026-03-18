@@ -373,8 +373,11 @@ async def backfill(request: Request):
     from engine.scheduler.tasks import process_episode
 
     settings = Settings()
-    conn = sqlite3.connect(settings.db_path)
-    conn.row_factory = sqlite3.Row
+    from sqlalchemy import create_engine
+    engine = create_engine(settings.database_url_sync)
+    conn = engine.raw_connection()
+    if "sqlite" in settings.database_url_sync:
+        conn.row_factory = sqlite3.Row
 
     # Reset all to unprocessed
     conn.execute("UPDATE frames SET processed = 0")

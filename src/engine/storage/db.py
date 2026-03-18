@@ -8,6 +8,7 @@ import logging
 from sqlalchemy import select, func, delete, update, text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 
+from engine.storage.session import ago
 from engine.storage.models import (
     Base, Frame, AudioFrame, OsEvent, Episode, PlaybookEntry,
     TokenUsage, State, PipelineLog, PlaybookHistory, Routine, ChatMessage,
@@ -19,24 +20,29 @@ CHAT_WINDOW_SIZE = 20
 
 
 class DB:
-    def __init__(self, path: str):
-        self.path = path
+    def __init__(self, url: str):
+        self.url = url
         self._engine = None
         self._session_factory = None
 
+    @property
+    def path(self) -> str:
+        """Extract file path from SQLite URL (for backwards compat in tests)."""
+        if "sqlite" in self.url:
+            return self.url.split("///", 1)[-1]
+        return self.url
+
     async def connect(self):
-        logger.debug("connecting to database at %s", self.path)
-        self._engine = create_async_engine(
-            f"sqlite+aiosqlite:///{self.path}",
-            echo=False,
-        )
+        logger.debug("connecting to database at %s", self.url)
+        self._engine = create_async_engine(self.url, echo=False)
         async with self._engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-            await conn.execute(text("PRAGMA journal_mode=WAL"))
+            if "sqlite" in self.url:
+                await conn.execute(text("PRAGMA journal_mode=WAL"))
         self._session_factory = async_sessionmaker(
             bind=self._engine, expire_on_commit=False,
         )
-        logger.info("database connected and schema initialized at %s", self.path)
+        logger.info("database connected and schema initialized at %s", self.url)
 
     async def close(self):
         if self._engine:
@@ -252,7 +258,7 @@ class DB:
         async with self._session() as s:
             rows = (await s.execute(
                 select(Episode)
-                .where(Episode.created_at >= func.datetime("now", f"-{days} days"))
+                .where(Episode.created_at >= ago(days=days))
                 .order_by(Episode.created_at)
             )).scalars().all()
             return [self._ep_dict(r) for r in rows]
@@ -290,7 +296,7 @@ class DB:
                 existing.confidence = confidence
                 existing.maturity = maturity
                 existing.evidence = evidence
-                existing.updated_at = func.datetime("now")
+                existing.updated_at = func.now()
             else:
                 s.add(PlaybookEntry(
                     name=name, context=context, action=action,
@@ -362,7 +368,7 @@ class DB:
         async with self._session() as s:
             rows = (await s.execute(
                 select(Episode.id, Episode.summary, Episode.app_names, Episode.started_at, Episode.ended_at)
-                .where(Episode.created_at >= func.datetime("now", f"-{hours} hours"))
+                .where(Episode.created_at >= ago(hours=hours))
                 .order_by(Episode.created_at.desc())
             )).all()
             return [{"id": r[0], "summary": r[1], "app_names": r[2], "started_at": r[3], "ended_at": r[4]} for r in rows]
@@ -385,27 +391,28 @@ class DB:
         async with self._session() as s:
             result = (await s.execute(
                 select(func.coalesce(func.sum(TokenUsage.cost_usd), 0.0))
-                .where(TokenUsage.created_at >= func.datetime("now", "-1 days"))
+                .where(TokenUsage.created_at >= ago(days=1))
             )).scalar()
             return float(result)
 
     async def get_usage_summary(self, days: int = 7) -> dict:
         async with self._session() as s:
+            cutoff = ago(days=days)
             by_layer = (await s.execute(text(
                 "SELECT layer, model, "
                 "SUM(input_tokens) as total_input, SUM(output_tokens) as total_output, "
                 "SUM(cost_usd) as total_cost, COUNT(*) as call_count "
-                "FROM token_usage WHERE created_at >= datetime('now', :days) "
+                "FROM token_usage WHERE created_at >= :cutoff "
                 "GROUP BY layer, model ORDER BY total_cost DESC"
-            ).bindparams(days=f"-{days} days"))).mappings().all()
+            ).bindparams(cutoff=cutoff))).mappings().all()
 
             by_day = (await s.execute(text(
                 "SELECT date(created_at) as day, "
                 "SUM(input_tokens) as total_input, SUM(output_tokens) as total_output, "
                 "SUM(cost_usd) as total_cost, COUNT(*) as call_count "
-                "FROM token_usage WHERE created_at >= datetime('now', :days) "
+                "FROM token_usage WHERE created_at >= :cutoff "
                 "GROUP BY date(created_at) ORDER BY day"
-            ).bindparams(days=f"-{days} days"))).mappings().all()
+            ).bindparams(cutoff=cutoff))).mappings().all()
 
             rows_layer = [dict(r) for r in by_layer]
             rows_day = [dict(r) for r in by_day]
@@ -524,7 +531,7 @@ class DB:
                 existing.uses = uses
                 existing.confidence = confidence
                 existing.maturity = maturity
-                existing.updated_at = func.datetime("now")
+                existing.updated_at = func.now()
             else:
                 s.add(Routine(
                     name=name, trigger=trigger, goal=goal,

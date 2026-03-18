@@ -1,6 +1,7 @@
-"""Session utilities — convert raw connections to SQLAlchemy sessions."""
+"""Session + time utilities for cross-database compatibility."""
 
 import sqlite3
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -21,3 +22,9 @@ def get_session(conn: sqlite3.Connection) -> Session:
         Base.metadata.create_all(engine)
         _cache[conn_id] = sessionmaker(bind=engine)
     return _cache[conn_id]()
+
+
+def ago(days: int = 0, hours: int = 0) -> str:
+    """Return ISO timestamp for N days/hours ago. Cross-database compatible."""
+    dt = datetime.now(timezone.utc) - timedelta(days=days, hours=hours)
+    return dt.isoformat()
