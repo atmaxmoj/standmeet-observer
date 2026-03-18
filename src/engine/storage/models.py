@@ -1,0 +1,187 @@
+"""SQLAlchemy ORM models for all engine tables."""
+
+from datetime import datetime, timezone
+
+from sqlalchemy import (
+    Integer, Float, Text, Index,
+    func,
+)
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+def _utcnow():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+class Frame(Base):
+    __tablename__ = "frames"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    timestamp: Mapped[str] = mapped_column(Text, nullable=False)
+    app_name: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    window_name: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    display_id: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    image_hash: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    image_path: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    processed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=func.datetime("now"))
+
+    __table_args__ = (
+        Index("idx_frames_id", "id"),
+        Index("idx_frames_processed", "processed"),
+    )
+
+
+class AudioFrame(Base):
+    __tablename__ = "audio_frames"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    timestamp: Mapped[str] = mapped_column(Text, nullable=False)
+    duration_seconds: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    language: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    source: Mapped[str] = mapped_column(Text, nullable=False, default="mic")
+    chunk_path: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    processed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=func.datetime("now"))
+
+    __table_args__ = (
+        Index("idx_audio_frames_id", "id"),
+        Index("idx_audio_frames_processed", "processed"),
+    )
+
+
+class OsEvent(Base):
+    __tablename__ = "os_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    timestamp: Mapped[str] = mapped_column(Text, nullable=False)
+    event_type: Mapped[str] = mapped_column(Text, nullable=False)
+    source: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    data: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    processed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=func.datetime("now"))
+
+    __table_args__ = (
+        Index("idx_os_events_id", "id"),
+        Index("idx_os_events_type", "event_type"),
+        Index("idx_os_events_processed", "processed"),
+    )
+
+
+class Episode(Base):
+    __tablename__ = "episodes"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    app_names: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    frame_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    started_at: Mapped[str] = mapped_column(Text, nullable=False)
+    ended_at: Mapped[str] = mapped_column(Text, nullable=False)
+    frame_id_min: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    frame_id_max: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    frame_source: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=func.datetime("now"))
+
+
+class PlaybookEntry(Base):
+    __tablename__ = "playbook_entries"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    context: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    action: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    maturity: Mapped[str] = mapped_column(Text, nullable=False, default="nascent")
+    evidence: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    last_evidence_at: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=func.datetime("now"))
+    updated_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=func.datetime("now"))
+
+
+class TokenUsage(Base):
+    __tablename__ = "token_usage"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    model: Mapped[str] = mapped_column(Text, nullable=False)
+    layer: Mapped[str] = mapped_column(Text, nullable=False)
+    input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    output_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    cost_usd: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=func.datetime("now"))
+
+    __table_args__ = (
+        Index("idx_token_usage_created_at", "created_at"),
+    )
+
+
+class State(Base):
+    __tablename__ = "state"
+
+    key: Mapped[str] = mapped_column(Text, primary_key=True)
+    value: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class PipelineLog(Base):
+    __tablename__ = "pipeline_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    stage: Mapped[str] = mapped_column(Text, nullable=False)
+    prompt: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    response: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    model: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    output_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    cost_usd: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=func.datetime("now"))
+
+    __table_args__ = (
+        Index("idx_pipeline_logs_stage", "stage"),
+        Index("idx_pipeline_logs_created_at", "created_at"),
+    )
+
+
+class PlaybookHistory(Base):
+    __tablename__ = "playbook_history"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    playbook_name: Mapped[str] = mapped_column(Text, nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    maturity: Mapped[str] = mapped_column(Text, nullable=False, default="nascent")
+    evidence: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    change_reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=func.datetime("now"))
+
+    __table_args__ = (
+        Index("idx_playbook_history_name", "playbook_name"),
+    )
+
+
+class Routine(Base):
+    __tablename__ = "routines"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    trigger: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    goal: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    steps: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    uses: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    maturity: Mapped[str] = mapped_column(Text, nullable=False, default="nascent")
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=func.datetime("now"))
+    updated_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=func.datetime("now"))
+
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    role: Mapped[str] = mapped_column(Text, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    proposals: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=func.datetime("now"))
