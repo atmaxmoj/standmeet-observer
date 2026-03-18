@@ -239,8 +239,12 @@ def run_routines(
     llm: LLMClient,
     conn: sqlite3.Connection,
     prompt_template: str = ROUTINE_PROMPT,
+    agentic: bool = False,
 ) -> int:
     """Sync routine pipeline: read episodes+playbooks → infer → store routines.
+
+    If agentic=True, uses Agent SDK MCP for multi-turn investigation.
+    If agentic=False, uses one-shot prompt.
 
     Returns count. Caller must conn.commit().
     """
@@ -251,6 +255,90 @@ def run_routines(
         logger.info("run_routines: no episodes, skipping")
         return 0
 
+    if agentic:
+        return _run_compose_agentic(llm, conn)
+
+    return _run_routines_oneshot(llm, conn, episodes, prompt_template)
+
+
+def _run_compose_agentic(llm: LLMClient, conn: sqlite3.Connection) -> int:
+    """Agentic routine composition: Agent uses MCP tools to investigate and write routines.
+
+    Uses Agent SDK query() with in-process MCP server — works with OAuth tokens + Opus.
+    """
+    import asyncio
+    import os
+    from claude_agent_sdk import query as sdk_query, ClaudeAgentOptions, ResultMessage
+    from engine.prompts.compose_agent import ROUTINE_AGENT_PROMPT
+    from engine.agents.tools.compose_mcp import create_compose_mcp_server
+
+    mcp_server = create_compose_mcp_server(conn)
+    logger.info("run_routines (agentic): starting with MCP server")
+
+    env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
+    token = os.environ.get("CLAUDE_CODE_OAUTH_TOKEN", "")
+    if token:
+        env["CLAUDE_CODE_OAUTH_TOKEN"] = token
+        env.pop("ANTHROPIC_AUTH_TOKEN", None)
+        env.pop("ANTHROPIC_API_KEY", None)
+
+    result_text = ""
+    cost_usd = None
+    usage: dict = {}
+
+    async def _run():
+        nonlocal result_text, cost_usd, usage
+        async for msg in sdk_query(
+            prompt=ROUTINE_AGENT_PROMPT,
+            options=ClaudeAgentOptions(
+                model=MODEL_DEEP,
+                max_turns=15,
+                permission_mode="bypassPermissions",
+                mcp_servers={
+                    "routine": {
+                        "type": "sdk",
+                        "name": "compose-tools",
+                        "instance": mcp_server._mcp_server,
+                    },
+                },
+                env=env,
+            ),
+        ):
+            msg_type = type(msg).__name__
+            logger.debug("compose_agentic msg: %s %s", msg_type, str(msg)[:500])
+            if isinstance(msg, ResultMessage):
+                result_text = msg.result or ""
+                cost_usd = msg.total_cost_usd
+                usage = msg.usage or {}
+
+    asyncio.run(_run())
+
+    input_tokens = usage.get("input_tokens", 0)
+    output_tokens = usage.get("output_tokens", 0)
+    cost = cost_usd or 0
+
+    conn.execute(
+        "INSERT INTO token_usage (model, layer, input_tokens, output_tokens, cost_usd) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (MODEL_DEEP, "compose_agentic", input_tokens, output_tokens, cost),
+    )
+    conn.execute(
+        "INSERT INTO pipeline_logs (stage, prompt, response, model, input_tokens, output_tokens, cost_usd) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        ("compose_agentic", ROUTINE_AGENT_PROMPT, result_text[:5000], MODEL_DEEP,
+         input_tokens, output_tokens, cost),
+    )
+
+    count = conn.execute(
+        "SELECT COUNT(*) FROM routines WHERE updated_at >= datetime('now', '-1 hours')",
+    ).fetchone()[0]
+
+    logger.info("run_routines (agentic): %d routines, cost=$%.4f", count, cost)
+    return count
+
+
+def _run_routines_oneshot(llm, conn, episodes, prompt_template) -> int:
+    """One-shot routine composition: single prompt → JSON response."""
     playbooks = conn.execute("SELECT * FROM playbook_entries ORDER BY confidence DESC").fetchall()
     existing_routines = conn.execute("SELECT * FROM routines ORDER BY confidence DESC").fetchall()
 

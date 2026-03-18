@@ -30,18 +30,44 @@ def _setup_test_db(tmp_dir: str) -> sqlite3.Connection:
     conn = sqlite3.connect(f"{tmp_dir}/test.db")
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA)
-    for i in range(3):
-        summary = json.dumps({
-            "summary": f"Episode {i}: Edited code, ran tests, committed.",
-            "method": "edit-test-commit cycle",
-            "turning_points": ["switched from manual to automated testing"],
-            "avoidance": ["did not use debugger"],
+    episodes_data = [
+        {
+            "summary": "Debugging a failing test: checked logs first, found the root cause in a config mismatch, fixed the config file, re-ran tests until green.",
+            "method": "logs → root cause → fix → verify",
+            "turning_points": ["initially tried restarting the service, then switched to reading logs"],
+            "avoidance": ["did not use print debugging, used structured logs instead"],
             "under_pressure": False,
+            "apps": '["VSCode", "Terminal", "Chrome"]',
+        },
+        {
+            "summary": "Code review workflow: opened PR, ran CI, reviewed diff line by line, left comments on edge cases, requested changes, approved after fixes.",
+            "method": "PR → CI → review → feedback → approve",
+            "turning_points": ["caught a subtle bug during review that tests missed"],
+            "avoidance": ["did not approve without running CI first"],
+            "under_pressure": False,
+            "apps": '["GitHub", "VSCode"]',
+        },
+        {
+            "summary": "Refactoring a module: wrote characterization tests first, then restructured code in small steps, running tests after each change to ensure no regression.",
+            "method": "test first → small refactor steps → verify after each",
+            "turning_points": ["reverted one change that broke an edge case, took a smaller step instead"],
+            "avoidance": ["did not refactor without test coverage"],
+            "under_pressure": False,
+            "apps": '["VSCode", "Terminal"]',
+        },
+    ]
+    for i, ep in enumerate(episodes_data):
+        summary = json.dumps({
+            "summary": ep["summary"],
+            "method": ep["method"],
+            "turning_points": ep["turning_points"],
+            "avoidance": ep["avoidance"],
+            "under_pressure": ep["under_pressure"],
         })
         conn.execute(
             "INSERT INTO episodes (summary, app_names, frame_count, started_at, ended_at, "
             "frame_id_min, frame_id_max, frame_source) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (summary, '["VSCode", "Terminal"]', 50,
+            (summary, ep["apps"], 50,
              f"2026-03-17T1{i}:00:00Z", f"2026-03-17T1{i}:30:00Z",
              i * 100 + 1, (i + 1) * 100, "capture"),
         )
