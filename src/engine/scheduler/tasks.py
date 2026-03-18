@@ -14,7 +14,6 @@ from pathlib import Path
 from huey import SqliteHuey, crontab
 
 from engine.config import Settings, MODEL_DEEP, DAILY_COST_CAP_USD
-from engine.etl.entities import Frame
 from engine.llm import create_client
 from engine.etl.filter import should_keep, detect_windows
 from engine.pipeline.budget import check_daily_budget
@@ -36,7 +35,7 @@ _llm = create_client(
 )
 
 
-def _get_conn() -> sqlite3.Connection:
+def _get_conn():
     """Get a sync DB connection."""
     url = settings.database_url_sync
     if "sqlite" in url:
@@ -45,10 +44,11 @@ def _get_conn() -> sqlite3.Connection:
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
         return conn
-    # PostgreSQL: use psycopg via SQLAlchemy raw_connection
-    from sqlalchemy import create_engine
-    engine = create_engine(url)
-    return engine.raw_connection()
+    # PostgreSQL
+    import psycopg
+    from psycopg.rows import dict_row
+    dsn = url.replace("postgresql+psycopg://", "postgresql://")
+    return psycopg.connect(dsn, row_factory=dict_row)
 
 
 def _get_session():
@@ -67,49 +67,8 @@ def on_new_data():
     """Check unprocessed frames for complete windows. Deduplicated by lock."""
     conn = _get_conn()
     try:
-        # Read all unprocessed frames
-        screen_rows = conn.execute(
-            "SELECT id, timestamp, app_name, window_name, text, image_path "
-            "FROM frames WHERE processed = 0 ORDER BY timestamp LIMIT 500",
-        ).fetchall()
-        screen_frames = [
-            Frame(
-                id=r["id"], source="capture",
-                text=r["text"] or "", app_name=r["app_name"] or "",
-                window_name=r["window_name"] or "",
-                timestamp=r["timestamp"] or "",
-                image_path=r["image_path"] or "",
-            )
-            for r in screen_rows
-        ]
-
-        audio_rows = conn.execute(
-            "SELECT id, timestamp, text, language "
-            "FROM audio_frames WHERE processed = 0 ORDER BY timestamp LIMIT 100",
-        ).fetchall()
-        audio_frames = [
-            Frame(
-                id=r["id"], source="audio",
-                text=r["text"] or "", app_name="microphone",
-                window_name=f"audio/{r['language'] or 'unknown'}",
-                timestamp=r["timestamp"] or "",
-            )
-            for r in audio_rows
-        ]
-
-        os_rows = conn.execute(
-            "SELECT id, timestamp, event_type, source, data "
-            "FROM os_events WHERE processed = 0 ORDER BY timestamp LIMIT 200",
-        ).fetchall()
-        os_frames = [
-            Frame(
-                id=r["id"], source="os_event",
-                text=r["data"] or "", app_name=r["event_type"] or "",
-                window_name=r["source"] or "",
-                timestamp=r["timestamp"] or "",
-            )
-            for r in os_rows
-        ]
+        from engine.etl.repository import load_unprocessed_frames
+        screen_frames, audio_frames, os_frames = load_unprocessed_frames(conn)
 
         if not screen_frames and not audio_frames and not os_frames:
             return
@@ -178,14 +137,14 @@ def on_new_data():
 
 
 def _mark_processed(
-    conn: sqlite3.Connection,
+    conn,
     screen_ids: set[int],
     audio_ids: set[int],
     os_event_ids: set[int] | None = None,
 ):
     """Mark frames as processed in DB."""
-    from engine.storage.sync_db import SyncDB
-    SyncDB(conn).mark_processed(screen_ids, audio_ids, os_event_ids)
+    from engine.etl.repository import mark_processed
+    mark_processed(conn, screen_ids, audio_ids, os_event_ids)
 
 
 # -- Process a window: read full data from DB by IDs, call Haiku --

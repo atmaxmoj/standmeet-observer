@@ -1,6 +1,18 @@
 name: bisimulator-test
 
 services:
+  db-test:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: observer_test
+      POSTGRES_USER: observer
+      POSTGRES_PASSWORD: observer
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U observer -d observer_test"]
+      interval: 3s
+      timeout: 2s
+      retries: 5
+
   engine-test:
     build: .
     volumes:
@@ -8,16 +20,19 @@ services:
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-sk-fake-test-key}
       - CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_OAUTH_TOKEN:-}
-      - DATABASE_URL=sqlite+aiosqlite:////data/engine.db
-      - DATABASE_URL_SYNC=sqlite:////data/engine.db
+      - DATABASE_URL=postgresql+asyncpg://observer:observer@db-test:5432/observer_test
+      - DATABASE_URL_SYNC=postgresql+psycopg://observer:observer@db-test:5432/observer_test
       - HUEY_DB_DIR=/data
       - FRAMES_BASE_DIR=/data/frames
+    depends_on:
+      db-test:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/engine/status')"]
       interval: 5s
       timeout: 3s
       retries: 10
-      start_period: 5s
+      start_period: 10s
 
   playwright:
     build:

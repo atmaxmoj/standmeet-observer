@@ -1,6 +1,5 @@
 """Session + time utilities for cross-database compatibility."""
 
-import sqlite3
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import create_engine
@@ -11,14 +10,20 @@ from engine.storage.models import Base
 _cache: dict[int, sessionmaker] = {}
 
 
-def get_session(conn: sqlite3.Connection) -> Session:
-    """Wrap a raw sqlite3.Connection in a SQLAlchemy Session.
+def get_session(conn) -> Session:
+    """Wrap a raw DB connection in a SQLAlchemy Session.
 
-    Caches the engine per connection id to avoid recreating on every call.
+    Supports sqlite3.Connection and psycopg.Connection.
+    Caches the engine per connection id.
     """
+    import sqlite3
     conn_id = id(conn)
     if conn_id not in _cache:
-        engine = create_engine("sqlite://", creator=lambda: conn)
+        if isinstance(conn, sqlite3.Connection):
+            engine = create_engine("sqlite://", creator=lambda: conn)
+        else:
+            # psycopg or other DBAPI connection
+            engine = create_engine("postgresql+psycopg://", creator=lambda: conn)
         Base.metadata.create_all(engine)
         _cache[conn_id] = sessionmaker(bind=engine)
     return _cache[conn_id]()
