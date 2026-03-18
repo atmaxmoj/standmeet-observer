@@ -1,17 +1,44 @@
-"""Synchronous DB wrapper for pipeline/scheduler/tools.
+"""Synchronous DB repository using SQLAlchemy ORM.
 
-Mirrors the async DB class methods but uses sync sqlite3.Connection.
-Centralizes all SQL so callers don't write raw queries.
+Used by pipeline/scheduler/tools (sync callers).
 """
 
-import sqlite3
+import logging
+
+from sqlalchemy import select, func, update
+from sqlalchemy.orm import Session
+
+from engine.storage.models import (
+    Frame, AudioFrame, OsEvent, Episode, PlaybookEntry,
+    TokenUsage, State, PipelineLog, Routine,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class SyncDB:
-    """Thin sync wrapper around a sqlite3.Connection."""
+    """Sync repository wrapping a SQLAlchemy Session.
 
-    def __init__(self, conn: sqlite3.Connection):
-        self.conn = conn
+    Accepts either a SQLAlchemy Session or a raw sqlite3.Connection
+    (for backwards compatibility during migration).
+    """
+
+    def __init__(self, session_or_conn):
+        import sqlite3
+        if isinstance(session_or_conn, Session):
+            self.session = session_or_conn
+            self._owns_session = False
+        elif isinstance(session_or_conn, sqlite3.Connection):
+            # Legacy: wrap raw connection in a session
+            from sqlalchemy import create_engine
+            from sqlalchemy.orm import sessionmaker
+            from engine.storage.models import Base
+            engine = create_engine("sqlite://", creator=lambda: session_or_conn)
+            Base.metadata.create_all(engine)
+            self.session = sessionmaker(bind=engine)()
+            self._owns_session = True
+        else:
+            raise TypeError(f"Expected Session or Connection, got {type(session_or_conn)}")
 
     # ── Token usage ──
 
@@ -19,11 +46,12 @@ class SyncDB:
         self, model: str, layer: str,
         input_tokens: int, output_tokens: int, cost_usd: float,
     ):
-        self.conn.execute(
-            "INSERT INTO token_usage (model, layer, input_tokens, output_tokens, cost_usd) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (model, layer, input_tokens, output_tokens, cost_usd),
-        )
+        self.session.add(TokenUsage(
+            model=model, layer=layer,
+            input_tokens=input_tokens, output_tokens=output_tokens,
+            cost_usd=cost_usd,
+        ))
+        self.session.flush()
 
     # ── Pipeline logs ──
 
@@ -32,76 +60,93 @@ class SyncDB:
         model: str = "", input_tokens: int = 0,
         output_tokens: int = 0, cost_usd: float = 0.0,
     ):
-        self.conn.execute(
-            "INSERT INTO pipeline_logs (stage, prompt, response, model, input_tokens, output_tokens, cost_usd) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (stage, prompt, response, model, input_tokens, output_tokens, cost_usd),
-        )
+        self.session.add(PipelineLog(
+            stage=stage, prompt=prompt, response=response,
+            model=model, input_tokens=input_tokens,
+            output_tokens=output_tokens, cost_usd=cost_usd,
+        ))
+        self.session.flush()
 
     # ── Episodes ──
 
     def get_recent_episodes(self, days: int = 1) -> list[dict]:
-        rows = self.conn.execute(
-            "SELECT * FROM episodes WHERE created_at >= datetime('now', ?) ORDER BY created_at",
-            (f"-{days} days",),
-        ).fetchall()
-        return [dict(r) for r in rows]
+        stmt = (
+            select(Episode)
+            .where(Episode.created_at >= func.datetime("now", f"-{days} days"))
+            .order_by(Episode.created_at)
+        )
+        rows = self.session.execute(stmt).scalars().all()
+        return [self._episode_to_dict(r) for r in rows]
 
     # ── Playbook entries ──
 
     def get_all_playbooks(self) -> list[dict]:
-        rows = self.conn.execute(
-            "SELECT * FROM playbook_entries ORDER BY confidence DESC"
-        ).fetchall()
-        return [dict(r) for r in rows]
+        stmt = select(PlaybookEntry).order_by(PlaybookEntry.confidence.desc())
+        rows = self.session.execute(stmt).scalars().all()
+        return [self._playbook_to_dict(r) for r in rows]
 
     def upsert_playbook(
         self, name: str, context: str, action: str,
         confidence: float, maturity: str, evidence: str,
     ):
-        self.conn.execute(
-            "INSERT INTO playbook_entries (name, context, action, confidence, maturity, evidence, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, datetime('now')) "
-            "ON CONFLICT(name) DO UPDATE SET "
-            "context=excluded.context, action=excluded.action, "
-            "confidence=excluded.confidence, maturity=excluded.maturity, "
-            "evidence=excluded.evidence, updated_at=datetime('now')",
-            (name, context, action, confidence, maturity, evidence),
-        )
+        existing = self.session.execute(
+            select(PlaybookEntry).where(PlaybookEntry.name == name)
+        ).scalar_one_or_none()
+        if existing:
+            existing.context = context
+            existing.action = action
+            existing.confidence = confidence
+            existing.maturity = maturity
+            existing.evidence = evidence
+            existing.updated_at = func.datetime("now")
+        else:
+            self.session.add(PlaybookEntry(
+                name=name, context=context, action=action,
+                confidence=confidence, maturity=maturity, evidence=evidence,
+            ))
+        self.session.flush()
 
     def count_recent_playbooks(self, hours: int = 1) -> int:
-        return self.conn.execute(
-            "SELECT COUNT(*) FROM playbook_entries WHERE updated_at >= datetime('now', ?)",
-            (f"-{hours} hours",),
-        ).fetchone()[0]
+        stmt = select(func.count()).select_from(PlaybookEntry).where(
+            PlaybookEntry.updated_at >= func.datetime("now", f"-{hours} hours")
+        )
+        return self.session.execute(stmt).scalar() or 0
 
     # ── Routines ──
 
     def get_all_routines(self) -> list[dict]:
-        rows = self.conn.execute(
-            "SELECT * FROM routines ORDER BY confidence DESC"
-        ).fetchall()
-        return [dict(r) for r in rows]
+        stmt = select(Routine).order_by(Routine.confidence.desc())
+        rows = self.session.execute(stmt).scalars().all()
+        return [self._routine_to_dict(r) for r in rows]
 
     def upsert_routine(
         self, name: str, trigger: str, goal: str,
         steps: str, uses: str, confidence: float, maturity: str,
     ):
-        self.conn.execute(
-            "INSERT INTO routines (name, trigger, goal, steps, uses, confidence, maturity, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now')) "
-            "ON CONFLICT(name) DO UPDATE SET "
-            "trigger=excluded.trigger, goal=excluded.goal, steps=excluded.steps, "
-            "uses=excluded.uses, confidence=excluded.confidence, maturity=excluded.maturity, "
-            "updated_at=datetime('now')",
-            (name, trigger, goal, steps, uses, confidence, maturity),
-        )
+        existing = self.session.execute(
+            select(Routine).where(Routine.name == name)
+        ).scalar_one_or_none()
+        if existing:
+            existing.trigger = trigger
+            existing.goal = goal
+            existing.steps = steps
+            existing.uses = uses
+            existing.confidence = confidence
+            existing.maturity = maturity
+            existing.updated_at = func.datetime("now")
+        else:
+            self.session.add(Routine(
+                name=name, trigger=trigger, goal=goal,
+                steps=steps, uses=uses,
+                confidence=confidence, maturity=maturity,
+            ))
+        self.session.flush()
 
     def count_recent_routines(self, hours: int = 1) -> int:
-        return self.conn.execute(
-            "SELECT COUNT(*) FROM routines WHERE updated_at >= datetime('now', ?)",
-            (f"-{hours} hours",),
-        ).fetchone()[0]
+        stmt = select(func.count()).select_from(Routine).where(
+            Routine.updated_at >= func.datetime("now", f"-{hours} hours")
+        )
+        return self.session.execute(stmt).scalar() or 0
 
     # ── Processed marking ──
 
@@ -112,29 +157,59 @@ class SyncDB:
         os_event_ids: set[int] | None = None,
     ):
         if screen_ids:
-            ph = ",".join("?" * len(screen_ids))
-            self.conn.execute(f"UPDATE frames SET processed = 1 WHERE id IN ({ph})", list(screen_ids))
+            self.session.execute(
+                update(Frame).where(Frame.id.in_(screen_ids)).values(processed=1)
+            )
         if audio_ids:
-            ph = ",".join("?" * len(audio_ids))
-            self.conn.execute(f"UPDATE audio_frames SET processed = 1 WHERE id IN ({ph})", list(audio_ids))
+            self.session.execute(
+                update(AudioFrame).where(AudioFrame.id.in_(audio_ids)).values(processed=1)
+            )
         if os_event_ids:
-            ph = ",".join("?" * len(os_event_ids))
-            self.conn.execute(f"UPDATE os_events SET processed = 1 WHERE id IN ({ph})", list(os_event_ids))
-        self.conn.commit()
+            self.session.execute(
+                update(OsEvent).where(OsEvent.id.in_(os_event_ids)).values(processed=1)
+            )
+        self.session.commit()
 
     # ── Budget ──
 
     def get_daily_spend(self) -> float:
-        row = self.conn.execute(
-            "SELECT COALESCE(SUM(cost_usd), 0.0) as total "
-            "FROM token_usage WHERE created_at >= datetime('now', '-1 days')",
-        ).fetchone()
-        return float(row["total"] if isinstance(row, sqlite3.Row) else row[0])
+        stmt = select(func.coalesce(func.sum(TokenUsage.cost_usd), 0.0)).where(
+            TokenUsage.created_at >= func.datetime("now", "-1 days")
+        )
+        return float(self.session.execute(stmt).scalar())
 
     def get_budget_cap(self, default: float) -> float:
-        row = self.conn.execute(
-            "SELECT value FROM state WHERE key = 'daily_cost_cap_usd'",
-        ).fetchone()
-        if row:
-            return float(row["value"] if isinstance(row, sqlite3.Row) else row[0])
-        return default
+        row = self.session.execute(
+            select(State.value).where(State.key == "daily_cost_cap_usd")
+        ).scalar_one_or_none()
+        return float(row) if row else default
+
+    # ── Helpers ──
+
+    @staticmethod
+    def _episode_to_dict(e: Episode) -> dict:
+        return {
+            "id": e.id, "summary": e.summary, "app_names": e.app_names,
+            "frame_count": e.frame_count, "started_at": e.started_at,
+            "ended_at": e.ended_at, "frame_id_min": e.frame_id_min,
+            "frame_id_max": e.frame_id_max, "frame_source": e.frame_source,
+            "created_at": e.created_at,
+        }
+
+    @staticmethod
+    def _playbook_to_dict(p: PlaybookEntry) -> dict:
+        return {
+            "id": p.id, "name": p.name, "context": p.context,
+            "action": p.action, "confidence": p.confidence,
+            "maturity": p.maturity, "evidence": p.evidence,
+            "created_at": p.created_at, "updated_at": p.updated_at,
+        }
+
+    @staticmethod
+    def _routine_to_dict(r: Routine) -> dict:
+        return {
+            "id": r.id, "name": r.name, "trigger": r.trigger,
+            "goal": r.goal, "steps": r.steps, "uses": r.uses,
+            "confidence": r.confidence, "maturity": r.maturity,
+            "created_at": r.created_at, "updated_at": r.updated_at,
+        }

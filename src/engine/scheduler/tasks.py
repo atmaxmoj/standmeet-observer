@@ -43,6 +43,13 @@ def _get_conn() -> sqlite3.Connection:
     return conn
 
 
+def _get_session():
+    """Get a SQLAlchemy session for ORM operations."""
+    from engine.storage.engine import get_sync_session_factory
+    factory = get_sync_session_factory(settings.db_path)
+    return factory()
+
+
 # -- Triggered by ingest: check if pending frames form complete windows --
 
 
