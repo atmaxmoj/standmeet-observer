@@ -244,7 +244,7 @@ Output a brief summary of what you did when finished."""
 @huey.periodic_task(crontab(hour="4", minute="0"))
 def daily_gc_task():
     """Daily garbage collection: decay + agent-driven audit. Runs every day at 4am (after distill at 3am)."""
-    from engine.pipeline.decay import decay_confidence
+    from engine.pipeline.decay import decay_confidence, decay_routines
     from engine.agents.tools.dedup import make_dedup_tools
     from engine.agents.tools.audit import make_audit_tools
 
@@ -256,8 +256,9 @@ def daily_gc_task():
             return
 
         # Phase 1: Deterministic decay
-        decayed = decay_confidence(session)
-        logger.info("daily_gc: decayed %d entries", decayed)
+        decayed_pb = decay_confidence(session)
+        decayed_rt = decay_routines(session)
+        logger.info("daily_gc: decayed %d playbook entries, %d routines", decayed_pb, decayed_rt)
 
         # Phase 2: Agent-driven audit (only if LLM supports tools)
         gc_tools = make_dedup_tools(session) + make_audit_tools(session)

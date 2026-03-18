@@ -4,7 +4,7 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
 from engine.storage.session import ago
-from engine.storage.models import PlaybookEntry, TokenUsage, State
+from engine.storage.models import PlaybookEntry, Routine, TokenUsage, State
 
 
 def get_all_playbooks_for_decay(session: Session) -> list[dict]:
@@ -20,6 +20,21 @@ def update_confidence(session: Session, entry_id: int, confidence: float):
     entry = session.get(PlaybookEntry, entry_id)
     if entry:
         entry.confidence = confidence
+        session.commit()
+
+
+def get_all_routines_for_decay(session: Session) -> list[dict]:
+    rows = session.execute(select(Routine)).scalars().all()
+    return [
+        {"id": r.id, "name": r.name, "confidence": r.confidence, "updated_at": r.updated_at}
+        for r in rows
+    ]
+
+
+def update_routine_confidence(session: Session, routine_id: int, confidence: float):
+    routine = session.get(Routine, routine_id)
+    if routine:
+        routine.confidence = confidence
         session.commit()
 
 

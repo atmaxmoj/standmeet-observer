@@ -79,3 +79,48 @@ class TestDecayConfidence:
         # 30 days: factor = max(0.3, 1.0 - 30/90) = 0.6667
         expected = 1.0 * (1.0 - 30 / 90)
         assert abs(row.confidence - expected) < 0.01
+
+
+from engine.storage.models import Routine
+
+
+def _insert_routine(session, name, confidence, updated_at=None):
+    r = Routine(name=name, confidence=confidence)
+    if updated_at:
+        r.updated_at = updated_at
+    session.add(r)
+    session.commit()
+
+
+class TestRoutineDecay:
+    def test_empty_db(self, session):
+        from engine.pipeline.decay import decay_routines
+        assert decay_routines(session) == 0
+
+    def test_recent_routine_no_decay(self, session):
+        from engine.pipeline.decay import decay_routines
+        recent = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+        _insert_routine(session, "fresh-routine", 0.8, updated_at=recent)
+        assert decay_routines(session) == 0
+        row = session.query(Routine).first()
+        session.refresh(row)
+        assert row.confidence == 0.8
+
+    def test_old_routine_decays(self, session):
+        from engine.pipeline.decay import decay_routines
+        old = (datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=45)).isoformat()
+        _insert_routine(session, "old-routine", 0.8, updated_at=old)
+        assert decay_routines(session) == 1
+        row = session.query(Routine).first()
+        session.refresh(row)
+        # 45 days: factor = max(0.3, 1.0 - 45/90) = 0.5
+        assert abs(row.confidence - 0.4) < 0.01
+
+    def test_very_old_routine_hits_floor(self, session):
+        from engine.pipeline.decay import decay_routines
+        old = (datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=180)).isoformat()
+        _insert_routine(session, "ancient-routine", 0.8, updated_at=old)
+        assert decay_routines(session) == 1
+        row = session.query(Routine).first()
+        session.refresh(row)
+        assert abs(row.confidence - 0.24) < 0.01
