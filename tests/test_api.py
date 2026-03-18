@@ -485,3 +485,4 @@ class TestBudgetAPI:
                               input_tokens=1000, output_tokens=500, cost_usd=2.0)
         resp = await client.get("/engine/budget")
         assert resp.json()["under_budget"] is False
+

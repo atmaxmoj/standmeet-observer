@@ -359,6 +359,15 @@ async def trigger_routines(request: Request):
     return {"routines_updated": count}
 
 
+@router.post("/engine/gc")
+async def trigger_gc(request: Request):
+    """Manually trigger garbage collection (decay + agent audit)."""
+    import asyncio
+    from engine.scheduler.tasks import daily_gc_task
+    await asyncio.to_thread(daily_gc_task)
+    return {"status": "completed"}
+
+
 @router.post("/engine/backfill")
 async def backfill(request: Request):
     """Reset all frames to unprocessed and re-trigger pipeline.
