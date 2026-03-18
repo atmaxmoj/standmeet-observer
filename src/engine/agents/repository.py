@@ -492,6 +492,65 @@ def purge_pipeline_logs(session: Session, older_than_days: int) -> dict:
     return {"deleted": count}
 
 
+# ── Sensitive data detection ──
+
+SENSITIVE_PATTERNS = [
+    "sk-ant-", "sk-", "ghp_", "gho_", "github_pat_",
+    "AKIA", "aws_secret", "Bearer ", "token=",
+    "password=", "passwd=", "secret=",
+    "-----BEGIN", "-----END",
+    "api_key=", "apikey=", "api-key:",
+]
+
+
+def search_frames_for_sensitive(session: Session, limit: int = 100) -> list[dict]:
+    """Scan frame text for common secret/key patterns. Returns matching frames."""
+    results = []
+    for pattern in SENSITIVE_PATTERNS:
+        rows = session.execute(
+            select(FrameModel.id, FrameModel.timestamp, FrameModel.app_name,
+                   func.substr(FrameModel.text, 1, 200).label("text"))
+            .where(FrameModel.text.contains(pattern))
+            .limit(limit)
+        ).all()
+        for r in rows:
+            results.append({
+                "id": r[0], "timestamp": r[1], "app_name": r[2],
+                "preview": r[3][:100] if r[3] else "", "matched_pattern": pattern,
+            })
+    # Also check episodes and pipeline_logs
+    for pattern in SENSITIVE_PATTERNS:
+        ep_rows = session.execute(
+            select(Episode.id, Episode.summary)
+            .where(Episode.summary.contains(pattern))
+            .limit(20)
+        ).all()
+        for r in ep_rows:
+            results.append({
+                "id": r[0], "table": "episodes", "matched_pattern": pattern,
+                "preview": r[1][:100] if r[1] else "",
+            })
+    # Deduplicate by id
+    seen = set()
+    unique = []
+    for r in results:
+        key = (r.get("table", "frames"), r["id"])
+        if key not in seen:
+            seen.add(key)
+            unique.append(r)
+    return unique
+
+
+def purge_sensitive_frames(session: Session, frame_ids: list[int]) -> dict:
+    """Delete frames containing sensitive data by ID."""
+    if not frame_ids:
+        return {"deleted": 0}
+    session.execute(delete(FrameModel).where(FrameModel.id.in_(frame_ids)))
+    session.commit()
+    logger.info("Purged %d sensitive frames", len(frame_ids))
+    return {"deleted": len(frame_ids)}
+
+
 # ── Helpers ──
 
 

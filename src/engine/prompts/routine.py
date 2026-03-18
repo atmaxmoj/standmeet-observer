@@ -1,12 +1,30 @@
 """Routine composition prompt template."""
 
 ROUTINE_PROMPT = """\
-You are studying someone's daily work journal and their known behavioral patterns (Playbook) \
-to identify **Routines** — recurring multi-step workflows they follow in specific situations.
+You are composing executable PROGRAMS from behavioral rules and episodes.
 
-A Routine is NOT a single habit (that's a Playbook entry). \
-A Routine is a **composed sequence of steps** that this person repeats when a specific \
-trigger/situation occurs. Think of it as their personal SOP (standard operating procedure).
+Your output must be good enough that an AI agent could read it and autonomously execute the workflow end-to-end without human intervention. Think of each routine as a program.md for an autonomous agent.
+
+## Routine types
+
+**deep-work**: Systematic multi-step workflows with clear inputs, outputs, and verification at each step. An agent COULD run this.
+**strategic**: Preparation/investigation workflows that produce a decision or plan. Agent could run this to gather context.
+**recovery**: NOT a routine — recovery behaviors are atomic, not multi-step. Do NOT create recovery routines.
+**avoidance**: Recurring failure loops. Document the ACTUAL behavior (not the ideal). Useful for self-awareness, NOT for agent execution.
+**displacement**: Fake-productivity spirals. Document the ACTUAL behavior. NOT for agent execution.
+
+## Quality bar: program.md
+
+For deep-work and strategic routines, every step must be:
+- **Concrete**: "Run the full test suite" not "verify things work"
+- **Observable**: an agent can tell when the step is done
+- **Conditional**: IF/ELSE for decision points, not vague "handle as needed"
+- **Verifiable**: each step has a success/failure signal
+
+Bad: "Review the code and make sure it's good"
+Good: "Run linter. IF violations > 0 THEN apply auto-fix and re-run. IF still failing THEN fix top 3 by hand. Verify: linter exits 0."
+
+For avoidance/displacement routines, describe the ACTUAL loop pattern so the human can recognize when they're in it.
 
 ## Existing Playbook entries (atomic behaviors)
 {playbooks}
@@ -17,50 +35,33 @@ trigger/situation occurs. Think of it as their personal SOP (standard operating 
 ## Today's episodes
 {episodes}
 
-## How to analyze
+## Output
 
-**Phase 1 — Sequence detection**
-Look for multi-step sequences that repeat across episodes:
-- Same trigger → same sequence of actions (≥2 occurrences across different days)
-- Steps that always appear together in a specific order
-- "Warm-up" sequences: what someone does before starting a task type
-
-**Phase 2 — Compose from Playbook**
-Each Routine should reference existing Playbook entries where applicable. \
-The Routine adds the **ordering, branching, and context** that individual entries lack.
-
-**Phase 3 — Output**
-Output valid JSON array:
 [
   {{
     "name": "kebab-case-name",
-    "trigger": "When/what situation triggers this routine",
-    "goal": "What this routine achieves",
+    "type": "deep-work|strategic|avoidance|displacement",
+    "trigger": "Recognizable situation that starts this routine",
+    "goal": "What this achieves (deep-work/strategic) or what it avoids (avoidance/displacement)",
     "steps": [
-      "Step 1 description",
-      "Step 2 description",
+      "Step 1: concrete action. Verify: observable signal.",
+      "Step 2: concrete action.",
       "IF condition THEN step 3a ELSE step 3b",
-      "Step 4 description"
+      "Step 4: concrete action. Verify: observable signal."
     ],
-    "uses": ["playbook-entry-name-1", "playbook-entry-name-2"],
+    "exit_condition": "How to know the routine is DONE (or how to break out of an avoidance loop)",
+    "uses": ["playbook-entry-name-1"],
     "confidence": 0.0,
     "maturity": "nascent|developing|mature"
   }}
 ]
 
-## Rules
-- A Routine must have ≥3 steps (otherwise it's just a Playbook entry)
-- A Routine must be observed ≥2 times to be created
-- Update existing Routines when you see confirming evidence (bump confidence) \
-or variations (update steps to capture the common core)
-- `uses` should list Playbook entry names that correspond to steps in this Routine
-- Steps can include simple branching: "IF x THEN y ELSE z"
-- Keep step descriptions concise — one line each
+Rules:
+- ≥3 steps per routine
+- ≥2 observations to create
+- deep-work routines MUST have verification steps — if an agent can't verify success, it's not a program
+- avoidance/displacement routines MUST have an exit_condition showing how to break the loop
+- Do NOT create recovery routines (recovery is atomic, not a workflow)
+- `uses` references playbook entry names
 
-## Confidence & maturity rules
-- confidence: 0.4 = seen twice, 0.6 = clear pattern (3-4 times), 0.8+ = very consistent
-- nascent: < 3 observations
-- developing: 3-5 observations
-- mature: > 5 observations with consistent steps
-
-Output ONLY the JSON array, nothing else."""
+Output ONLY the JSON array."""

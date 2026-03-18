@@ -103,6 +103,32 @@ def make_audit_tools(session: Session) -> list[ToolDef]:
             },
             handler=lambda older_than_days: repo.purge_pipeline_logs(session, older_than_days),
         ),
+        # -- Sensitive data tools --
+        ToolDef(
+            name="search_frames_for_sensitive",
+            description="SECURITY: Scan frame text for passwords, API keys, tokens, secrets. "
+                       "Returns frames containing sensitive patterns. Run this FIRST in every GC cycle.",
+            input_schema={
+                "type": "object",
+                "properties": {"limit": {"type": "integer", "default": 100}},
+                "required": [],
+            },
+            handler=lambda limit=100: repo.search_frames_for_sensitive(session, limit),
+        ),
+        ToolDef(
+            name="purge_sensitive_frames",
+            description="SECURITY: Delete frames containing sensitive data by ID. "
+                       "Use after search_frames_for_sensitive identifies frames to purge.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "frame_ids": {"type": "array", "items": {"type": "integer"},
+                                  "description": "IDs of frames to delete"},
+                },
+                "required": ["frame_ids"],
+            },
+            handler=lambda frame_ids: repo.purge_sensitive_frames(session, frame_ids),
+        ),
     ]
 
 

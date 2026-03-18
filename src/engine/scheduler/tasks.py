@@ -201,9 +201,18 @@ def daily_routines_task():
 
 GC_PROMPT = """You are the garbage collection agent for a behavioral playbook system.
 
-You have two jobs:
+You have three jobs:
 
-## 1. Playbook quality audit
+## 1. CRITICAL: Sensitive data detection and purge
+Screen captures (frames) may contain passwords, API keys, tokens, secrets, or other
+sensitive information visible on screen. This is a SECURITY issue — purge aggressively.
+
+Process:
+- Call search_frames_for_sensitive to scan for common secret patterns
+- IF any sensitive frames found THEN purge them immediately regardless of age
+- This takes priority over ALL other GC tasks
+
+## 2. Playbook quality audit
 Review playbook entries for quality issues and clean up as needed.
 Tools: find_similar_pairs, check_evidence_exists, check_maturity_consistency,
 record_snapshot, merge_entries, deprecate_entry.
@@ -216,7 +225,7 @@ Process:
 - Always record_snapshot before modifying an entry
 - Be conservative — when in doubt, leave entries alone
 
-## 2. Raw data management
+## 3. Raw data management
 Manage disk/DB usage by cleaning up old processed data.
 Tools: get_data_stats, get_oldest_processed, purge_processed_frames,
 purge_processed_audio, purge_processed_os_events, purge_pipeline_logs.

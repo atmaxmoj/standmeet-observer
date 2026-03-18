@@ -1,72 +1,53 @@
-"""Playbook distillation prompt template (formerly DISTILL_PROMPT)."""
+"""Playbook distillation prompt template."""
 
 PLAYBOOK_PROMPT = """\
-You are a master craftsman studying an apprentice's work journal to understand \
-how they think, decide, and act — not what they did, but how and why.
+You are extracting reusable behavioral rules from someone's work journal.
 
-Your goal: distill recurring behavioral patterns into Playbook entries. \
-A Playbook entry is a 情境-行動對 (situation-action pair) — not a description \
-of what someone is, but a recipe for reproducing how they behave in a specific context.
+Extract DECISION RULES that are TRANSFERABLE — they apply to anyone in similar situations, not just this person with these specific tools.
 
-## Existing Playbook
+## Rule types (based on self-regulation theory)
+
+**deep-work**: High-focus productive patterns — systematic approaches to solving problems, building features, debugging
+**strategic**: Deliberate preparation or delay — investigating before acting, waiting for CI, reading docs before coding
+**recovery**: Attention restoration — micro-breaks, task-switching during forced idle time (builds, deploys), deliberate rest
+**avoidance**: Self-regulation failure — knows what to do but doesn't do it, anxiety-driven checking, displacement activity
+**displacement**: Fake productivity — browsing settings, checking unrelated accounts, organizing instead of executing
+
+## Abstraction level
+
+Extract PATTERNS from specific instances. Abstract tool-specific details into transferable situation types.
+
+WRONG: "When docker cp fails: mkdir -p first"
+RIGHT: "When a file operation fails due to missing path: create the path structure first, then retry"
+
+## Existing rules
 {playbooks}
 
-## Today's episodes
+## Recent episodes
 {episodes}
 
-## How to analyze
+## Output
 
-**Phase 1 — Pattern detection**
-Scan all episodes. Look for:
-- Recurring sequences: same type of situation → same approach (≥2 occurrences)
-- Turning points: moments of correction, choice, or hesitation that reveal preference
-- Avoidance patterns: tools/features/steps available but consistently NOT used — \
-"never" reveals more than "always"
-- Pressure-revealed behavior: what they do under time pressure vs normal. \
-Habits dropped under pressure = learned discipline. Habits kept = internalized.
-
-**Phase 2 — Cross-validation**
-For each candidate pattern, ask:
-- Does this appear across different apps/contexts? (cross-domain = high confidence)
-- Are there counter-examples this week? If so, what was different? (boundary conditions)
-- Does this confirm, contradict, or extend an existing Playbook entry?
-
-**Phase 3 — Output**
-For each pattern, produce a Playbook entry in 情境-行動對 format:
-
-Output valid JSON array:
 [
   {{
     "name": "kebab-case-name",
-    "context": "The specific situation/trigger (be precise: WHEN does this apply?)",
-    "intuition": "Their first/instinctive reaction in this context",
-    "action": "What they consistently do (the reproducible sequence)",
-    "why": "Inferred reason — what value or constraint drives this choice",
-    "counterexample": "Any episode where they did NOT follow this pattern, and why (null if none)",
+    "type": "deep-work|strategic|recovery|avoidance|displacement",
+    "when": "Recognizable situation type (transferable)",
+    "then": "Behavioral pattern (transferable)",
+    "because": "The value or reasoning driving this",
+    "boundary": "When this does NOT apply, or when it crosses into a different type (null if unknown)",
     "confidence": 0.0,
     "maturity": "nascent|developing|mature|mastered",
     "evidence": [1, 2, 3]
   }}
 ]
 
-## Confidence & maturity rules
-- confidence: 0.3 = weak signal (2 episodes), 0.6 = clear pattern (3-4), 0.8+ = very consistent (5+)
-- nascent: < 3 evidence episodes or confidence < 0.6
-- developing: 3-8 evidence, confidence mostly 0.6-0.8
-- mature: > 8 evidence, confidence mostly > 0.8
-- mastered: mature + has counterexamples with identified boundary conditions + survives pressure
+Rules:
+- Be aggressive — extract from single episodes too (confidence 0.2). Aim for 8-15 rules.
+- Every type should have at least 1 entry if evidence exists.
+- "boundary" is critical: it defines when a behavior SWITCHES type (e.g., strategic investigation becomes avoidance when it extends indefinitely without execution).
 
-## Rules
-- Patterns, not one-offs. Minimum 2 episodes as evidence.
-- Update existing entries when you see confirming or contradicting evidence. \
-Increment confidence for confirmation, note counterexamples for contradiction.
-- Create new entries only for clearly recurring patterns.
-- If an episode shows behavior UNDER PRESSURE (marked under_pressure=true), \
-compare it to the normal pattern. This is gold — it shows what's truly internalized.
-- Look for cross-domain patterns: if someone does the same thing across debugging, \
-writing, and communication, that's a value, not just a habit.
-
-Output ONLY the JSON array, nothing else."""
+Output ONLY the JSON array."""
 
 # Backwards compat alias
 DISTILL_PROMPT = PLAYBOOK_PROMPT
