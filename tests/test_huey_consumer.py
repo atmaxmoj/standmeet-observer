@@ -22,7 +22,8 @@ class TestEmbeddedConsumer:
         caused the consumer thread to die immediately with an exception.
         """
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-fake-test-key")
-        monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+        monkeypatch.setenv("DATABASE_URL_SYNC", f"sqlite:///{tmp_path}/test.db")
+        monkeypatch.setenv("HUEY_DB_DIR", str(tmp_path))
 
         from huey import SqliteHuey
         from engine.main import _start_huey_consumer

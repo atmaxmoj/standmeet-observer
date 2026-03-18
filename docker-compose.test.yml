@@ -8,7 +8,9 @@ services:
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-sk-fake-test-key}
       - CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_OAUTH_TOKEN:-}
-      - DB_PATH=/data/engine.db
+      - DATABASE_URL=sqlite+aiosqlite:////data/engine.db
+      - DATABASE_URL_SYNC=sqlite:////data/engine.db
+      - HUEY_DB_DIR=/data
       - FRAMES_BASE_DIR=/data/frames
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/engine/status')"]

@@ -23,7 +23,7 @@ def _memory_dir(tmp_path):
 @pytest.fixture
 async def db(tmp_path):
     path = str(tmp_path / "test.db")
-    d = DB(path)
+    d = DB(f"sqlite+aiosqlite:///{path}")
     await d.connect()
     yield d
     await d.close()

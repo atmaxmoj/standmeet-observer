@@ -36,13 +36,19 @@ _llm = create_client(
 )
 
 
-def _get_conn():
-    """Get a sync DB connection via SQLAlchemy."""
+def _get_conn() -> sqlite3.Connection:
+    """Get a sync DB connection."""
+    url = settings.database_url_sync
+    if "sqlite" in url:
+        path = url.split("///", 1)[-1]
+        conn = sqlite3.connect(path)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        return conn
+    # PostgreSQL: use psycopg via SQLAlchemy raw_connection
     from sqlalchemy import create_engine
-    engine = create_engine(settings.database_url_sync)
-    conn = engine.raw_connection()
-    conn.row_factory = sqlite3.Row if "sqlite" in settings.database_url_sync else None
-    return conn
+    engine = create_engine(url)
+    return engine.raw_connection()
 
 
 def _get_session():
