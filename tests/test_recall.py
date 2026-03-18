@@ -2,7 +2,7 @@
 
 import sqlite3
 import pytest
-from engine.agents.tools.recall import search_episodes, get_recent_episodes, get_episodes_by_app
+from engine.agents.repository import search_episodes, get_recent_episodes, get_episodes_by_app
 
 
 @pytest.fixture

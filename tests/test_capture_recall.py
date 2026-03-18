@@ -2,7 +2,7 @@
 
 import sqlite3
 import pytest
-from engine.agents.tools.recall import (
+from engine.agents.repository import (
     get_recent_frames,
     get_frames_by_app,
     get_recent_audio,

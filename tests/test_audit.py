@@ -3,7 +3,7 @@
 import json
 import sqlite3
 import pytest
-from engine.agents.tools.audit import (
+from engine.agents.repository import (
     check_evidence_exists,
     check_maturity_consistency,
     record_snapshot,

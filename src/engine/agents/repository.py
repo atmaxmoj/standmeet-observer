@@ -177,6 +177,19 @@ def get_playbook_history(conn: sqlite3.Connection, name: str) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def record_snapshot(conn: sqlite3.Connection, name: str, reason: str = "") -> dict:
+    """Record snapshot of a playbook entry (convenience wrapper)."""
+    entry = get_playbook_by_name(conn, name)
+    if not entry:
+        return {"error": f"Entry '{name}' not found"}
+    record_playbook_snapshot(
+        conn, name, entry["confidence"], entry.get("maturity") or "nascent",
+        entry.get("evidence") or "[]", reason,
+    )
+    return {"name": name, "snapshot_confidence": entry["confidence"],
+            "snapshot_maturity": entry.get("maturity"), "reason": reason}
+
+
 def record_playbook_snapshot(
     conn: sqlite3.Connection, name: str,
     confidence: float, maturity: str, evidence: str, reason: str = "",

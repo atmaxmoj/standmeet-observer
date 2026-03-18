@@ -2,7 +2,7 @@
 
 import sqlite3
 import pytest
-from engine.agents.tools.audit import (
+from engine.agents.repository import (
     get_data_stats,
     get_oldest_processed,
     purge_processed_frames,

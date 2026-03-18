@@ -1,22 +1,15 @@
-"""Tools for agentic L2 distillation.
+"""Tools for agentic L2 distillation (non-MCP, ToolDef-based)."""
 
-These tools let the distill agent investigate episodes and manage playbook entries.
-Used with LLMClient.complete_with_tools() for multi-turn distillation.
-"""
-
-import logging
 import sqlite3
 
 from engine.llm.types import ToolDef
 from engine.observability.logger import log_tool_call
-
-logger = logging.getLogger(__name__)
+from engine.agents import repository as repo
 
 STAGE = "distill_agentic"
 
 
 def _logged(conn, name, fn):
-    """Wrap a tool handler to auto-log every call."""
     def wrapper(**kwargs):
         result = fn(**kwargs)
         log_tool_call(conn, STAGE, name, kwargs, result)
@@ -26,85 +19,10 @@ def _logged(conn, name, fn):
 
 def make_distill_tools(conn: sqlite3.Connection) -> list[ToolDef]:
     """Create tools for the distill agent."""
-
-    def search_episodes(query: str, limit: int = 10) -> list[dict]:
-        """Search episodes by keyword in summary."""
-        words = query.strip().split()
-        if len(words) > 1:
-            where = " AND ".join("summary LIKE ?" for _ in words)
-            params = [f"%{w}%" for w in words]
-        else:
-            where = "summary LIKE ?"
-            params = [f"%{query}%"]
-        rows = conn.execute(
-            f"SELECT id, summary, app_names, started_at, ended_at "
-            f"FROM episodes WHERE {where} ORDER BY created_at DESC LIMIT ?",
-            params + [limit],
-        ).fetchall()
-        return [dict(r) for r in rows]
-
-    def get_episode_detail(episode_id: int) -> dict:
-        """Get full episode with frame range for deeper inspection."""
-        row = conn.execute(
-            "SELECT * FROM episodes WHERE id = ?", (episode_id,),
-        ).fetchone()
-        if not row:
-            return {"error": f"Episode {episode_id} not found"}
-        return dict(row)
-
-    def get_episode_frames(episode_id: int, limit: int = 10) -> list[dict]:
-        """Get raw capture frames for an episode (for verification)."""
-        ep = conn.execute(
-            "SELECT frame_id_min, frame_id_max FROM episodes WHERE id = ?",
-            (episode_id,),
-        ).fetchone()
-        if not ep:
-            return [{"error": f"Episode {episode_id} not found"}]
-        rows = conn.execute(
-            "SELECT id, timestamp, app_name, window_name, substr(text, 1, 200) as text "
-            "FROM frames WHERE id BETWEEN ? AND ? ORDER BY id LIMIT ?",
-            (ep["frame_id_min"], ep["frame_id_max"], limit),
-        ).fetchall()
-        return [dict(r) for r in rows]
-
-    def get_playbook_history(name: str) -> list[dict]:
-        """Get confidence/maturity history for a playbook entry."""
-        rows = conn.execute(
-            "SELECT confidence, maturity, change_reason, created_at "
-            "FROM playbook_history WHERE playbook_name = ? ORDER BY created_at",
-            (name,),
-        ).fetchall()
-        return [dict(r) for r in rows]
-
-    def get_all_playbook_entries() -> list[dict]:
-        """List all current playbook entries."""
-        rows = conn.execute(
-            "SELECT name, context, action, confidence, maturity, evidence "
-            "FROM playbook_entries ORDER BY confidence DESC",
-        ).fetchall()
-        return [dict(r) for r in rows]
-
-    def write_playbook_entry(
-        name: str, context: str, action: str,
-        confidence: float, maturity: str, evidence: str,
-    ) -> dict:
-        """Create or update a playbook entry."""
-        conn.execute(
-            "INSERT INTO playbook_entries (name, context, action, confidence, "
-            "maturity, evidence, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, datetime('now')) "
-            "ON CONFLICT(name) DO UPDATE SET "
-            "context=excluded.context, action=excluded.action, "
-            "confidence=excluded.confidence, maturity=excluded.maturity, "
-            "evidence=excluded.evidence, updated_at=datetime('now')",
-            (name, context, action, confidence, maturity, evidence),
-        )
-        return {"status": "ok", "name": name}
-
     return [
         ToolDef(
             name="search_episodes",
-            description="Search episodes by keyword in summary. Returns matching episodes.",
+            description="Search episodes by keyword in summary.",
             input_schema={
                 "type": "object",
                 "properties": {
@@ -113,7 +31,8 @@ def make_distill_tools(conn: sqlite3.Connection) -> list[ToolDef]:
                 },
                 "required": ["query"],
             },
-            handler=_logged(conn, "search_episodes", lambda **kw: search_episodes(**kw)),
+            handler=_logged(conn, "search_episodes",
+                            lambda query, limit=10: repo.search_episodes(conn, query, limit)),
         ),
         ToolDef(
             name="get_episode_detail",
@@ -123,11 +42,12 @@ def make_distill_tools(conn: sqlite3.Connection) -> list[ToolDef]:
                 "properties": {"episode_id": {"type": "integer"}},
                 "required": ["episode_id"],
             },
-            handler=_logged(conn, "get_episode_detail", lambda **kw: get_episode_detail(**kw)),
+            handler=_logged(conn, "get_episode_detail",
+                            lambda episode_id: repo.get_episode_detail(conn, episode_id) or {"error": "not found"}),
         ),
         ToolDef(
             name="get_episode_frames",
-            description="Get raw capture frames for an episode. Use this to verify patterns by checking the actual screen data.",
+            description="Get raw capture frames for an episode.",
             input_schema={
                 "type": "object",
                 "properties": {
@@ -136,39 +56,45 @@ def make_distill_tools(conn: sqlite3.Connection) -> list[ToolDef]:
                 },
                 "required": ["episode_id"],
             },
-            handler=_logged(conn, "get_episode_frames", lambda **kw: get_episode_frames(**kw)),
+            handler=_logged(conn, "get_episode_frames",
+                            lambda episode_id, limit=10: repo.get_episode_frames(conn, episode_id, limit)),
         ),
         ToolDef(
             name="get_playbook_history",
-            description="Get the confidence/maturity history for a playbook entry over time.",
+            description="Get confidence/maturity history for a playbook entry.",
             input_schema={
                 "type": "object",
                 "properties": {"name": {"type": "string"}},
                 "required": ["name"],
             },
-            handler=_logged(conn, "get_playbook_history", lambda **kw: get_playbook_history(**kw)),
+            handler=_logged(conn, "get_playbook_history",
+                            lambda name: repo.get_playbook_history(conn, name)),
         ),
         ToolDef(
             name="get_all_playbook_entries",
-            description="List all current playbook entries with their confidence and maturity.",
+            description="List all current playbook entries.",
             input_schema={"type": "object", "properties": {}},
-            handler=_logged(conn, "get_all_playbook_entries", lambda **kw: get_all_playbook_entries()),
+            handler=_logged(conn, "get_all_playbook_entries",
+                            lambda: repo.get_all_playbook_entries(conn)),
         ),
         ToolDef(
             name="write_playbook_entry",
-            description="Create or update a playbook entry. Call this when you've identified a behavioral pattern.",
+            description="Create or update a playbook entry.",
             input_schema={
                 "type": "object",
                 "properties": {
                     "name": {"type": "string", "description": "kebab-case name"},
-                    "context": {"type": "string", "description": "When does this rule apply?"},
-                    "action": {"type": "string", "description": "What they do (JSON with intuition, action, why, counterexample)"},
+                    "context": {"type": "string"},
+                    "action": {"type": "string"},
                     "confidence": {"type": "number", "description": "0.0-1.0"},
                     "maturity": {"type": "string", "enum": ["nascent", "developing", "mature", "mastered"]},
                     "evidence": {"type": "string", "description": "JSON array of episode IDs"},
                 },
                 "required": ["name", "context", "action", "confidence", "maturity", "evidence"],
             },
-            handler=_logged(conn, "write_playbook_entry", lambda **kw: write_playbook_entry(**kw)),
+            handler=_logged(conn, "write_playbook_entry",
+                            lambda name, context, action, confidence, maturity, evidence:
+                            (repo.write_playbook_entry(conn, name, context, action, confidence, maturity, evidence),
+                             {"status": "ok", "name": name})[-1]),
         ),
     ]
