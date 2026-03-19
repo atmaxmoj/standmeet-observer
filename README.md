@@ -1,6 +1,6 @@
 <div align="center">
 
-# Observer
+# 👁️ Observer
 
 **Watch what you do. Learn how you think.**
 
