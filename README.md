@@ -45,51 +45,51 @@ npm test          # lint + 320 engine tests + 17 Playwright e2e
 
 ## How It Works
 
-```
-  You use your computer normally
-          │
-          ▼
-┌─────────────────────────────────┐
-│     7 Source Plugins (host)     │
-│                                 │
-│  screen   audio   zsh   bash   │
-│  safari   chrome   oslog       │
-│                                 │
-│  Each an independent process    │
-│  with its own venv + deps       │
-└────────────┬────────────────────┘
-             │  POST /ingest/{source}
-             ▼
-┌─────────────────────────────────┐
-│     Engine (Docker)             │
-│                                 │
-│  ┌─ Noise Filter ─────── $0 ─┐ │
-│  │  Drop trivial apps/text    │ │
-│  └────────────┬───────────────┘ │
-│               ▼                 │
-│  ┌─ Window Detection ────────┐ │
-│  │  30min span / 5min idle   │ │
-│  └────────────┬───────────────┘ │
-│               ▼                 │
-│  ┌─ Haiku ──── ~$0.01/ep ───┐ │
-│  │  "What task was this?"    │ │
-│  └────────────┬───────────────┘ │
-│               ▼                 │
-│  ┌─ Opus ───── ~$2/day ─────┐ │
-│  │  Distill → Playbook       │ │
-│  │  Compose → Routines       │ │
-│  │  GC → Decay + Purge       │ │
-│  └────────────────────────────┘ │
-└────────────┬────────────────────┘
-             ▼
-┌─────────────────────────────────┐
-│     Dashboard (:5174)           │
-│                                 │
-│  Sources │ Episodes │ Playbooks │
-│  Routines │ Usage │ Chat        │
-│                                 │
-│  Dynamic panels from manifests  │
-└─────────────────────────────────┘
+```mermaid
+graph TD
+    You["You use your computer normally"] --> Plugins
+
+    subgraph Plugins["Source Plugins · host · 7 processes"]
+        direction LR
+        screen["screen"]
+        audio["audio"]
+        zsh["zsh"]
+        bash["bash"]
+        safari["safari"]
+        chrome["chrome"]
+        oslog["oslog"]
+    end
+
+    Plugins -->|"POST /ingest/{source}"| Engine
+
+    subgraph Engine["Engine · Docker"]
+        Filter["Noise Filter · $0\nDrop trivial apps/text"]
+        Window["Window Detection\n30min span / 5min idle"]
+        Haiku["Haiku · ~$0.01/episode\nWhat task was this?"]
+        Opus["Opus · ~$2/day\nDistill → Playbook\nCompose → Routines\nGC → Decay + Purge"]
+
+        Filter --> Window --> Haiku --> Opus
+    end
+
+    Engine --> Dashboard
+
+    subgraph Dashboard["Dashboard · :5174"]
+        direction LR
+        d1["Sources"]
+        d2["Episodes"]
+        d3["Playbooks"]
+        d4["Routines"]
+        d5["Usage"]
+        d6["Chat"]
+    end
+
+    style Plugins fill:#1a1a2e,stroke:#16213e,color:#e0e0e0
+    style Engine fill:#0f3460,stroke:#16213e,color:#e0e0e0
+    style Dashboard fill:#533483,stroke:#16213e,color:#e0e0e0
+    style Filter fill:#1a1a2e,stroke:#e94560,color:#e0e0e0
+    style Window fill:#1a1a2e,stroke:#e94560,color:#e0e0e0
+    style Haiku fill:#1a1a2e,stroke:#0ea5e9,color:#e0e0e0
+    style Opus fill:#1a1a2e,stroke:#a855f7,color:#e0e0e0
 ```
 
 ### What comes out
