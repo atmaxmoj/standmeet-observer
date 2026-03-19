@@ -472,18 +472,3 @@ async def pipeline_resume(request: Request):
     return {"paused": False}
 
 
-# -- Test helper --
-
-
-@router.post("/test/ingest")
-async def test_ingest(request: Request):
-    body = await request.json()
-    db = request.app.state.db
-    episode_id = await db.insert_episode(
-        summary=body["summary"],
-        app_names=str(body.get("app_names", "[]")),
-        frame_count=0,
-        started_at=body.get("started_at", ""),
-        ended_at=body.get("ended_at", ""),
-    )
-    return {"episode_id": episode_id}
