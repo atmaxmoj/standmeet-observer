@@ -215,7 +215,6 @@ collect() → POST /ingest/{source} → PostgreSQL table
 | `npm run status` | Show running processes + API health |
 | `npm run logs` | Docker compose logs |
 | `npm test` | Lint + engine pytest + framework tests + Playwright e2e |
-| `npm run watchdog` | Install launchd auto-restart (macOS) |
 
 ## Testing
 

@@ -13,8 +13,6 @@
     "test": "uv run python cli.py test",
     "test:sources": "uv run python cli.py test sources",
     "test:web": "uv run python cli.py test web",
-    "watchdog": "uv run python cli.py watchdog",
-    "watchdog-off": "uv run python cli.py watchdog-off",
     "lint": "uv run ruff check src/ cli.py",
     "experiment": "uv run python cli.py experiment",
     "test:integration": "uv run python cli.py test-integration",
