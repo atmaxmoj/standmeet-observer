@@ -14,12 +14,23 @@ function parseSummary(raw: string): string {
   try { return JSON.parse(raw).summary || raw; } catch { return raw; }
 }
 
+type SortKey = "date" | "frames" | "apps";
+
+function sortEpisodes(list: Episode[], key: SortKey): Episode[] {
+  return [...list].sort((a, b) => {
+    if (key === "frames") return b.frame_count - a.frame_count;
+    if (key === "apps") return (b.app_names ?? "").localeCompare(a.app_names ?? "");
+    return (b.created_at ?? "").localeCompare(a.created_at ?? ""); // date desc
+  });
+}
+
 export function EpisodesPanel() {
   const [episodes, setEpisodes] = useState<Episode[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<SortKey>("date");
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
@@ -41,7 +52,15 @@ export function EpisodesPanel() {
     <div data-testid="episodes-panel">
       <div className="p-6 space-y-4">
         <div className="flex items-center justify-between">
-          <SearchInput onSearch={setSearch} />
+          <div className="flex items-center gap-3">
+            <SearchInput onSearch={setSearch} />
+            <div className="flex gap-1">
+              {(["date", "frames", "apps"] as SortKey[]).map((k) => (
+                <Button key={k} variant={sort === k ? "secondary" : "ghost"} size="sm" className="text-xs h-7 px-2"
+                  onClick={() => setSort(k)}>{k}</Button>
+              ))}
+            </div>
+          </div>
           <Button variant="outline" size="sm" onClick={() => load(1)}>Refresh</Button>
         </div>
 
@@ -54,7 +73,7 @@ export function EpisodesPanel() {
         </div>
       ) : (
         <div className="space-y-3">
-          {episodes.map((e) => (
+          {sortEpisodes(episodes, sort).map((e) => (
             <Card key={e.id} data-testid="episode-card"
               className={`cursor-pointer transition-colors ${sel.selected.has(e.id) ? "ring-1 ring-primary bg-primary/5" : "hover:bg-accent/50"}`}
               onClick={() => sel.toggle(e.id)} onContextMenu={(ev) => { ev.preventDefault(); sel.toggle(e.id); }}

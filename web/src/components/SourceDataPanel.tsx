@@ -116,7 +116,6 @@ export function SourceDataPanel({ manifest }: { manifest: SourceManifest }) {
   const [detailRecord, setDetailRecord] = useState<SourceRecord | null>(null);
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
-  const hasDetail = manifest.ui.detail_columns.length > 0;
   const hasImage = manifest.ui.detail_columns.includes("image_path");
 
   const load = useCallback(async (p: number = 1) => {
