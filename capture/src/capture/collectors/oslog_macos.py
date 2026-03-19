@@ -238,3 +238,8 @@ class OsLogCollector(BaseCollector):
             timestamp, category, data = self._buffer.popleft()
             events.append(data)
         return events
+
+
+COLLECTORS = [
+    ("darwin", OsLogCollector),
+]

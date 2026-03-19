@@ -14,10 +14,11 @@ const PAGE_SIZE = 50;
 const SOURCE_LABELS: Record<string, string> = {
   zsh: "Terminal", bash: "Terminal", powershell: "PowerShell",
   chrome: "Chrome", safari: "Safari", edge: "Edge",
+  macos: "macOS",
 };
 
 const TYPE_COLORS: Record<string, "default" | "secondary" | "outline"> = {
-  shell_command: "default", browser_url: "secondary",
+  shell_command: "default", browser_url: "secondary", os_log: "outline",
 };
 
 function EventCard({ event, selected, onSelect }: { event: OsEvent; selected: boolean; onSelect: () => void }) {
@@ -73,7 +74,7 @@ export function OsEventsPanel() {
           <div className="flex items-center gap-3">
             <SearchInput onSearch={setSearch} />
             <div className="flex gap-1">
-              {[["", "All"], ["shell_command", "Commands"], ["browser_url", "URLs"]].map(([val, label]) => (
+              {[["", "All"], ["shell_command", "Commands"], ["browser_url", "URLs"], ["os_log", "OS Events"]].map(([val, label]) => (
                 <Button key={val} variant={filter === val ? "default" : "outline"} size="sm" onClick={() => setFilterAndLoad(val)}>
                   {label}
                 </Button>

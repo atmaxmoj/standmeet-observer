@@ -144,3 +144,9 @@ class GitBashHistoryCollector(BaseCollector):
         if self._tracker is None:
             self._tracker = _HistoryFileTracker(self._path)
         return self._tracker.collect_new()
+
+
+COLLECTORS = [
+    ("win32", PowerShellHistoryCollector),
+    ("win32", GitBashHistoryCollector),
+]

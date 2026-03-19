@@ -236,3 +236,9 @@ class BashHistoryCollector(BaseCollector):
         if self._tracker is None:
             self._tracker = _HistoryFileTracker(self._path)
         return self._tracker.collect_new()
+
+
+COLLECTORS = [
+    ("darwin", ZshHistoryCollector),
+    ("darwin", BashHistoryCollector),
+]

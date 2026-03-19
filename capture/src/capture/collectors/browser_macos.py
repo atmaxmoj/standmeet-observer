@@ -101,3 +101,9 @@ class ChromeURLCollector(BaseCollector):
         except Exception:
             logger.debug("chrome: not running or not accessible")
             return []
+
+
+COLLECTORS = [
+    ("darwin", SafariURLCollector),
+    ("darwin", ChromeURLCollector),
+]

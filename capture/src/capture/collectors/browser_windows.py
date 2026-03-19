@@ -99,3 +99,9 @@ class EdgeURLCollector(BaseCollector):
         except Exception:
             logger.debug("edge: not running or not accessible")
             return []
+
+
+COLLECTORS = [
+    ("win32", ChromeURLCollector),
+    ("win32", EdgeURLCollector),
+]
