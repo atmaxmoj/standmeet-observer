@@ -28,11 +28,49 @@ const maturityVariant: Record<string, "default" | "secondary" | "outline" | "des
   nascent: "outline", developing: "secondary", mature: "default", mastered: "default",
 };
 
+function PlaybookCard({ p, selected, onSelect }: { p: Playbook; selected: boolean; onSelect: () => void }) {
+  return (
+    <Card data-testid="playbook-card"
+      className={`cursor-pointer transition-colors ${selected ? "ring-1 ring-primary bg-primary/5" : "hover:bg-accent/50"}`}
+      onClick={onSelect} onContextMenu={(e) => { e.preventDefault(); onSelect(); }}
+    >
+      <CardHeader className="pb-2">
+        <div className="flex items-center gap-2">
+          <CardTitle className="text-sm">{p.name}</CardTitle>
+          <Badge variant={maturityVariant[p.maturity] ?? "outline"}>{p.maturity}</Badge>
+        </div>
+        <CardDescription>{p.context}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <p className="text-sm mb-3 whitespace-pre-line">{parseAction(p.action)}</p>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-muted-foreground">{(p.confidence * 100).toFixed(0)}%</span>
+          <div className="flex-1 h-1.5 bg-secondary rounded-full overflow-hidden">
+            <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${p.confidence * 100}%` }} />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+type SortKey = "date" | "maturity" | "confidence";
+const MATURITY_ORDER: Record<string, number> = { mastered: 0, mature: 1, developing: 2, nascent: 3 };
+
+function sortPlaybooks(list: Playbook[], key: SortKey): Playbook[] {
+  return [...list].sort((a, b) => {
+    if (key === "date") return (b.updated_at ?? "").localeCompare(a.updated_at ?? "");
+    if (key === "maturity") return (MATURITY_ORDER[a.maturity] ?? 9) - (MATURITY_ORDER[b.maturity] ?? 9);
+    return b.confidence - a.confidence;
+  });
+}
+
 export function PlaybooksPanel() {
   const [playbooks, setPlaybooks] = useState<Playbook[]>([]);
   const [loading, setLoading] = useState(true);
   const [distilling, setDistilling] = useState(false);
   const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<SortKey>("confidence");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -61,6 +99,12 @@ export function PlaybooksPanel() {
         <div className="flex items-center gap-3">
           <SearchInput onSearch={setSearch} />
           <span className="text-sm text-muted-foreground" data-testid="entries-count">{playbooks.length} entries</span>
+          <div className="flex gap-1">
+            {(["confidence", "date", "maturity"] as SortKey[]).map((k) => (
+              <Button key={k} variant={sort === k ? "secondary" : "ghost"} size="sm" className="text-xs h-7 px-2"
+                onClick={() => setSort(k)}>{k}</Button>
+            ))}
+          </div>
         </div>
         <div className="flex gap-2">
           <Button variant="default" size="sm" onClick={runDistill} disabled={distilling}>
@@ -79,28 +123,8 @@ export function PlaybooksPanel() {
         </div>
       ) : (
         <div className="space-y-3">
-          {playbooks.map((p) => (
-            <Card key={p.id} data-testid="playbook-card"
-              className={`cursor-pointer transition-colors ${sel.selected.has(p.id) ? "ring-1 ring-primary bg-primary/5" : "hover:bg-accent/50"}`}
-              onClick={() => sel.toggle(p.id)} onContextMenu={(e) => { e.preventDefault(); sel.toggle(p.id); }}
-            >
-              <CardHeader className="pb-2">
-                <div className="flex items-center gap-2">
-                  <CardTitle className="text-sm">{p.name}</CardTitle>
-                  <Badge variant={maturityVariant[p.maturity] ?? "outline"}>{p.maturity}</Badge>
-                </div>
-                <CardDescription>{p.context}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm mb-3">{parseAction(p.action)}</p>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-muted-foreground">{(p.confidence * 100).toFixed(0)}%</span>
-                  <div className="flex-1 h-1.5 bg-secondary rounded-full overflow-hidden">
-                    <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${p.confidence * 100}%` }} />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+          {sortPlaybooks(playbooks, sort).map((p) => (
+            <PlaybookCard key={p.id} p={p} selected={sel.selected.has(p.id)} onSelect={() => sel.toggle(p.id)} />
           ))}
         </div>
       )}

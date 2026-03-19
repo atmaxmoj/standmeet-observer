@@ -48,11 +48,23 @@ function RoutineCard({ routine }: { routine: Routine }) {
   );
 }
 
+type SortKey = "date" | "maturity" | "confidence";
+const MATURITY_ORDER: Record<string, number> = { mastered: 0, mature: 1, developing: 2, nascent: 3 };
+
+function sortRoutines(list: Routine[], key: SortKey): Routine[] {
+  return [...list].sort((a, b) => {
+    if (key === "date") return (b.updated_at ?? "").localeCompare(a.updated_at ?? "");
+    if (key === "maturity") return (MATURITY_ORDER[a.maturity] ?? 9) - (MATURITY_ORDER[b.maturity] ?? 9);
+    return b.confidence - a.confidence;
+  });
+}
+
 export function RoutinesPanel() {
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [loading, setLoading] = useState(true);
   const [composing, setComposing] = useState(false);
   const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<SortKey>("confidence");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -79,6 +91,12 @@ export function RoutinesPanel() {
         <div className="flex items-center gap-3">
           <SearchInput onSearch={setSearch} />
           <span className="text-sm text-muted-foreground">{routines.length} routines</span>
+          <div className="flex gap-1">
+            {(["confidence", "date", "maturity"] as SortKey[]).map((k) => (
+              <Button key={k} variant={sort === k ? "secondary" : "ghost"} size="sm" className="text-xs h-7 px-2"
+                onClick={() => setSort(k)}>{k}</Button>
+            ))}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="default" size="sm" onClick={runCompose} disabled={composing}>
@@ -97,7 +115,7 @@ export function RoutinesPanel() {
         </div>
       ) : (
         <div className="space-y-3">
-          {routines.map((r) => <RoutineCard key={r.id} routine={r} />)}
+          {sortRoutines(routines, sort).map((r) => <RoutineCard key={r.id} routine={r} />)}
         </div>
       )}
     </div>
