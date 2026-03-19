@@ -11,3 +11,6 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/safari_source"]
+
+[tool.uv.sources]
+source-framework = { path = "../../framework" }

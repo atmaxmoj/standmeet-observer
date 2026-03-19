@@ -2,10 +2,12 @@
 
 import json
 import tempfile
+import uuid
 from pathlib import Path
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker
 
 from engine.etl.sources.manifest_registry import (
     ManifestCaptureSource,
@@ -58,8 +60,27 @@ def zsh_manifest():
 
 
 @pytest.fixture
-def db_session(sync_session):
-    return sync_session
+def db_session():
+    """Own isolated schema for manifest tests (creates dynamic tables)."""
+    from tests.conftest import TEST_PG_SYNC
+    schema = f"test_manifest_{uuid.uuid4().hex[:8]}"
+    admin = create_engine(TEST_PG_SYNC)
+    with admin.connect() as c:
+        c.execute(text(f"CREATE SCHEMA {schema}"))
+        c.commit()
+    admin.dispose()
+
+    engine = create_engine(f"{TEST_PG_SYNC}?options=-csearch_path%3D{schema}")
+    session = sessionmaker(bind=engine)()
+    yield session
+    session.close()
+    engine.dispose()
+
+    admin = create_engine(TEST_PG_SYNC)
+    with admin.connect() as c:
+        c.execute(text(f"DROP SCHEMA {schema} CASCADE"))
+        c.commit()
+    admin.dispose()
 
 
 def _write_manifest(data: dict) -> Path:

@@ -25,20 +25,11 @@ class DB:
         self._engine = None
         self._session_factory = None
 
-    @property
-    def path(self) -> str:
-        """Extract file path from SQLite URL (for backwards compat in tests)."""
-        if "sqlite" in self.url:
-            return self.url.split("///", 1)[-1]
-        return self.url
-
     async def connect(self):
         logger.debug("connecting to database at %s", self.url)
         self._engine = create_async_engine(self.url, echo=False)
         async with self._engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-            if "sqlite" in self.url:
-                await conn.execute(text("PRAGMA journal_mode=WAL"))
         self._session_factory = async_sessionmaker(
             bind=self._engine, expire_on_commit=False,
         )

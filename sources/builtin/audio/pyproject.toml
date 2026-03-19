@@ -2,7 +2,7 @@
 name = "observer-source-audio"
 version = "0.1.0"
 description = "Audio capture + transcription source plugin for Observer"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
     "source-framework",
     "sounddevice>=0.5",
@@ -16,3 +16,6 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/audio_source"]
+
+[tool.uv.sources]
+source-framework = { path = "../../framework" }

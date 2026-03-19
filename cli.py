@@ -164,19 +164,17 @@ def daemon_start_source(name: str, source_dir: Path):
     log = _log_file(f"source-{name}")
 
     print(f"  Starting source/{name}...")
-    framework_dir = ROOT / "sources" / "framework"
     with open(log, "w") as lf:
         kwargs = dict(
-            cwd=framework_dir,
+            cwd=source_dir,
             stdout=lf, stderr=lf,
-            env={**os.environ, "PYTHONPATH": str(framework_dir / "src")},
         )
         if sys.platform == "win32":
             kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
         else:
             kwargs["start_new_session"] = True
         p = subprocess.Popen(
-            ["uv", "run", "python", "-m", "source_framework", str(source_dir)],
+            ["uv", "run", "python", "-m", "source_framework", "."],
             **kwargs,
         )
 
@@ -229,14 +227,8 @@ def cmd_start():
     check_prereqs()
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Start source plugins
-    # screen and audio sources can't run independently yet (need backend migration)
-    LEGACY_SOURCES = {"screen", "audio"}
     print("==> Starting source plugins...")
     for source_name, source_dir, manifest in _iter_source_manifests():
-        if source_name in LEGACY_SOURCES:
-            print(f"  Skipping source/{source_name} (uses legacy daemon)")
-            continue
         platforms = manifest.get("platform", [])
         if platforms and sys.platform not in platforms:
             print(f"  Skipping {source_name} (platform {sys.platform} not in {platforms})")
@@ -319,19 +311,16 @@ def cmd_test():
     results_dir.mkdir(parents=True, exist_ok=True)
 
     if suite in ("engine", "all"):
-        print("\n==> Running engine pytest...")
-        test_env = {
-            **os.environ,
-            "PYTHONPATH": str(ROOT / "src"),
-            "ANTHROPIC_API_KEY": os.environ.get("ANTHROPIC_API_KEY", "sk-fake-test-key"),
-            "ANTHROPIC_AUTH_TOKEN": os.environ.get("ANTHROPIC_AUTH_TOKEN", ""),
-        }
+        print("\n==> Running engine pytest (Docker)...")
+        compose_test = str(ROOT / "docker-compose.test.yml")
+        run(["docker", "compose", "-p", "bisimulator-test", "-f", compose_test,
+             "up", "-d", "--build", "--wait", "db-test"], cwd=ROOT)
         engine_log = results_dir / "engine.log"
         with open(engine_log, "w") as log:
             r = subprocess.run(
-                ["uv", "run", "--extra", "test", "pytest", "-v",
-                 f"--junitxml={results_dir / 'engine.xml'}"],
-                cwd=ROOT, env=test_env, stdout=log, stderr=subprocess.STDOUT,
+                ["docker", "compose", "-p", "bisimulator-test", "-f", compose_test,
+                 "run", "--rm", "pytest"],
+                cwd=ROOT, stdout=log, stderr=subprocess.STDOUT,
             )
         results.append(("engine", r.returncode))
         if r.returncode != 0:
@@ -435,7 +424,6 @@ def _launchd_plist_source(name: str, source_dir: Path) -> str:
     uv_path = shutil.which("uv") or "/usr/local/bin/uv"
     label = f"com.observer.source-{name}"
     log = str(LOG_DIR / f"source-{name}.log")
-    framework_dir = ROOT / "sources" / "framework"
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -449,10 +437,10 @@ def _launchd_plist_source(name: str, source_dir: Path) -> str:
         <string>python</string>
         <string>-m</string>
         <string>source_framework</string>
-        <string>{source_dir}</string>
+        <string>.</string>
     </array>
     <key>WorkingDirectory</key>
-    <string>{framework_dir}</string>
+    <string>{source_dir}</string>
     <key>KeepAlive</key>
     <true/>
     <key>ThrottleInterval</key>
@@ -465,8 +453,6 @@ def _launchd_plist_source(name: str, source_dir: Path) -> str:
     <dict>
         <key>PATH</key>
         <string>{os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin")}</string>
-        <key>PYTHONPATH</key>
-        <string>{framework_dir / "src"}</string>
     </dict>
 </dict>
 </plist>"""
@@ -480,14 +466,9 @@ def cmd_watchdog():
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     LOG_DIR.mkdir(parents=True, exist_ok=True)
 
-    LEGACY_SOURCES = {"screen", "audio"}
-
     # Source plugins
     for source_name, source_dir, manifest in _iter_source_manifests():
         platforms = manifest.get("platform", [])
-        if source_name in LEGACY_SOURCES:
-            print(f"  Skipping source/{source_name} (legacy dependency)")
-            continue
         if platforms and sys.platform not in platforms:
             print(f"  Skipping source/{source_name} (platform {sys.platform} not in {platforms})")
             continue

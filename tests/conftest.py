@@ -1,83 +1,107 @@
-"""Shared fixtures for engine tests."""
+"""Shared fixtures for engine tests.
 
-import asyncio
+Single schema per session, TRUNCATE between tests. No per-test DDL = no lock contention.
+"""
+
 import uuid
 
 import pytest
 import pytest_asyncio
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 from engine.storage.db import DB
 from engine.storage.models import Base
 
-# Test PostgreSQL connection — uses docker compose db service
-TEST_PG_SYNC = "postgresql+psycopg://observer:observer@localhost:15432/observer"
-TEST_PG_ASYNC = "postgresql+asyncpg://observer:observer@localhost:15432/observer"
+import os
+
+_pg_host = os.environ.get("TEST_PG_HOST", "localhost")
+_pg_port = os.environ.get("TEST_PG_PORT", "15432")
+_pg_db = os.environ.get("TEST_PG_DB", "observer")
+TEST_PG_SYNC = f"postgresql+psycopg://observer:observer@{_pg_host}:{_pg_port}/{_pg_db}"
+TEST_PG_ASYNC = f"postgresql+asyncpg://observer:observer@{_pg_host}:{_pg_port}/{_pg_db}"
+
+_SCHEMA = f"test_{uuid.uuid4().hex[:8]}"
+_SYNC_URL = f"{TEST_PG_SYNC}?options=-csearch_path%3D{_SCHEMA}"
+
+# Session-scoped sync engine — reused across all tests
+_engine = None
+_truncate_sql = None
 
 
-@pytest.fixture(scope="session")
-def event_loop():
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
+@pytest.fixture(scope="session", autouse=True)
+def _init_schema():
+    """Create schema + tables once for the entire session."""
+    global _engine, _truncate_sql
+
+    admin = create_engine(TEST_PG_SYNC)
+    with admin.connect() as c:
+        c.execute(text(f"CREATE SCHEMA IF NOT EXISTS {_SCHEMA}"))
+        c.commit()
+    admin.dispose()
+
+    _engine = create_engine(_SYNC_URL, pool_size=5, max_overflow=5)
+    Base.metadata.create_all(_engine)
+
+    tables = list(Base.metadata.tables.keys())
+    _truncate_sql = f"TRUNCATE {', '.join(tables)} RESTART IDENTITY CASCADE" if tables else None
+
+    yield
+
+    _engine.dispose()
+    admin = create_engine(TEST_PG_SYNC)
+    with admin.connect() as c:
+        c.execute(text(f"DROP SCHEMA IF EXISTS {_SCHEMA} CASCADE"))
+        c.commit()
+    admin.dispose()
+
+
+@pytest.fixture(autouse=True)
+def _clean_tables():
+    """TRUNCATE all tables after each test."""
+    yield
+    if _truncate_sql and _engine:
+        with _engine.connect() as c:
+            c.execute(text(_truncate_sql))
+            c.commit()
 
 
 @pytest.fixture
 def _test_schema():
-    """Create a unique schema for test isolation, drop after test."""
-    schema = f"test_{uuid.uuid4().hex[:8]}"
-    engine = create_engine(TEST_PG_SYNC)
-    with engine.connect() as conn:
-        conn.execute(text(f"CREATE SCHEMA {schema}"))
-        conn.commit()
-    yield schema
-    with engine.connect() as conn:
-        conn.execute(text(f"DROP SCHEMA {schema} CASCADE"))
-        conn.commit()
-    engine.dispose()
+    """Expose schema name for tests that need it."""
+    return _SCHEMA
 
 
 class _TestDB(DB):
-    """DB subclass that supports setting search_path via connect_args."""
+    """Async DB targeting the test schema."""
 
     def __init__(self, url: str, schema: str):
         super().__init__(url)
         self._schema = schema
 
     async def connect(self):
-        from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
-        from engine.storage.models import Base
-        from sqlalchemy import text as sa_text
-
         self._engine = create_async_engine(
             self.url, echo=False,
             connect_args={"server_settings": {"search_path": self._schema}},
         )
-        async with self._engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
         self._session_factory = async_sessionmaker(
             bind=self._engine, expire_on_commit=False,
         )
 
 
 @pytest_asyncio.fixture
-async def db(_test_schema):
-    """Create a fresh DB for each test using a unique schema."""
-    database = _TestDB(TEST_PG_ASYNC, _test_schema)
+async def db():
+    """Async DB for each test."""
+    database = _TestDB(TEST_PG_ASYNC, _SCHEMA)
     await database.connect()
     yield database
     await database.close()
 
 
 @pytest.fixture
-def sync_session(_test_schema):
-    """Sync SQLAlchemy session for tests that need it."""
-    url = f"{TEST_PG_SYNC}?options=-csearch_path%3D{_test_schema}"
-    engine = create_engine(url)
-    Base.metadata.create_all(engine)
-    factory = sessionmaker(bind=engine)
-    session = factory()
+def sync_session():
+    """Sync session using the shared engine."""
+    session = sessionmaker(bind=_engine)()
     yield session
     session.close()
-    engine.dispose()

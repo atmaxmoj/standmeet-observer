@@ -46,11 +46,15 @@ class AudioSource(SourcePlugin):
             )
 
         try:
-            devices = sd.query_devices()
-            input_devices = [
-                d for d in (devices if isinstance(devices, list) else [devices])
-                if d.get("max_input_channels", 0) > 0
-            ]
+            raw = sd.query_devices()
+            # query_devices returns DeviceList — iterate and check each device
+            input_devices = []
+            for d in raw:
+                try:
+                    if d["max_input_channels"] > 0:
+                        input_devices.append(d)
+                except (KeyError, TypeError):
+                    pass
         except Exception as exc:
             return ProbeResult(
                 available=False,
@@ -88,15 +92,8 @@ class AudioSource(SourcePlugin):
         Mirrors the logic in audio/src/audio/daemon.py but adapted for the
         source-framework EngineClient interface.
         """
-        try:
-            from audio.recorder import AudioRecorder
-            from audio.transcriber import transcribe, is_hallucination
-        except ImportError:
-            raise RuntimeError(
-                "audio source requires the audio package. "
-                "During migration, run the old audio daemon instead: "
-                "cd audio && uv run python -m audio"
-            )
+        from audio_source.recorder import AudioRecorder
+        from audio_source.transcriber import transcribe, is_hallucination
 
         keep_chunks = config.get("keep_chunks", False)
         chunk_duration = config.get("chunk_duration_seconds", 300)
@@ -116,7 +113,7 @@ class AudioSource(SourcePlugin):
             return on_chunk_ready
 
         # Build recorders from config (default: single mic recorder)
-        recorders = [AudioRecorder(chunk_duration=chunk_duration)]
+        recorders = [AudioRecorder(chunk_seconds=chunk_duration)]
         for rec in recorders:
             t = threading.Thread(
                 target=rec.record,

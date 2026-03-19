@@ -5,7 +5,6 @@ import json
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from engine.storage.db import DB
 from engine.api.chat import _read_tool, _handle_tool, _make_read_tools
 from engine.llm import ContentBlock, MessageResponse, LLMClient, LLMResponse
 

@@ -17,7 +17,9 @@ services:
     build: .
     volumes:
       - engine-test-data:/data
+      - ./sources/builtin:/app/sources/builtin:ro
     environment:
+      - SOURCES_DIR=/app/sources/builtin
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-sk-fake-test-key}
       - CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_OAUTH_TOKEN:-}
       - DATABASE_URL=postgresql+asyncpg://observer:observer@db-test:5432/observer_test
@@ -33,6 +35,20 @@ services:
       timeout: 3s
       retries: 10
       start_period: 10s
+
+  pytest:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    environment:
+      - TEST_PG_HOST=db-test
+      - TEST_PG_PORT=5432
+      - TEST_PG_DB=observer_test
+      - ANTHROPIC_API_KEY=sk-fake-test-key
+      - HUEY_DB_DIR=/tmp
+    depends_on:
+      db-test:
+        condition: service_healthy
 
   playwright:
     build:

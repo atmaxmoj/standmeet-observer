@@ -2,8 +2,8 @@
 
 import json
 from unittest.mock import MagicMock
+from sqlalchemy import text
 
-import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 
@@ -31,53 +31,58 @@ ZSH_MANIFEST = {
 
 
 @pytest_asyncio.fixture
-async def app_with_zsh_source(tmp_path, _test_schema):
-    """Create a FastAPI app with zsh manifest source registered."""
+async def app_with_zsh_source(tmp_path):
+    """Create a FastAPI app with zsh manifest source registered (own schema)."""
     import os
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
+    import uuid as _uuid
+    from sqlalchemy import create_engine as _ce
+    from sqlalchemy.orm import sessionmaker as _sm
     from tests.conftest import TEST_PG_SYNC, TEST_PG_ASYNC, _TestDB
+
+    # Own schema to avoid lock contention with shared schema
+    schema = f"test_srcapi_{_uuid.uuid4().hex[:8]}"
+    admin = _ce(TEST_PG_SYNC)
+    with admin.connect() as c:
+        c.execute(text(f"CREATE SCHEMA {schema}"))
+        c.commit()
+    admin.dispose()
+
+    sync_url = f"{TEST_PG_SYNC}?options=-csearch_path%3D{schema}"
 
     # Write manifest to a temp dir
     zsh_dir = tmp_path / "sources" / "zsh"
     zsh_dir.mkdir(parents=True)
     (zsh_dir / "manifest.json").write_text(json.dumps(ZSH_MANIFEST))
 
-    sync_url = f"{TEST_PG_SYNC}?options=-csearch_path%3D{_test_schema}"
-    db_url = TEST_PG_ASYNC
-
     os.environ["SOURCES_DIR"] = str(tmp_path / "sources")
-    os.environ["DATABASE_URL"] = db_url
 
     from engine.etl.sources.manifest_registry import (
         ManifestRegistry, create_table_for_manifest, load_manifest_data,
     )
+    from engine.storage.models import Base
 
-    # Create table
-    engine = create_engine(sync_url)
-    factory = sessionmaker(bind=engine)
-    session = factory()
-
+    # Create ORM tables + manifest table in own schema
+    schema_engine = _ce(sync_url)
+    Base.metadata.create_all(schema_engine)
+    session = _sm(bind=schema_engine)()
     manifest = load_manifest_data(zsh_dir)
     create_table_for_manifest(session, manifest)
     session.close()
+    schema_engine.dispose()
 
-    # Build registry
     registry = ManifestRegistry()
     registry.register(manifest)
 
-    # Create a minimal FastAPI app with the routes
     from fastapi import FastAPI
     from engine.api.routes import router
 
     app = FastAPI()
     app.include_router(router)
 
-    # Mock settings
     settings = MagicMock()
     settings.database_url_sync = sync_url
 
-    db = _TestDB(db_url, _test_schema)
+    db = _TestDB(TEST_PG_ASYNC, schema)
     await db.connect()
     app.state.db = db
     app.state.manifest_registry = registry
@@ -87,7 +92,13 @@ async def app_with_zsh_source(tmp_path, _test_schema):
 
     await db.close()
     os.environ.pop("SOURCES_DIR", None)
-    os.environ.pop("DATABASE_URL", None)
+
+    # Drop entire schema
+    admin = _ce(TEST_PG_SYNC)
+    with admin.connect() as c:
+        c.execute(text(f"DROP SCHEMA {schema} CASCADE"))
+        c.commit()
+    admin.dispose()
 
 
 @pytest_asyncio.fixture

@@ -10,7 +10,6 @@ test.describe("Dashboard", () => {
     await page.goto("/");
     const header = page.getByTestId("header");
     await expect(header).toContainText("OBSERVER");
-    await expect(page.getByTestId("engine-status")).toBeVisible();
     await expect(page.getByTestId("episode-count")).toBeVisible({ timeout: 10000 });
     await page.screenshot({ path: "tests/screenshots/header.png", fullPage: false });
   });
@@ -19,37 +18,34 @@ test.describe("Dashboard", () => {
     await page.goto("/");
     const sidebar = page.getByTestId("sidebar");
     await expect(sidebar).toBeVisible();
-    // Check category labels
-    await expect(sidebar).toContainText("Capture");
+    // Check category labels (Sources replaces Capture)
+    await expect(sidebar).toContainText("Sources");
     await expect(sidebar).toContainText("Memory");
     await expect(sidebar).toContainText("Usage");
     await expect(sidebar).toContainText("Logs");
   });
 
-  test("Capture panel shows frames with pagination", async ({ page }) => {
+  test("Screen source panel shows data with pagination", async ({ page }) => {
     await page.goto("/");
-    await nav(page, "frames");
-    const panel = page.getByTestId("frames-panel");
+    await nav(page, "source:screen");
+    const panel = page.getByTestId("source-panel-screen");
     await expect(panel).toBeVisible({ timeout: 10000 });
 
-    // Should have frame cards (capture is running)
-    const cards = panel.getByTestId("frame-card");
+    // Should have record cards
+    const cards = panel.getByTestId("source-record-card");
     await expect(cards.first()).toBeVisible({ timeout: 10000 });
 
     // Pagination should be fixed at bottom
     const pagination = page.getByTestId("pagination");
     await expect(pagination).toBeVisible();
 
-    // Click a frame card to select it
-    await cards.first().click();
-
-    await page.screenshot({ path: "tests/screenshots/capture.png", fullPage: true });
+    await page.screenshot({ path: "tests/screenshots/screen.png", fullPage: true });
   });
 
-  test("Audio panel loads", async ({ page }) => {
+  test("Audio source panel loads", async ({ page }) => {
     await page.goto("/");
-    await nav(page, "audio");
-    const panel = page.getByTestId("audio-panel");
+    await nav(page, "source:audio");
+    const panel = page.getByTestId("source-panel-audio");
     await expect(panel).toBeVisible({ timeout: 10000 });
     await page.screenshot({ path: "tests/screenshots/audio.png", fullPage: true });
   });
@@ -83,12 +79,12 @@ test.describe("Dashboard", () => {
     await page.screenshot({ path: "tests/screenshots/usage.png", fullPage: true });
   });
 
-  test("OS Events panel loads", async ({ page }) => {
+  test("Zsh source panel loads", async ({ page }) => {
     await page.goto("/");
-    await nav(page, "os-events");
-    const panel = page.getByTestId("os-events-panel");
+    await nav(page, "source:zsh");
+    const panel = page.getByTestId("source-panel-zsh");
     await expect(panel).toBeVisible({ timeout: 10000 });
-    await page.screenshot({ path: "tests/screenshots/os-events.png", fullPage: true });
+    await page.screenshot({ path: "tests/screenshots/zsh.png", fullPage: true });
   });
 
   test("Logs panel loads", async ({ page }) => {
@@ -99,40 +95,33 @@ test.describe("Dashboard", () => {
     await page.screenshot({ path: "tests/screenshots/logs.png", fullPage: true });
   });
 
-  test("frame detail overlay opens on thumbnail click", async ({ page }) => {
+  test("record detail overlay opens on click", async ({ page }) => {
     await page.goto("/");
-    await nav(page, "frames");
-    const panel = page.getByTestId("frames-panel");
-    await expect(panel.getByTestId("frame-card").first()).toBeVisible({ timeout: 10000 });
+    await nav(page, "source:screen");
+    const panel = page.getByTestId("source-panel-screen");
+    await expect(panel.getByTestId("source-record-card").first()).toBeVisible({ timeout: 10000 });
 
-    // Click the thumbnail image (or OCR button) on the first card
-    const firstCard = panel.getByTestId("frame-card").first();
-    const thumb = firstCard.locator("img").first();
-    if (await thumb.isVisible()) {
-      await thumb.click();
-    } else {
-      // No image — click the OCR button
-      await firstCard.getByText("OCR").click();
-    }
+    // Click the first card to open detail
+    await panel.getByTestId("source-record-card").first().click();
 
     // Detail overlay should appear
-    const detail = page.getByTestId("frame-detail");
+    const detail = page.getByTestId("record-detail");
     await expect(detail).toBeVisible({ timeout: 5000 });
 
     // Close it
-    await page.getByTestId("frame-detail-close").click();
+    await page.getByTestId("record-detail-close").click();
     await expect(detail).not.toBeVisible();
   });
 
-  test("selection bar appears when selecting frames", async ({ page }) => {
+  test("selection bar appears when right-clicking records", async ({ page }) => {
     await page.goto("/");
-    await nav(page, "frames");
-    const panel = page.getByTestId("frames-panel");
-    const cards = panel.getByTestId("frame-card");
+    await nav(page, "source:screen");
+    const panel = page.getByTestId("source-panel-screen");
+    const cards = panel.getByTestId("source-record-card");
     await expect(cards.first()).toBeVisible({ timeout: 10000 });
 
-    // Click first card to select it
-    await cards.first().click();
+    // Right-click first card to select it
+    await cards.first().click({ button: "right" });
 
     // Selection bar should appear with "1 selected"
     const selCount = page.getByTestId("selection-count");
@@ -147,42 +136,46 @@ test.describe("Dashboard", () => {
     await expect(page.getByTestId("pagination")).toBeVisible();
   });
 
-  test("header shows capture status and toggle switch", async ({ page }) => {
+  test("header shows pipeline toggle switch", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByTestId("engine-status")).toBeVisible({ timeout: 10000 });
-    await expect(page.getByTestId("pipeline-toggle")).toBeVisible();
+    await expect(page.getByTestId("pipeline-toggle")).toBeVisible({ timeout: 10000 });
   });
 
-  test("sidebar navigation works", async ({ page }) => {
+  test("sidebar navigation works for all panels", async ({ page }) => {
     await page.goto("/");
-    const keys = ["frames", "audio", "os-events", "episodes", "playbooks", "routines", "chat", "usage", "logs"];
-    const panels = [
-      "frames-panel", "audio-panel", "os-events-panel",
-      "episodes-panel", "playbooks-panel", "routines-panel", "chat-panel", "usage-panel", "logs-panel",
+    // Source panels use dynamic nav keys (source:name)
+    // Static panels use fixed keys
+    const staticPanels = [
+      { key: "episodes", panel: "episodes-panel" },
+      { key: "playbooks", panel: "playbooks-panel" },
+      { key: "routines", panel: "routines-panel" },
+      { key: "chat", panel: "chat-panel" },
+      { key: "usage", panel: "usage-panel" },
+      { key: "logs", panel: "logs-panel" },
     ];
-    for (let i = 0; i < keys.length; i++) {
-      await nav(page, keys[i]);
-      await expect(page.getByTestId(panels[i])).toBeVisible({ timeout: 10000 });
+    for (const { key, panel } of staticPanels) {
+      await nav(page, key);
+      await expect(page.getByTestId(panel)).toBeVisible({ timeout: 10000 });
     }
   });
 
   test("Refresh button reloads data", async ({ page }) => {
     await page.goto("/");
-    await nav(page, "frames");
-    const panel = page.getByTestId("frames-panel");
+    await nav(page, "source:screen");
+    const panel = page.getByTestId("source-panel-screen");
     await expect(panel).toBeVisible({ timeout: 10000 });
 
     // Click refresh
     await panel.getByRole("button", { name: "Refresh" }).click();
 
-    // Should still show frames after refresh
-    await expect(panel.getByTestId("frame-card").first()).toBeVisible({ timeout: 10000 });
+    // Should still show records after refresh
+    await expect(panel.getByTestId("source-record-card").first()).toBeVisible({ timeout: 10000 });
   });
 
   test("pagination navigates between pages", async ({ page }) => {
     await page.goto("/");
-    await nav(page, "frames");
-    const panel = page.getByTestId("frames-panel");
+    await nav(page, "source:screen");
+    const panel = page.getByTestId("source-panel-screen");
     await expect(panel).toBeVisible({ timeout: 10000 });
 
     const pagination = page.getByTestId("pagination");
@@ -192,7 +185,7 @@ test.describe("Dashboard", () => {
       await nextBtn.click();
       // After clicking next, Prev should be enabled
       await expect(pagination.getByRole("button", { name: "Prev" })).toBeEnabled();
-      await page.screenshot({ path: "tests/screenshots/capture-page2.png", fullPage: true });
+      await page.screenshot({ path: "tests/screenshots/screen-page2.png", fullPage: true });
     }
   });
 

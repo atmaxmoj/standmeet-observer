@@ -9,10 +9,7 @@ from engine.storage.models import Base
 
 def create_sync_engine(url: str):
     """Create a sync SQLAlchemy engine from a URL."""
-    kwargs = {}
-    if url.startswith("sqlite"):
-        kwargs["connect_args"] = {"check_same_thread": False}
-    engine = _create_engine(url, echo=False, **kwargs)
+    engine = _create_engine(url, echo=False)
     Base.metadata.create_all(engine)
     return engine
 

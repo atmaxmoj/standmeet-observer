@@ -20,24 +20,42 @@ from engine.pipeline.orchestrator import run_episode, run_distill, run_routines
 
 logger = logging.getLogger(__name__)
 
-settings = Settings()
+_settings = None
+_llm_client = None
 
-huey = SqliteHuey(
-    filename=str(Path(settings.huey_db_dir) / "huey.db"),
-)
 
-_llm = create_client(
-    api_key=settings.anthropic_api_key,
-    auth_token=settings.claude_code_oauth_token,
-    openai_api_key=settings.openai_api_key,
-    openai_base_url=settings.openai_base_url,
-)
+def _get_settings():
+    global _settings
+    if _settings is None:
+        _settings = Settings()
+    return _settings
+
+
+def _get_llm():
+    global _llm_client
+    if _llm_client is None:
+        s = _get_settings()
+        _llm_client = create_client(
+            api_key=s.anthropic_api_key,
+            auth_token=s.claude_code_oauth_token,
+            openai_api_key=s.openai_api_key,
+            openai_base_url=s.openai_base_url,
+        )
+    return _llm_client
+
+
+def _get_huey():
+    s = _get_settings()
+    return SqliteHuey(filename=str(Path(s.huey_db_dir) / "huey.db"))
+
+
+huey = _get_huey()
 
 
 def _get_session():
     """Get a SQLAlchemy session for ORM operations."""
     from engine.storage.engine import get_sync_session_factory
-    factory = get_sync_session_factory(settings.database_url_sync)
+    factory = get_sync_session_factory(_get_settings().database_url_sync)
     return factory()
 
 
@@ -109,7 +127,7 @@ def on_new_data():
             _mark_all_processed(session, all_screen_ids, all_audio_ids, all_os_ids, all_source_ids, registry, [])
             return
 
-        windows, remainder = detect_windows(kept, window_minutes=30, idle_seconds=settings.idle_threshold_seconds)
+        windows, remainder = detect_windows(kept, window_minutes=30, idle_seconds=_get_settings().idle_threshold_seconds)
 
         if not windows:
             logger.info("on_new_data: %d frames, no complete windows, %d remainder", len(all_raw), len(remainder))
@@ -157,7 +175,7 @@ def process_episode(
         if not check_daily_budget(session, DAILY_COST_CAP_USD):
             logger.warning("process_episode: budget exceeded, skipping")
             return
-        tasks, count = run_episode(_llm, session, screen_ids, audio_ids, os_event_ids, source_ids=source_ids)
+        tasks, count = run_episode(_get_llm(), session, screen_ids, audio_ids, os_event_ids, source_ids=source_ids)
         session.commit()
         logger.info("process_episode: %d episodes created", count)
     except Exception:
@@ -179,7 +197,7 @@ def daily_distill_task():
         if not check_daily_budget(session, DAILY_COST_CAP_USD):
             logger.warning("daily distill: budget exceeded, skipping")
             return
-        count = run_distill(_llm, session)
+        count = run_distill(_get_llm(), session)
         session.commit()
         logger.info("daily distill: %d entries updated", count)
     except Exception:
@@ -199,7 +217,7 @@ def daily_routines_task():
         if not check_daily_budget(session, DAILY_COST_CAP_USD):
             logger.warning("daily routines: budget exceeded, skipping")
             return
-        count = run_routines(_llm, session)
+        count = run_routines(_get_llm(), session)
         session.commit()
         logger.info("daily routines: %d routines updated", count)
     except Exception:
@@ -295,7 +313,7 @@ def daily_gc_task():
         gc_tools = make_dedup_tools(session) + make_audit_tools(session) + make_manifest_purge_tools(session)
         try:
             gc_prompt = _build_gc_prompt()
-            resp = _llm.complete_with_tools(
+            resp = _get_llm().complete_with_tools(
                 gc_prompt, MODEL_DEEP, gc_tools, max_turns=10,
             )
             from engine.storage.sync_db import SyncDB

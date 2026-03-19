@@ -23,7 +23,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 from engine.api.routes import router
-from tests.conftest import TEST_PG_SYNC, TEST_PG_ASYNC
+from tests.conftest import TEST_PG_SYNC
 
 
 @pytest.fixture(autouse=True)

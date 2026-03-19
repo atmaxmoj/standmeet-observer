@@ -25,10 +25,7 @@ def get_session(conn_or_url) -> Session:
         url = Settings().database_url_sync
 
     if url not in _factory_cache:
-        kwargs = {}
-        if url.startswith("sqlite"):
-            kwargs["connect_args"] = {"check_same_thread": False}
-        engine = _sa_create_engine(url, **kwargs)
+        engine = _sa_create_engine(url)
         Base.metadata.create_all(engine)
         _factory_cache[url] = sessionmaker(bind=engine)
     return _factory_cache[url]()

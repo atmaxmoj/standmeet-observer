@@ -106,22 +106,14 @@ class ScreenSource(SourcePlugin):
         Mirrors the logic from capture/src/capture/daemon.py but runs within
         the source plugin framework.
         """
-        # Lazy import — backends depend on platform-specific packages
-        try:
-            from capture.backends import (
-                capture_display,
-                compress_image,
-                get_all_displays,
-                get_frontmost_app,
-                hash_image,
-                ocr_image,
-            )
-        except ImportError:
-            raise RuntimeError(
-                "screen source requires the capture package. "
-                "During migration, run the old capture daemon instead: "
-                "cd capture && uv run python -m capture"
-            )
+        from screen_source.backends import (
+            capture_display,
+            compress_image,
+            get_all_displays,
+            get_frontmost_app,
+            hash_image,
+            ocr_image,
+        )
 
         interval = config.get("interval_seconds", 3)
         max_width = config.get("max_width", 1024)

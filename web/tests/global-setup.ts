@@ -36,8 +36,9 @@ async function post(path: string, body: unknown) {
 async function seedTestData() {
   const now = new Date().toISOString();
 
+  // Screen frames
   for (let i = 0; i < 35; i++) {
-    await post("/ingest/frame", {
+    await post("/ingest/screen", {
       timestamp: now,
       app_name: `TestApp${i}`,
       window_name: `Test Window ${i}`,
@@ -46,6 +47,7 @@ async function seedTestData() {
     });
   }
 
+  // Audio transcription
   await post("/ingest/audio", {
     timestamp: now,
     text: "Test audio transcription content",
@@ -54,17 +56,16 @@ async function seedTestData() {
     source: "mic",
   });
 
-  await post("/ingest/os-event", {
+  // Shell command
+  await post("/ingest/zsh", {
     timestamp: now,
-    event_type: "shell_command",
-    source: "zsh",
-    data: "echo hello world",
+    command: "echo hello world",
   });
-  await post("/ingest/os-event", {
+
+  // Browser URL
+  await post("/ingest/chrome", {
     timestamp: now,
-    event_type: "browser_url",
-    source: "chrome",
-    data: "https://example.com",
+    url: "https://example.com",
   });
 }
 

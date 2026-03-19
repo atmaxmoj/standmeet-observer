@@ -30,9 +30,9 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     openai_base_url: str = ""
 
-    # Database
-    database_url: str = "sqlite+aiosqlite:///data/engine.db"
-    database_url_sync: str = "sqlite:///data/engine.db"
+    # Database (PostgreSQL)
+    database_url: str = "postgresql+asyncpg://observer:observer@db:5432/observer"
+    database_url_sync: str = "postgresql+psycopg://observer:observer@db:5432/observer"
 
     # Huey task queue (always SQLite, separate from engine data)
     huey_db_dir: str = "/data"

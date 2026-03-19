@@ -1,0 +1,12 @@
+.venv
+.git
+*.pyc
+__pycache__
+sources/*/.*venv
+sources/*/.venv
+web/node_modules
+web/.next
+web/dist
+.env
+*.log
+data/

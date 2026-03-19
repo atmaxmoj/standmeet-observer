@@ -1,0 +1,23 @@
+version = 1
+revision = 3
+requires-python = ">=3.12"
+
+[[package]]
+name = "observer-source-chrome"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "source-framework" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "source-framework", directory = "../../framework" }]
+
+[[package]]
+name = "source-framework"
+version = "0.1.0"
+source = { directory = "../../framework" }
+
+[package.metadata]
+requires-dist = [{ name = "pytest", marker = "extra == 'test'", specifier = ">=9.0" }]
+provides-extras = ["test"]
