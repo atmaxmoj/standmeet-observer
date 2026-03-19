@@ -7,7 +7,6 @@ import json
 import logging
 import os
 import sys
-import traceback
 import uuid
 from pathlib import Path
 
@@ -130,7 +129,7 @@ def test_agentic_distill_uses_tools():
         save_result("distill_full", {
             "entries_written": count,
             "playbook_entries": [{"name": e.name, "context": e.context, "confidence": e.confidence} for e in entries],
-            "logs": [{"stage": l.stage} for l in logs],
+            "logs": [{"stage": lg.stage} for lg in logs],
         })
 
         assert count > 0 or len(entries) > 0, "Agent wrote 0 entries"

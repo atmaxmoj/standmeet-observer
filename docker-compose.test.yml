@@ -20,7 +20,7 @@ services:
       - ./sources/builtin:/app/sources/builtin:ro
     environment:
       - SOURCES_DIR=/app/sources/builtin
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_OAUTH_TOKEN:-}
       - DATABASE_URL=postgresql+asyncpg://observer:observer@db-test:5432/observer_test
       - DATABASE_URL_SYNC=postgresql+psycopg://observer:observer@db-test:5432/observer_test

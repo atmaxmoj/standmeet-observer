@@ -7,7 +7,6 @@ import json
 import logging
 import os
 import sys
-import traceback
 import uuid
 from pathlib import Path
 
@@ -121,7 +120,7 @@ def test_agentic_routines_uses_tools():
         save_result("full", {
             "routines_written": count,
             "routines": [{"name": r.name, "trigger": r.trigger, "confidence": r.confidence} for r in routines],
-            "logs": [{"stage": l.stage} for l in logs],
+            "logs": [{"stage": lg.stage} for lg in logs],
         })
 
         assert count > 0 or len(routines) > 0, "Agent wrote 0 routines"
