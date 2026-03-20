@@ -468,13 +468,86 @@ async def update_proposal_status(request: Request, body: ProposalStatusUpdate):
 
 
 async def _chat_stream(db, llm, messages: list[dict]) -> AsyncGenerator[str, None]:
-    """SSE stream generator for chat — delegates tool loop to AgentService.astream()."""
+    """SSE stream generator for chat.
+
+    DirectAPIClient: uses astream() with native tool_use blocks.
+    AgentSDKClient: uses run_with_mcp() — Agent SDK handles tool calling via MCP.
+    """
+    from engine.llm.adapters.agent_sdk import AgentSDKClient
+
+    logger.info("chat: starting with %d messages, llm=%s", len(messages), type(llm).__name__)
+
+    if isinstance(llm, AgentSDKClient):
+        async for sse in _chat_stream_mcp(db, llm, messages):
+            yield sse
+    else:
+        async for sse in _chat_stream_native(db, llm, messages):
+            yield sse
+
+
+async def _chat_stream_mcp(db, llm, messages: list[dict]) -> AsyncGenerator[str, None]:
+    """Chat via Agent SDK + MCP tools (OAuth path). Agent SDK handles tool calling natively."""
+    import os
+    from engine.agents.service import AgentService
+    from engine.agents.tools.chat_mcp import create_chat_mcp_server
+    from engine.storage.engine import get_sync_session_factory
+
+    sync_url = os.environ.get("DATABASE_URL_SYNC", "")
+    if not sync_url:
+        yield _sse("error", {"message": "DATABASE_URL_SYNC not configured"})
+        return
+
+    session_factory = get_sync_session_factory(sync_url)
+    session = session_factory()
+    try:
+        mcp_server = create_chat_mcp_server(session)
+
+        # Build prompt from system + messages
+        parts = [SYSTEM_PROMPT]
+        for m in messages:
+            role = m["role"]
+            content = m["content"] if isinstance(m["content"], str) else json.dumps(m["content"])
+            parts.append(f"[{role}]: {content}")
+        prompt = "\n\n".join(parts)
+
+        yield _sse("tool_call", {"name": "thinking", "label": "Thinking..."})
+
+        import asyncio
+        agent = AgentService(llm)
+        result = await asyncio.to_thread(
+            agent.run_with_mcp,
+            prompt=prompt,
+            mcp_server=mcp_server,
+            mcp_name="chat",
+            stage="chat",
+            session=session,
+            model=MODEL_FAST,
+            max_turns=10,
+        )
+
+        reply = _clean_reply(result.result_text)
+        total_input = result.input_tokens
+        total_output = result.output_tokens
+
+        await db.append_chat_message("assistant", reply, json.dumps([], default=str))
+        await _record_usage(db, total_input, total_output)
+        logger.info("chat(mcp): done, %d in, %d out", total_input, total_output)
+        yield _sse("text", {"content": reply, "proposals": [],
+                            "input_tokens": total_input, "output_tokens": total_output})
+    except Exception as e:
+        logger.exception("chat(mcp): failed")
+        yield _sse("error", {"message": f"Chat failed: {e}"})
+    finally:
+        session.close()
+
+
+async def _chat_stream_native(db, llm, messages: list[dict]) -> AsyncGenerator[str, None]:
+    """Chat via native API with tool_use blocks (DirectAPIClient path)."""
     from engine.agents.service import AgentService
 
     tools = _make_read_tools(db)
     proposals: list[dict] = []
 
-    # Async tool handlers — astream supports both sync and async
     def _make_handler(tool_name):
         async def handler(**kwargs):
             result, proposal = await _handle_tool(db, tool_name, kwargs)
@@ -484,8 +557,6 @@ async def _chat_stream(db, llm, messages: list[dict]) -> AsyncGenerator[str, Non
         return handler
 
     tool_handlers = {t["name"]: _make_handler(t["name"]) for t in tools}
-
-    logger.info("chat: starting with %d messages", len(messages))
 
     agent = AgentService(llm)
     async for event in agent.astream(
