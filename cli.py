@@ -411,13 +411,17 @@ def cmd_test():
     results_dir.mkdir(parents=True, exist_ok=True)
 
     print("==> Running code checks...")
-    for name, cmd, cwd in [
-        ("ruff", ["uv", "run", "ruff", "check", "src/", "tests/", "tests_unit/", "cli.py"], ROOT),
-        ("tsc", ["npx", "tsc", "--noEmit"], ROOT / "web"),
-        ("eslint", ["npx", "eslint", "src/", "--max-warnings", "0"], ROOT / "web"),
-        ("knip", ["npx", "knip"], ROOT / "web"),
-    ]:
-        if run(cmd, cwd=cwd).returncode != 0:
+    env_with_pythonpath = {**os.environ, "PYTHONPATH": str(ROOT / "src")}
+    checks = [
+        ("ruff", ["uv", "run", "ruff", "check", "src/", "tests/", "tests_unit/", "cli.py"], ROOT, None),
+        ("lint-imports", ["uv", "run", "lint-imports"], ROOT, env_with_pythonpath),
+        ("tsc", ["npx", "tsc", "--noEmit"], ROOT / "web", None),
+        ("eslint", ["npx", "eslint", "src/", "--max-warnings", "0"], ROOT / "web", None),
+        ("knip", ["npx", "knip"], ROOT / "web", None),
+        ("madge", ["npx", "madge", "--circular", "--extensions", "ts,tsx", "src/"], ROOT / "web", None),
+    ]
+    for name, cmd, cwd, env in checks:
+        if run(cmd, cwd=cwd, **({"env": env} if env else {})).returncode != 0:
             sys.exit(f"\n==> CODE CHECK FAILED: {name}")
     print("==> All code checks passed\n")
 
