@@ -320,8 +320,7 @@ def daily_gc_task():
         try:
             from engine.agents.service import AgentService
             gc_prompt = _build_gc_prompt()
-            agent = AgentService(_get_llm())
-            resp = agent.complete_with_tools(
+            resp = AgentService(_get_llm()).run(
                 gc_prompt, MODEL_DEEP, gc_tools, max_turns=10,
             )
             from engine.storage.sync_db import SyncDB

@@ -457,84 +457,62 @@ async def update_proposal_status(request: Request, body: ProposalStatusUpdate):
 
 
 async def _chat_stream(db, llm, messages: list[dict]) -> AsyncGenerator[str, None]:
-    """SSE stream generator for chat — tool-use loop with event emission."""
+    """SSE stream generator for chat — delegates tool loop to AgentService.astream()."""
+    from engine.agents.service import AgentService
+
     tools = _make_read_tools(db)
     proposals: list[dict] = []
-    total_input = 0
-    total_output = 0
-    logger.info("chat: starting with %d messages", len(messages))
 
-    for _turn in range(8):
-        try:
-            logger.debug("chat: turn %d, calling amessages_create", _turn)
-            resp = await llm.amessages_create(
-                messages=messages,
-                model=MODEL_FAST,
-                tools=tools,
-                system=SYSTEM_PROMPT,
-            )
-        except NotImplementedError:
-            logger.warning("chat: LLM backend does not support amessages_create")
-            yield _sse("error", {"message": "LLM backend does not support chat."})
-            return
-        except Exception:
-            logger.exception("chat: amessages_create failed")
-            yield _sse("error", {"message": "LLM call failed. Check engine logs."})
-            return
+    # Build sync tool handlers from chat's async _handle_tool
+    import asyncio
 
-        total_input += resp.input_tokens
-        total_output += resp.output_tokens
-
-        tool_uses = [b for b in resp.content if b.type == "tool_use"]
-        text_blocks = [b for b in resp.content if b.type == "text"]
-
-        logger.debug("chat: turn %d got %d tool_uses, stop=%s", _turn, len(tool_uses), resp.stop_reason)
-
-        if not tool_uses or resp.stop_reason == "end_turn":
-            reply = _clean_reply(text_blocks[-1].text if text_blocks else "")
-            await db.append_chat_message("assistant", reply, json.dumps(proposals, default=str))
-            await _record_usage(db, total_input, total_output)
-            logger.info("chat: done, %d tokens in, %d out, %d proposals", total_input, total_output, len(proposals))
-            yield _sse("text", {"content": reply, "proposals": proposals,
-                                "input_tokens": total_input, "output_tokens": total_output})
-            return
-
-        # Build assistant message content for conversation history
-        assistant_content = []
-        for b in resp.content:
-            if b.type == "text":
-                assistant_content.append({"type": "text", "text": b.text})
-            elif b.type == "tool_use":
-                assistant_content.append({
-                    "type": "tool_use", "id": b.tool_use_id,
-                    "name": b.tool_name, "input": b.tool_input,
-                })
-        messages.append({"role": "assistant", "content": assistant_content})
-
-        # Execute tool calls with SSE events
-        tool_results = []
-        for tu in tool_uses:
-            label = TOOL_LABELS.get(tu.tool_name, tu.tool_name)
-            logger.info("chat: calling tool %s", tu.tool_name)
-            yield _sse("tool_call", {"name": tu.tool_name, "label": label})
-
-            result, proposal = await _handle_tool(db, tu.tool_name, tu.tool_input or {})
+    def _make_sync_handler(tool_db, tool_name):
+        def handler(**kwargs):
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    result, proposal = pool.submit(asyncio.run, _handle_tool(tool_db, tool_name, kwargs)).result()
+            else:
+                result, proposal = asyncio.run(_handle_tool(tool_db, tool_name, kwargs))
             if proposal:
                 proposals.append(proposal)
-            tool_results.append({
-                "type": "tool_result",
-                "tool_use_id": tu.tool_use_id,
-                "content": json.dumps(result, default=str),
-            })
-        messages.append({"role": "user", "content": tool_results})
+            return result
+        return handler
 
-    # Max turns
-    await _record_usage(db, total_input, total_output)
-    yield _sse("text", {
-        "content": "I've reached the maximum number of steps. Please try a more specific question.",
-        "proposals": proposals,
-        "input_tokens": total_input, "output_tokens": total_output,
-    })
+    tool_handlers = {}
+    for t in tools:
+        tool_handlers[t["name"]] = _make_sync_handler(db, t["name"])
+
+    logger.info("chat: starting with %d messages", len(messages))
+
+    agent = AgentService(llm)
+    async for event in agent.astream(
+        messages=messages,
+        model=MODEL_FAST,
+        tools=tools,
+        tool_handlers=tool_handlers,
+        system=SYSTEM_PROMPT,
+    ):
+        if event["type"] == "tool_call":
+            label = TOOL_LABELS.get(event["name"], event["name"])
+            logger.info("chat: tool %s", event["name"])
+            yield _sse("tool_call", {"name": event["name"], "label": label})
+
+        elif event["type"] == "response":
+            text_blocks = [b for b in event["content"] if b.type == "text"]
+            reply = _clean_reply(text_blocks[-1].text if text_blocks else "")
+            total_input = event["input_tokens"]
+            total_output = event["output_tokens"]
+
+            await db.append_chat_message("assistant", reply, json.dumps(proposals, default=str))
+            await _record_usage(db, total_input, total_output)
+            logger.info("chat: done, %d in, %d out, %d proposals", total_input, total_output, len(proposals))
+            yield _sse("text", {"content": reply, "proposals": proposals,
+                                "input_tokens": total_input, "output_tokens": total_output})
+
+        elif event["type"] == "error":
+            yield _sse("error", {"message": event["message"]})
 
 
 @router.post("/memory/chat")

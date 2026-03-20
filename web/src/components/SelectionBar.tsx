@@ -14,7 +14,7 @@ export function SelectionBar({ count, allCount, onSelectAll, onClear, onDelete, 
           {allSelected ? "Deselect all" : `Select all ${allCount}`}
         </button>
         <div className="w-px h-4 bg-border" />
-        <Button variant="destructive" size="sm" className="h-7 text-xs" onClick={onDelete} disabled={deleting}>
+        <Button variant="destructive" size="sm" className="h-7 text-xs" onClick={onDelete} disabled={deleting} data-testid="selection-delete">
           {deleting ? "Deleting..." : "Delete"}
         </Button>
         <button onClick={onClear} data-testid="selection-cancel" className="text-xs text-muted-foreground hover:text-foreground transition-colors ml-1">

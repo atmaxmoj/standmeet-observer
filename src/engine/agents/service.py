@@ -1,10 +1,13 @@
-"""AgentService — agentic capabilities on top of LLMClient.
+"""AgentService — agentic multi-turn tool interactions.
 
-Provides:
-- complete_with_tools(): multi-turn tool-use loop via Anthropic API
-- run_mcp(): multi-turn agentic with MCP server via Agent SDK
+Single entry point for any code that needs multi-turn LLM + tools.
+Consumers: distill, compose, gc, chat.
 
-Consumers: distill, compose, gc pipelines.
+Usage:
+    agent = AgentService(llm)
+    result = agent.run(prompt, tools, session)           # sync, with ToolDef
+    result = await agent.arun(messages, tools, system)   # async, with API tool dicts
+    result = agent.run_with_mcp(prompt, mcp_server, ...) # sync, Agent SDK + MCP
 """
 
 from __future__ import annotations
@@ -28,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class AgentResult:
-    """Result from an agentic MCP run."""
+    """Result from an agentic run."""
     result_text: str
     cost_usd: float
     input_tokens: int
@@ -36,103 +39,141 @@ class AgentResult:
 
 
 class AgentService:
-    """Agentic capabilities built on top of an LLMClient."""
+    """Multi-turn tool interactions on top of LLMClient."""
 
     def __init__(self, llm: LLMClient):
         self.llm = llm
 
-    def complete_with_tools(
+    # ── Sync tool loop (GC, distill one-shot with tools) ──
+
+    def run(
         self,
         prompt: str,
         model: str,
         tools: list[ToolDef],
         max_turns: int = 5,
     ) -> LLMResponse:
-        """Multi-turn tool-use loop using the underlying LLM client."""
-        api_tools = [
-            {"name": t.name, "description": t.description, "input_schema": t.input_schema}
-            for t in tools
-        ]
-        tool_handlers = {t.name: t.handler for t in tools}
+        """Sync multi-turn tool loop. Works with any LLMClient."""
+        if hasattr(self.llm, '_sync'):
+            return self._run_native(prompt, model, tools, max_turns)
+        return self._run_text(prompt, model, tools, max_turns)
 
-        messages: list[dict] = [{"role": "user", "content": prompt}]
+    # ── Async streaming tool loop (chat) ──
+
+    async def astream(
+        self,
+        messages: list[dict],
+        model: str,
+        tools: list[dict],
+        tool_handlers: dict,
+        system: str = "",
+        max_turns: int = 8,
+    ):
+        """Async generator — yields events during multi-turn tool loop.
+
+        Yields dicts with "type" key:
+          {"type": "tool_call", "name": ..., "input": ..., "result": ...}
+          {"type": "response", "content": [...], "stop_reason": ..., "input_tokens": ..., "output_tokens": ...}
+          {"type": "error", "message": ...}
+
+        Messages list is modified in-place (tool results appended).
+        """
         total_input = 0
         total_output = 0
-        final_text = ""
 
-        for turn in range(max_turns):
-            logger.debug("complete_with_tools turn=%d model=%s tools=%d", turn, model, len(api_tools))
-            kwargs: dict = {
-                "model": model,
-                "max_tokens": 16384,
-                "messages": messages,
-                "tools": api_tools,
-            }
-            if "opus-4-6" in model or "sonnet-4-6" in model:
-                kwargs["thinking"] = {"type": "adaptive"}
+        for _turn in range(max_turns):
+            try:
+                resp = await self.llm.amessages_create(
+                    messages=messages, model=model, tools=tools, system=system,
+                )
+            except NotImplementedError:
+                yield {"type": "error", "message": "LLM backend does not support chat."}
+                return
+            except Exception as e:
+                logger.exception("astream: LLM call failed")
+                yield {"type": "error", "message": f"LLM call failed: {e}"}
+                return
 
-            response = self.llm._sync.messages.create(**kwargs)
-            total_input += response.usage.input_tokens
-            total_output += response.usage.output_tokens
+            total_input += resp.input_tokens
+            total_output += resp.output_tokens
 
-            tool_uses = [b for b in response.content if b.type == "tool_use"]
-            text_blocks = [b for b in response.content if b.type == "text"]
+            tool_uses = [b for b in resp.content if b.type == "tool_use"]
 
-            if text_blocks:
-                final_text = text_blocks[-1].text
+            if not tool_uses or resp.stop_reason == "end_turn":
+                yield {
+                    "type": "response",
+                    "content": resp.content,
+                    "stop_reason": resp.stop_reason,
+                    "input_tokens": total_input,
+                    "output_tokens": total_output,
+                }
+                return
 
-            if not tool_uses or response.stop_reason == "end_turn":
-                break
+            # Build assistant message
+            messages.append({"role": "assistant", "content": [
+                {"type": "tool_use", "id": b.tool_use_id, "name": b.tool_name, "input": b.tool_input}
+                for b in tool_uses
+            ]})
 
-            messages.append({"role": "assistant", "content": response.content})
+            # Execute tools, yield each
             tool_results = []
             for tu in tool_uses:
-                handler = tool_handlers.get(tu.name)
+                handler = tool_handlers.get(tu.tool_name)
+                result = None
+                error = None
                 if handler:
                     try:
-                        result = handler(**tu.input)
-                        tool_results.append({
-                            "type": "tool_result",
-                            "tool_use_id": tu.id,
-                            "content": json.dumps(result, default=str),
-                        })
+                        result = handler(**(tu.tool_input or {}))
                     except Exception as e:
-                        logger.warning("Tool %s failed: %s", tu.name, e)
-                        tool_results.append({
-                            "type": "tool_result",
-                            "tool_use_id": tu.id,
-                            "content": json.dumps({"error": str(e)}),
-                            "is_error": True,
-                        })
+                        logger.warning("Tool %s failed: %s", tu.tool_name, e)
+                        error = str(e)
+                else:
+                    error = f"Unknown tool: {tu.tool_name}"
+
+                yield {
+                    "type": "tool_call",
+                    "name": tu.tool_name,
+                    "input": tu.tool_input,
+                    "result": result,
+                    "error": error,
+                }
+
+                if error:
+                    tool_results.append({
+                        "type": "tool_result", "tool_use_id": tu.tool_use_id,
+                        "content": json.dumps({"error": error}), "is_error": True,
+                    })
                 else:
                     tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": tu.id,
-                        "content": json.dumps({"error": f"Unknown tool: {tu.name}"}),
-                        "is_error": True,
+                        "type": "tool_result", "tool_use_id": tu.tool_use_id,
+                        "content": json.dumps(result, default=str) if not isinstance(result, str) else result,
                     })
             messages.append({"role": "user", "content": tool_results})
 
-        return LLMResponse(
-            text=final_text,
-            input_tokens=total_input,
-            output_tokens=total_output,
-        )
+        # Max turns
+        yield {
+            "type": "response",
+            "content": resp.content if 'resp' in dir() else [],
+            "stop_reason": "max_turns",
+            "input_tokens": total_input,
+            "output_tokens": total_output,
+        }
 
-    def run_mcp(
+    # ── Agent SDK + MCP (agentic distill/compose) ──
+
+    def run_with_mcp(
         self,
         prompt: str,
-        mcp_server: "FastMCP",
+        mcp_server: FastMCP,
         mcp_name: str,
         stage: str,
-        session: "Session",
+        session: Session,
         model: str = "",
         max_turns: int = 15,
     ) -> AgentResult:
-        """Run Agent SDK query() with an in-process MCP server.
+        """Multi-turn agentic with MCP tools via Agent SDK.
 
-        This is the only place that uses Agent SDK — for MCP tool integration.
-        All other LLM calls go through self.llm directly.
+        Only method that uses Agent SDK — needed for MCP tool integration.
         """
         from claude_agent_sdk import query as sdk_query, ClaudeAgentOptions, ResultMessage
         from engine.config import MODEL_DEEP
@@ -140,7 +181,7 @@ class AgentService:
         if not model:
             model = MODEL_DEEP
 
-        logger.info("%s: starting with MCP server", stage)
+        logger.info("%s: starting agentic run", stage)
 
         env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
         token = os.environ.get("CLAUDE_CODE_OAUTH_TOKEN", "")
@@ -196,3 +237,82 @@ class AgentService:
             input_tokens=input_tokens,
             output_tokens=output_tokens,
         )
+
+    # ── Private: native API tool loop ──
+
+    def _run_native(self, prompt: str, model: str, tools: list[ToolDef], max_turns: int) -> LLMResponse:
+        api_tools = [{"name": t.name, "description": t.description, "input_schema": t.input_schema} for t in tools]
+        tool_handlers = {t.name: t.handler for t in tools}
+        messages: list[dict] = [{"role": "user", "content": prompt}]
+        total_input = 0
+        total_output = 0
+        final_text = ""
+
+        for turn in range(max_turns):
+            logger.debug("run turn=%d model=%s tools=%d", turn, model, len(api_tools))
+            kwargs: dict = {"model": model, "max_tokens": 16384, "messages": messages, "tools": api_tools}
+            if "opus-4-6" in model or "sonnet-4-6" in model:
+                kwargs["thinking"] = {"type": "adaptive"}
+            response = self.llm._sync.messages.create(**kwargs)
+            total_input += response.usage.input_tokens
+            total_output += response.usage.output_tokens
+            tool_uses = [b for b in response.content if b.type == "tool_use"]
+            text_blocks = [b for b in response.content if b.type == "text"]
+            if text_blocks:
+                final_text = text_blocks[-1].text
+            if not tool_uses or response.stop_reason == "end_turn":
+                break
+            messages.append({"role": "assistant", "content": response.content})
+            messages.append({"role": "user", "content": self._exec_tools(tool_uses, tool_handlers)})
+
+        return LLMResponse(text=final_text, input_tokens=total_input, output_tokens=total_output)
+
+    def _run_text(self, prompt: str, model: str, tools: list[ToolDef], max_turns: int) -> LLMResponse:
+        """Text-based tool loop for AgentSDKClient (OAuth)."""
+        tool_handlers = {t.name: t.handler for t in tools}
+        tool_desc = "\n".join(f"- {t.name}: {t.description}" for t in tools)
+        conversation = [f"{prompt}\n\nAvailable tools:\n{tool_desc}\n\nTo call a tool: <tool_call>{{\"name\":\"...\",\"input\":{{...}}}}</tool_call>"]
+        total_input = 0
+        total_output = 0
+        final_text = ""
+
+        for turn in range(max_turns):
+            resp = self.llm.complete("\n\n".join(conversation), model)
+            total_input += resp.input_tokens
+            total_output += resp.output_tokens
+            final_text = resp.text
+            if "<tool_call>" not in resp.text:
+                break
+            import re
+            calls = re.findall(r'<tool_call>(.*?)</tool_call>', resp.text, re.DOTALL)
+            if not calls:
+                break
+            conversation.append(resp.text)
+            results = []
+            for call_str in calls:
+                try:
+                    call = json.loads(call_str)
+                    handler = tool_handlers.get(call["name"])
+                    result = handler(**call.get("input", {})) if handler else {"error": f"Unknown: {call['name']}"}
+                    results.append(f"[Tool {call['name']}: {json.dumps(result, default=str)[:2000]}]")
+                except Exception as e:
+                    results.append(f"[Tool error: {e}]")
+            conversation.append("\n".join(results))
+
+        return LLMResponse(text=final_text, input_tokens=total_input, output_tokens=total_output)
+
+    @staticmethod
+    def _exec_tools(tool_uses: list, tool_handlers: dict) -> list[dict]:
+        results = []
+        for tu in tool_uses:
+            handler = tool_handlers.get(tu.name)
+            if handler:
+                try:
+                    result = handler(**tu.input)
+                    results.append({"type": "tool_result", "tool_use_id": tu.id, "content": json.dumps(result, default=str)})
+                except Exception as e:
+                    logger.warning("Tool %s failed: %s", tu.name, e)
+                    results.append({"type": "tool_result", "tool_use_id": tu.id, "content": json.dumps({"error": str(e)}), "is_error": True})
+            else:
+                results.append({"type": "tool_result", "tool_use_id": tu.id, "content": json.dumps({"error": f"Unknown: {tu.name}"}), "is_error": True})
+        return results

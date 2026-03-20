@@ -351,8 +351,16 @@ def _test_e2e(compose_test, results_dir):
             cwd=ROOT, stdout=log, stderr=subprocess.STDOUT,
         )
     _compose(compose_test, "cp", "engine-test:/data/.", str(results_dir / "web-data"))
+    # Dump engine logs on failure (before down -v destroys containers)
     if r.returncode != 0:
+        engine_e2e_log = results_dir / "engine-e2e.log"
+        with open(engine_e2e_log, "w") as elog:
+            subprocess.run(
+                ["docker", "compose", "-p", "bisimulator-test", "-f", compose_test, "logs", "engine-test"],
+                cwd=ROOT, stdout=elog, stderr=subprocess.STDOUT,
+            )
         print(f"  See {web_log}")
+        print(f"  Engine logs: {engine_e2e_log}")
     return [("e2e", r.returncode)]
 
 

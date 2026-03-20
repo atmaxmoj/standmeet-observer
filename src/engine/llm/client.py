@@ -67,7 +67,7 @@ def create_client(
         logger.info("Using Anthropic API (API key)")
         return DirectAPIClient(api_key=api_key)
     if auth_token:
-        from engine.llm.adapters.anthropic import DirectAPIClient
-        logger.info("Using Anthropic API (OAuth token)")
-        return DirectAPIClient(auth_token=auth_token)
+        from engine.llm.adapters.agent_sdk import AgentSDKClient
+        logger.info("Using Claude Agent SDK (OAuth token)")
+        return AgentSDKClient(auth_token)
     raise ValueError("No LLM credentials configured. Set ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN.")

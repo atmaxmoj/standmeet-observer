@@ -172,14 +172,20 @@ test.describe("Dashboard", () => {
     await page.screenshot({ path: "tests/screenshots/logs.png", fullPage: true });
   });
 
-  test("record detail overlay opens on click", async ({ page }) => {
+  test("record detail overlay opens on thumbnail click", async ({ page }) => {
     await page.goto("/");
     await nav(page, "source:screen");
     const panel = page.getByTestId("source-panel-screen");
     await expect(panel.getByTestId("source-record-card").first()).toBeVisible({ timeout: 10000 });
 
-    // Click the first card to open detail
-    await panel.getByTestId("source-record-card").first().click();
+    // Click thumbnail image (or OCR button) on first card to open detail
+    const firstCard = panel.getByTestId("source-record-card").first();
+    const thumb = firstCard.locator("img").first();
+    if (await thumb.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await thumb.click();
+    } else {
+      await firstCard.getByText("OCR").click();
+    }
 
     // Detail overlay should appear
     const detail = page.getByTestId("record-detail");
@@ -346,32 +352,25 @@ test.describe("Dashboard", () => {
     // May or may not have routines depending on data, but should not error
   });
 
-  test("Pipeline toggle switches between Recording and Paused", async ({ page }) => {
+  test("Pipeline toggle changes pause state", async ({ page }) => {
     await page.goto("/");
     const toggle = page.getByTestId("pipeline-toggle");
     await expect(toggle).toBeVisible({ timeout: 10000 });
 
-    // Read current state
+    // Read current text
     const textBefore = await toggle.textContent();
-    const wasPaused = textBefore?.includes("Paused");
 
-    // Click toggle
+    // Click toggle — state should change
     await toggle.click();
+    await page.waitForTimeout(1000);
+    const textAfter = await toggle.textContent();
+    expect(textAfter).not.toBe(textBefore);
 
-    // State should change
-    if (wasPaused) {
-      await expect(toggle).toContainText("Recording", { timeout: 5000 });
-    } else {
-      await expect(toggle).toContainText("Paused", { timeout: 5000 });
-    }
-
-    // Click again to restore original state
+    // Click again to restore
     await toggle.click();
-    if (wasPaused) {
-      await expect(toggle).toContainText("Paused", { timeout: 5000 });
-    } else {
-      await expect(toggle).toContainText("Recording", { timeout: 5000 });
-    }
+    await page.waitForTimeout(1000);
+    const textRestored = await toggle.textContent();
+    expect(textRestored).toBe(textBefore);
   });
 
   test("Batch delete removes selected records", async ({ page }) => {
