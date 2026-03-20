@@ -307,13 +307,14 @@ test.describe("Dashboard", () => {
     const panel = page.getByTestId("chat-panel");
     await expect(panel).toBeVisible({ timeout: 10000 });
 
-    // Wait for input to be ready
+    // Wait for input to be ready, then fill (Send is disabled while input is empty)
     const input = panel.getByTestId("chat-input");
     await expect(input).toBeVisible({ timeout: 5000 });
+    await expect(input).toBeEnabled({ timeout: 5000 });
+    await input.fill("search the web for what is SearXNG");
+
     const sendBtn = panel.getByRole("button", { name: "Send" });
     await expect(sendBtn).toBeEnabled({ timeout: 5000 });
-
-    await input.fill("search the web for what is SearXNG");
     await sendBtn.click();
 
     await expect(panel.getByText(/Thinking|Searching/)).toBeVisible({ timeout: 15000 });
