@@ -52,6 +52,97 @@ class TestShouldKeep:
         f2 = _frame(source="os_event", app_name="browser_url", text="   ")
         assert should_keep(f2) is False
 
+    def test_osascript_noise_does_not_produce_episodes(self):
+        """Realistic scenario: oslog captures observer's own osascript polling every 3s.
+
+        These should be filtered out, producing zero windows (= zero episodes).
+        Without the fix, this creates a window every ~3 minutes — the root cause
+        of the 'frequent episode' bug.
+        """
+        base = datetime(2026, 3, 20, 12, 0, 0, tzinfo=timezone.utc)
+        # Simulate 10 minutes of osascript launch/quit every 3 seconds (200 events)
+        noise_frames = []
+        for i in range(200):
+            ts = (base + timedelta(seconds=i * 3)).isoformat()
+            pid = 10000 + i
+            noise_frames.append(_frame(
+                id=i * 2, source="os_event", app_name="oslog",
+                text=f"[app_launch] runningboardd: Now tracking process: [anon<osascript>(501):{pid}]",
+                timestamp=ts,
+            ))
+            noise_frames.append(_frame(
+                id=i * 2 + 1, source="os_event", app_name="oslog",
+                text=f"[app_quit] runningboardd: [anon<osascript>(501):{pid}] termination reported by proc_exit",
+                timestamp=ts,
+            ))
+
+        # Filter then detect windows
+        kept = [f for f in noise_frames if should_keep(f)]
+        windows, remainder = detect_windows(kept)
+
+        # All noise should be filtered — zero frames kept, zero windows
+        assert len(kept) == 0, f"Expected 0 frames kept, got {len(kept)}"
+        assert len(windows) == 0, f"Expected 0 windows, got {len(windows)}"
+
+    def test_osascript_noise_mixed_with_real_work(self):
+        """osascript noise interleaved with real user activity.
+
+        Only real user frames should survive filtering and produce windows.
+        """
+        base = datetime(2026, 3, 20, 12, 0, 0, tzinfo=timezone.utc)
+        frames = []
+        fid = 0
+
+        # 10 minutes of osascript noise every 3s
+        for i in range(200):
+            ts = (base + timedelta(seconds=i * 3)).isoformat()
+            frames.append(_frame(
+                id=fid, source="os_event", app_name="oslog",
+                text=f"[app_launch] runningboardd: Now tracking process: [anon<osascript>(501):{10000+i}]",
+                timestamp=ts,
+            ))
+            fid += 1
+
+        # Sprinkle in real user activity (screen captures while coding)
+        for i in range(5):
+            ts = (base + timedelta(minutes=i * 2)).isoformat()
+            frames.append(_frame(
+                id=fid, source="capture", app_name="VSCode",
+                text="def process_data(): return transform(input_data)",
+                timestamp=ts,
+            ))
+            fid += 1
+
+        frames.sort(key=lambda f: f.timestamp)
+        kept = [f for f in frames if should_keep(f)]
+
+        # Only the 5 real captures should survive
+        assert all(f.source == "capture" for f in kept), "Noise frames leaked through filter"
+        assert len(kept) == 5
+
+    def test_filters_observer_process_noise(self):
+        """oslog frames from observer's own processes (osascript, node, caffeinate) should be filtered."""
+        noise_texts = [
+            "[app_launch] runningboardd: Now tracking process: [anon<osascript>(501):11492]",
+            "[app_quit] runningboardd: [anon<osascript>(501):11491] termination reported by proc_exit",
+            "[app_launch] runningboardd: Now tracking process: [anon<caffeinate>(501):5678]",
+            "[app_quit] runningboardd: [anon<node>(501):9999] termination reported by proc_exit",
+        ]
+        for text in noise_texts:
+            f = _frame(source="os_event", app_name="oslog", text=text)
+            assert should_keep(f) is False, f"Should filter: {text}"
+
+    def test_keeps_real_app_oslog_events(self):
+        """oslog frames about real user apps should be kept."""
+        real_texts = [
+            "[app_launch] runningboardd: Now tracking process: [app<com.apple.Safari>(501):1234]",
+            "[frontmost_change] com.apple.Terminal became frontmost",
+            "[app_launch] runningboardd: Now tracking process: [app<com.microsoft.VSCode>(501):5678]",
+        ]
+        for text in real_texts:
+            f = _frame(source="os_event", app_name="oslog", text=text)
+            assert should_keep(f) is True, f"Should keep: {text}"
+
     def test_os_event_not_affected_by_ignore_apps(self):
         """os_events use event_type as app_name, should never be filtered by IGNORE_APPS."""
         f = _frame(source="os_event", app_name="Finder", text="some event data here")

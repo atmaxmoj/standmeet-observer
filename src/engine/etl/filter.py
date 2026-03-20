@@ -1,5 +1,6 @@
 """Rules-based signal filter + batch window detection. No LLM, $0 cost."""
 
+import re
 import logging
 from datetime import datetime, timezone
 
@@ -22,6 +23,11 @@ IGNORE_APPS = frozenset(
     }
 )
 
+# Processes spawned by observer itself (source plugins use osascript, node, caffeinate).
+# These show up in oslog as [anon<processname>(uid):pid] — filter them to avoid
+# observer observing itself and creating junk episodes every ~3 minutes.
+_OBSERVER_PROCESS_RE = re.compile(r"\[anon<(osascript|node|caffeinate)\>\(\d+\):\d+\]")
+
 MIN_TEXT_LENGTH = 10
 
 
@@ -29,6 +35,10 @@ def should_keep(frame: Frame) -> bool:
     if frame.source in ("os_event", "audio"):
         if not frame.text or not frame.text.strip():
             logger.debug("filtered out %s id=%d (empty text)", frame.source, frame.id)
+            return False
+        # Filter observer's own process noise from oslog
+        if _OBSERVER_PROCESS_RE.search(frame.text):
+            logger.debug("filtered out oslog id=%d (observer process noise)", frame.id)
             return False
         return True
     if frame.app_name in IGNORE_APPS:
