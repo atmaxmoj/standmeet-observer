@@ -91,6 +91,7 @@ class AgentService:
 
     async def _astream_native(self, messages, model, tools, tool_handlers, system, max_turns):
         """Native API path — uses amessages_create with tool_use blocks."""
+        logger.info("astream: using native API path (%d tools)", len(tools))
         total_input = 0
         total_output = 0
         resp = None
@@ -142,10 +143,8 @@ class AgentService:
                "input_tokens": total_input, "output_tokens": total_output}
 
     async def _astream_via_mcp(self, messages, model, tools, tool_handlers, system, max_turns):
-        """OAuth path — wraps tools as MCP server, runs via Agent SDK.
-
-        Agent SDK handles tool calling natively. We yield a single response event.
-        """
+        """OAuth path — wraps tools as MCP server, runs via Agent SDK."""
+        logger.info("astream: using MCP/Agent SDK path (%d tools)", len(tools))
         from mcp.server.fastmcp import FastMCP
 
         # Build MCP server from tool definitions
