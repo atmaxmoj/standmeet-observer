@@ -12,6 +12,9 @@ PYTHONPATH=src uv run pytest tests_unit/ -q || exit 1
 
 # Python: source framework unit tests (Docker — skipped in pre-commit, run via npm test)
 
+# JS/TS: unit tests (vitest)
+(cd web && npx vitest run) || exit 1
+
 # JS/TS: TypeScript compile check
 (cd web && npx tsc -b) || exit 1
 

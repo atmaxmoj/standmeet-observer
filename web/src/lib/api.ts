@@ -134,7 +134,7 @@ export interface PipelineLog {
   created_at: string;
 }
 
-function qs(params: Record<string, string | number>): string {
+export function qs(params: Record<string, string | number>): string {
   return Object.entries(params)
     .filter(([, v]) => typeof v === "number" || v !== "")
     .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)

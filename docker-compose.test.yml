@@ -26,6 +26,11 @@ services:
       - ANTHROPIC_API_KEY=sk-fake-test-key
     command: ["uv", "run", "pytest", "tests_unit/", "-q", "--tb=short"]
 
+  vitest:
+    build:
+      context: web
+      dockerfile: Dockerfile.unit
+
   engine-test:
     build: .
     volumes:

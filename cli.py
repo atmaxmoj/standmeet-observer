@@ -308,6 +308,17 @@ def _test_unit(compose_test, results_dir):
     results.append(("unit", r.returncode))
     if r.returncode != 0:
         print(f"  See {unit_log}")
+
+    print("\n==> [1/4] Web unit tests (Docker, vitest)...")
+    vitest_log = results_dir / "vitest.log"
+    with open(vitest_log, "w") as log:
+        r = subprocess.run(
+            ["docker", "compose", "-p", "observer-test", "-f", compose_test, "run", "--rm", "vitest"],
+            cwd=ROOT, stdout=log, stderr=subprocess.STDOUT,
+        )
+    results.append(("vitest", r.returncode))
+    if r.returncode != 0:
+        print(f"  See {vitest_log}")
     return results
 
 
