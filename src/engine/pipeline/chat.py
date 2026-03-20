@@ -385,7 +385,7 @@ async def chat_stream(db, llm, messages: list[dict]) -> AsyncGenerator[str, None
 
 async def _stream_mcp(db, llm, messages: list[dict]) -> AsyncGenerator[str, None]:
     """Chat via Agent SDK + MCP tools (OAuth path)."""
-    from engine.agents.service import AgentService, MCPRunOptions
+    from engine.agents.service import AgentService
     from engine.agents.tools.chat_mcp import create_chat_mcp_server
     from engine.storage.engine import get_sync_session_factory
 
@@ -396,17 +396,17 @@ async def _stream_mcp(db, llm, messages: list[dict]) -> AsyncGenerator[str, None
 
     session = get_sync_session_factory(sync_url)()
     try:
-        mcp_server = create_chat_mcp_server(session)
+        tool_queue: queue.Queue[str | None] = queue.Queue()
+        mcp_server = create_chat_mcp_server(
+            session, on_tool_call=lambda name: tool_queue.put(name),
+        )
         prompt = build_chat_prompt(messages)
         yield sse("tool_call", {"name": "thinking", "label": "Thinking..."})
-
-        tool_queue: queue.Queue[str | None] = queue.Queue()
 
         def _run():
             result = AgentService(llm).run_with_mcp(
                 prompt=prompt, mcp_server=mcp_server, mcp_name="chat",
                 stage="chat", session=session, model=MODEL_FAST, max_turns=10,
-                options=MCPRunOptions(on_tool_call=lambda name: tool_queue.put(name)),
             )
             tool_queue.put(None)
             return result

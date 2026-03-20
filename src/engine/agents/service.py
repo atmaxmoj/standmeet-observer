@@ -17,7 +17,6 @@ import json
 import logging
 import os
 from dataclasses import dataclass
-from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from engine.llm.client import LLMClient
@@ -38,11 +37,6 @@ class AgentResult:
     input_tokens: int
     output_tokens: int
 
-
-@dataclass
-class MCPRunOptions:
-    """Optional settings for run_with_mcp."""
-    on_tool_call: Callable[[str], None] | None = None
 
 
 class AgentService:
@@ -157,13 +151,11 @@ class AgentService:
         session: Session,
         model: str = "",
         max_turns: int = 15,
-        options: MCPRunOptions | None = None,
     ) -> AgentResult:
         """Multi-turn agentic with MCP tools via Agent SDK.
 
         Only method that uses Agent SDK — needed for MCP tool integration.
         """
-        opts = options or MCPRunOptions()
         from claude_agent_sdk import query as sdk_query, ClaudeAgentOptions, ResultMessage
         from engine.config import MODEL_DEEP
 
@@ -207,11 +199,6 @@ class AgentService:
                     result_text = msg.result or ""
                     cost_usd = msg.total_cost_usd
                     usage = msg.usage or {}
-                elif opts.on_tool_call and hasattr(msg, "content"):
-                    for block in (msg.content if isinstance(msg.content, list) else []):
-                        if hasattr(block, "name") and block.name.startswith(f"mcp__{mcp_name}__"):
-                            tool_name = block.name.removeprefix(f"mcp__{mcp_name}__")
-                            opts.on_tool_call(tool_name)
 
         asyncio.run(_run())
 
