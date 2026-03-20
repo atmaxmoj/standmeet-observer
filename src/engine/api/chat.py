@@ -502,7 +502,7 @@ async def _chat_stream_mcp(db, llm, messages: list[dict]) -> AsyncGenerator[str,
     import queue
 
     from engine.agents.service import AgentService, MCPRunOptions
-    from engine.agents.tools.chat_mcp import CHAT_TOOL_NAMES, create_chat_mcp_server
+    from engine.agents.tools.chat_mcp import create_chat_mcp_server
     from engine.storage.engine import get_sync_session_factory
 
     sync_url = os.environ.get("DATABASE_URL_SYNC", "")
@@ -517,15 +517,12 @@ async def _chat_stream_mcp(db, llm, messages: list[dict]) -> AsyncGenerator[str,
         yield _sse("tool_call", {"name": "thinking", "label": "Thinking..."})
 
         tool_queue: queue.Queue[str | None] = queue.Queue()
-        allowed = [f"mcp__chat__{n}" for n in CHAT_TOOL_NAMES] + ["WebSearch"]
-
         def _run():
             result = AgentService(llm).run_with_mcp(
                 prompt=prompt, mcp_server=mcp_server, mcp_name="chat",
                 stage="chat", session=session, model=MODEL_FAST, max_turns=10,
                 options=MCPRunOptions(
                     on_tool_call=lambda name: tool_queue.put(name),
-                    allowed_tools=allowed,
                 ),
             )
             tool_queue.put(None)

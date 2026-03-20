@@ -43,7 +43,6 @@ class AgentResult:
 class MCPRunOptions:
     """Optional settings for run_with_mcp."""
     on_tool_call: Callable[[str], None] | None = None
-    allowed_tools: list[str] | None = None
 
 
 class AgentService:
@@ -199,7 +198,6 @@ class AgentService:
                             "instance": mcp_server._mcp_server,
                         },
                     },
-                    **({"allowed_tools": opts.allowed_tools} if opts.allowed_tools is not None else {}),
                     env=env,
                 ),
             ):

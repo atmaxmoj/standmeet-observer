@@ -7,13 +7,6 @@ from mcp.server.fastmcp import FastMCP
 
 from engine.agents import repository as repo
 
-CHAT_TOOL_NAMES = [
-    "search_episodes", "get_recent_episodes", "get_playbooks",
-    "get_playbook_history", "get_usage", "get_routines",
-    "get_frames", "get_os_events",
-]
-
-
 def create_chat_mcp_server(session: Session) -> FastMCP:
     """Create an in-process MCP server with chat read tools."""
     mcp = FastMCP("chat-tools")
