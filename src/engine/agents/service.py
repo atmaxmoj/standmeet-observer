@@ -107,7 +107,6 @@ class AgentService:
             total_input += resp.input_tokens
             total_output += resp.output_tokens
             tool_uses = [b for b in resp.content if b.type == "tool_use"]
-
             if not tool_uses or resp.stop_reason == "end_turn":
                 yield {"type": "response", "content": resp.content, "stop_reason": resp.stop_reason,
                        "input_tokens": total_input, "output_tokens": total_output}

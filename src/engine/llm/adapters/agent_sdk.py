@@ -102,6 +102,7 @@ class AgentSDKClient(LLMClient):
             re.DOTALL,
         )
         matches = list(tool_pattern.finditer(resp.text))
+        logger.debug("amessages_create: %d chars, %d tool_use tags", len(resp.text), len(matches))
 
         if matches:
             # Extract text before first tool call
