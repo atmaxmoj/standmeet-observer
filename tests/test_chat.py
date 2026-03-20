@@ -5,7 +5,7 @@ import json
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from engine.api.chat import _read_tool, _handle_tool, _make_read_tools
+from engine.pipeline.chat import read_tool, handle_tool, make_read_tools
 from engine.llm import ContentBlock, MessageResponse, LLMClient, LLMResponse
 
 
@@ -67,97 +67,97 @@ async def seeded_db(db):
 class TestReadTools:
     @pytest.mark.asyncio
     async def test_search_episodes(self, seeded_db):
-        result = await _read_tool(seeded_db, "search_episodes", {"query": "VSCode"})
+        result = await read_tool(seeded_db, "search_episodes", {"query": "VSCode"})
         assert isinstance(result, list)
         assert len(result) == 1
         assert "VSCode" in result[0]["summary"]
 
     @pytest.mark.asyncio
     async def test_search_episodes_no_match(self, seeded_db):
-        result = await _read_tool(seeded_db, "search_episodes", {"query": "nonexistent"})
+        result = await read_tool(seeded_db, "search_episodes", {"query": "nonexistent"})
         assert result == []
 
     @pytest.mark.asyncio
     async def test_get_recent_episodes(self, seeded_db):
-        result = await _read_tool(seeded_db, "get_recent_episodes", {"days": 7})
+        result = await read_tool(seeded_db, "get_recent_episodes", {"days": 7})
         assert isinstance(result, list)
         assert len(result) >= 1
 
     @pytest.mark.asyncio
     async def test_get_playbooks(self, seeded_db):
-        result = await _read_tool(seeded_db, "get_playbooks", {})
+        result = await read_tool(seeded_db, "get_playbooks", {})
         assert isinstance(result, list)
         assert len(result) == 1
         assert result[0]["name"] == "use-git-frequently"
 
     @pytest.mark.asyncio
     async def test_get_playbooks_with_search(self, seeded_db):
-        result = await _read_tool(seeded_db, "get_playbooks", {"search": "git"})
+        result = await read_tool(seeded_db, "get_playbooks", {"search": "git"})
         assert len(result) == 1
-        result = await _read_tool(seeded_db, "get_playbooks", {"search": "nonexistent"})
+        result = await read_tool(seeded_db, "get_playbooks", {"search": "nonexistent"})
         assert len(result) == 0
 
     @pytest.mark.asyncio
     async def test_get_playbook_history(self, seeded_db):
-        result = await _read_tool(seeded_db, "get_playbook_history", {"name": "use-git-frequently"})
+        result = await read_tool(seeded_db, "get_playbook_history", {"name": "use-git-frequently"})
         assert isinstance(result, list)
 
     @pytest.mark.asyncio
     async def test_get_frames(self, seeded_db):
-        result = await _read_tool(seeded_db, "get_frames", {"limit": 10})
+        result = await read_tool(seeded_db, "get_frames", {"limit": 10})
         assert isinstance(result, list)
         assert len(result) == 1
         assert result[0]["app_name"] == "VSCode"
 
     @pytest.mark.asyncio
     async def test_get_frames_with_search(self, seeded_db):
-        result = await _read_tool(seeded_db, "get_frames", {"search": "hello"})
+        result = await read_tool(seeded_db, "get_frames", {"search": "hello"})
         assert len(result) == 1
-        result = await _read_tool(seeded_db, "get_frames", {"search": "nonexistent"})
+        result = await read_tool(seeded_db, "get_frames", {"search": "nonexistent"})
         assert len(result) == 0
 
     @pytest.mark.asyncio
     async def test_get_audio(self, seeded_db):
-        result = await _read_tool(seeded_db, "get_audio", {"limit": 10})
+        result = await read_tool(seeded_db, "get_audio", {"limit": 10})
         assert isinstance(result, list)
         assert len(result) == 1
 
     @pytest.mark.asyncio
     async def test_get_os_events(self, seeded_db):
-        result = await _read_tool(seeded_db, "get_os_events", {"limit": 10})
+        result = await read_tool(seeded_db, "get_os_events", {"limit": 10})
         assert isinstance(result, list)
         assert len(result) == 1
         assert result[0]["data"] == "git status"
 
     @pytest.mark.asyncio
     async def test_get_os_events_filtered(self, seeded_db):
-        result = await _read_tool(seeded_db, "get_os_events", {"event_type": "shell_command"})
+        result = await read_tool(seeded_db, "get_os_events", {"event_type": "shell_command"})
         assert len(result) == 1
-        result = await _read_tool(seeded_db, "get_os_events", {"event_type": "browser_url"})
+        result = await read_tool(seeded_db, "get_os_events", {"event_type": "browser_url"})
         assert len(result) == 0
 
     @pytest.mark.asyncio
     async def test_get_usage(self, seeded_db):
-        result = await _read_tool(seeded_db, "get_usage", {"days": 7})
+        result = await read_tool(seeded_db, "get_usage", {"days": 7})
         assert isinstance(result, dict)
         assert "total_cost_usd" in result
 
     @pytest.mark.asyncio
     async def test_unknown_tool_returns_none(self, seeded_db):
-        result = await _read_tool(seeded_db, "nonexistent_tool", {})
+        result = await read_tool(seeded_db, "nonexistent_tool", {})
         assert result is None
 
 
 class TestHandleTool:
     @pytest.mark.asyncio
-    async def test_read_tool_returns_no_proposal(self, seeded_db):
-        result, proposal = await _handle_tool(seeded_db, "get_playbooks", {})
+    async def testread_tool_returns_no_proposal(self, seeded_db):
+        result, proposal = await handle_tool(seeded_db, "get_playbooks", {})
         assert isinstance(result, list)
         assert proposal is None
 
     @pytest.mark.asyncio
     async def test_propose_delete(self, seeded_db):
-        result, proposal = await _handle_tool(seeded_db, "propose_delete", {
+        result, proposal = await handle_tool(seeded_db, "propose_delete", {
             "table": "episodes", "ids": [1, 2], "reason": "outdated data",
         })
         assert result["status"] == "proposal_created"
@@ -170,7 +170,7 @@ class TestHandleTool:
     @pytest.mark.asyncio
     async def test_propose_delete_does_not_execute(self, seeded_db):
         """Proposals must NOT actually delete anything."""
-        _, _ = await _handle_tool(seeded_db, "propose_delete", {
+        _, _ = await handle_tool(seeded_db, "propose_delete", {
             "table": "episodes", "ids": [1], "reason": "test",
         })
         # Episode should still exist
@@ -179,7 +179,7 @@ class TestHandleTool:
 
     @pytest.mark.asyncio
     async def test_propose_update_playbook(self, seeded_db):
-        result, proposal = await _handle_tool(seeded_db, "propose_update_playbook", {
+        result, proposal = await handle_tool(seeded_db, "propose_update_playbook", {
             "name": "use-git-frequently",
             "confidence": 0.9,
             "reason": "more evidence observed",
@@ -193,7 +193,7 @@ class TestHandleTool:
     @pytest.mark.asyncio
     async def test_propose_update_does_not_execute(self, seeded_db):
         """Proposals must NOT actually modify anything."""
-        _, _ = await _handle_tool(seeded_db, "propose_update_playbook", {
+        _, _ = await handle_tool(seeded_db, "propose_update_playbook", {
             "name": "use-git-frequently",
             "confidence": 0.1,
             "reason": "test",
@@ -203,16 +203,16 @@ class TestHandleTool:
 
     @pytest.mark.asyncio
     async def test_unknown_tool(self, seeded_db):
-        result, proposal = await _handle_tool(seeded_db, "nonexistent", {})
+        result, proposal = await handle_tool(seeded_db, "nonexistent", {})
         assert "error" in result
         assert proposal is None
 
 
 class TestToolDefinitions:
-    def test_all_read_tools_have_handlers(self, tmp_path):
-        """Every tool defined in _make_read_tools should be handled by _read_tool or _handle_tool."""
+    def test_allread_tools_have_handlers(self, tmp_path):
+        """Every tool defined in make_read_tools should be handled by read_tool or handle_tool."""
         # We just check the tool names are recognized
-        tools = _make_read_tools(None)
+        tools = make_read_tools(None)
         tool_names = {t["name"] for t in tools}
         # Known tool names
         expected = {
@@ -224,7 +224,7 @@ class TestToolDefinitions:
 
     def test_tool_schemas_valid(self, tmp_path):
         """Tool schemas should have required fields."""
-        tools = _make_read_tools(None)
+        tools = make_read_tools(None)
         for t in tools:
             assert "name" in t
             assert "description" in t
