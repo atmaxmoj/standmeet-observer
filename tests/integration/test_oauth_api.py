@@ -99,15 +99,17 @@ def test_oauth_with_tools():
 
 
 def test_oauth_opus_with_tools():
-    """Test Opus model with OAuth + tools via AgentSDKClient (text-based tool loop)."""
-    from engine.llm import AgentSDKClient, ToolDef
+    """Test Opus model with OAuth + tools via AgentService."""
+    from engine.llm import DirectAPIClient, ToolDef
+    from engine.agents.service import AgentService
 
     token = os.environ.get("CLAUDE_CODE_OAUTH_TOKEN", "")
     if not token:
         print("  SKIP  no CLAUDE_CODE_OAUTH_TOKEN")
         return
 
-    client = AgentSDKClient(auth_token=token)
+    client = DirectAPIClient(auth_token=token)
+    agent = AgentService(client)
 
     tool_called = {}
 
@@ -129,7 +131,7 @@ def test_oauth_opus_with_tools():
     ]
 
     try:
-        resp = client.complete_with_tools(
+        resp = agent.complete_with_tools(
             "What's the weather in Tokyo? Use the get_weather tool.",
             "claude-opus-4-6",
             tools,

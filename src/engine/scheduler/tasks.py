@@ -318,8 +318,10 @@ def daily_gc_task():
         # Phase 2: Agent-driven audit (only if LLM supports tools)
         gc_tools = make_dedup_tools(session) + make_audit_tools(session) + make_manifest_purge_tools(session)
         try:
+            from engine.agents.service import AgentService
             gc_prompt = _build_gc_prompt()
-            resp = _get_llm().complete_with_tools(
+            agent = AgentService(_get_llm())
+            resp = agent.complete_with_tools(
                 gc_prompt, MODEL_DEEP, gc_tools, max_turns=10,
             )
             from engine.storage.sync_db import SyncDB

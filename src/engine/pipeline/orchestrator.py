@@ -103,10 +103,10 @@ def _run_distill_agentic(llm: LLMClient, session: Session) -> int:
     """Agentic distill: Agent SDK + MCP tools to investigate episodes and write playbook entries."""
     from engine.prompts.playbook_agent import PLAYBOOK_AGENT_PROMPT
     from engine.agents.tools.distill_mcp import create_distill_mcp_server
-    from engine.agents.service import run_agent_mcp
+    from engine.agents.service import AgentService
 
     mcp_server = create_distill_mcp_server(session)
-    run_agent_mcp(PLAYBOOK_AGENT_PROMPT, mcp_server, "distill", "distill_agentic", session)
+    AgentService(llm).run_mcp(PLAYBOOK_AGENT_PROMPT, mcp_server, "distill", "distill_agentic", session)
 
     count = SyncDB(session).count_recent_playbooks()
     logger.info("run_distill (agentic): %d entries", count)
@@ -185,10 +185,10 @@ def _run_compose_agentic(llm: LLMClient, session: Session) -> int:
     """Agentic routine composition: Agent SDK + MCP tools to investigate and write routines."""
     from engine.prompts.compose_agent import ROUTINE_AGENT_PROMPT
     from engine.agents.tools.compose_mcp import create_compose_mcp_server
-    from engine.agents.service import run_agent_mcp
+    from engine.agents.service import AgentService
 
     mcp_server = create_compose_mcp_server(session)
-    run_agent_mcp(ROUTINE_AGENT_PROMPT, mcp_server, "compose", "compose_agentic", session)
+    AgentService(llm).run_mcp(ROUTINE_AGENT_PROMPT, mcp_server, "compose", "compose_agentic", session)
 
     count = SyncDB(session).count_recent_routines()
     logger.info("run_routines (agentic): %d routines", count)

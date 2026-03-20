@@ -1,21 +1,19 @@
 """LLM client abstract base + factory.
 
-Four backends:
-- DirectAPI: uses anthropic SDK directly (requires API key)
-- AgentSDK: uses Claude Agent SDK (OAuth token or logged-in CLI session)
+Backends:
+- DirectAPI: uses anthropic SDK (API key or OAuth token)
 - OpenAIClient: uses openai SDK (any OpenAI-compatible API)
 
 Priority (first match wins):
 1. OPENAI_BASE_URL set         → OpenAI-compatible API
 2. ANTHROPIC_API_KEY set       → DirectAPI (per-token billing)
-3. ANTHROPIC_AUTH_TOKEN set    → AgentSDK with OAuth token (subscription billing)
-4. Neither                     → AgentSDK with CLI session (subscription billing)
+3. CLAUDE_CODE_OAUTH_TOKEN set → DirectAPI (OAuth, subscription billing)
 """
 
 import logging
 from abc import ABC, abstractmethod
 
-from engine.llm.types import LLMResponse, MessageResponse, ToolDef
+from engine.llm.types import LLMResponse, MessageResponse
 
 logger = logging.getLogger(__name__)
 
@@ -51,17 +49,6 @@ class LLMClient(ABC):
             f"{type(self).__name__} does not support amessages_create"
         )
 
-    def complete_with_tools(
-        self,
-        prompt: str,
-        model: str,
-        tools: list[ToolDef],
-        max_turns: int = 5,
-    ) -> LLMResponse:
-        """Multi-turn tool-use loop. Default raises NotImplementedError."""
-        raise NotImplementedError(
-            f"{type(self).__name__} does not support tool use"
-        )
 
 
 def create_client(
@@ -70,26 +57,17 @@ def create_client(
     openai_api_key: str = "",
     openai_base_url: str = "",
 ) -> LLMClient:
-    """Factory: pick the right backend based on available credentials.
-
-    Priority:
-    1. OpenAI base URL → OpenAIClient (any compatible API)
-    2. Anthropic API key → DirectAPIClient (per-token billing)
-    3. OAuth token → AgentSDKClient with token
-    4. Neither → AgentSDKClient with CLI session (user must be logged in)
-    """
+    """Factory: pick the right backend based on available credentials."""
     if openai_base_url:
         from engine.llm.adapters.openai import OpenAIClient
         logger.info("Using OpenAI-compatible API (%s)", openai_base_url)
         return OpenAIClient(openai_api_key, openai_base_url)
     if api_key:
         from engine.llm.adapters.anthropic import DirectAPIClient
-        logger.info("Using direct Anthropic API (API key)")
-        return DirectAPIClient(api_key)
+        logger.info("Using Anthropic API (API key)")
+        return DirectAPIClient(api_key=api_key)
     if auth_token:
-        from engine.llm.adapters.agent_sdk import AgentSDKClient
-        logger.info("Using Claude Agent SDK (OAuth token)")
-        return AgentSDKClient(auth_token)
-    from engine.llm.adapters.agent_sdk import AgentSDKClient
-    logger.info("Using Claude Agent SDK (CLI session)")
-    return AgentSDKClient()
+        from engine.llm.adapters.anthropic import DirectAPIClient
+        logger.info("Using Anthropic API (OAuth token)")
+        return DirectAPIClient(auth_token=auth_token)
+    raise ValueError("No LLM credentials configured. Set ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN.")
