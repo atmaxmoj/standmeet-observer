@@ -485,11 +485,24 @@ async def _chat_stream(db, llm, messages: list[dict]) -> AsyncGenerator[str, Non
             yield sse
 
 
-async def _chat_stream_mcp(db, llm, messages: list[dict]) -> AsyncGenerator[str, None]:  # noqa: PLR0915
+def _build_chat_prompt(messages: list[dict]) -> str:
+    """Build a single prompt from system prompt + conversation history."""
+    parts = [SYSTEM_PROMPT]
+    for m in messages:
+        role = m["role"]
+        content = m["content"] if isinstance(m["content"], str) else json.dumps(m["content"])
+        parts.append(f"[{role}]: {content}")
+    return "\n\n".join(parts)
+
+
+async def _chat_stream_mcp(db, llm, messages: list[dict]) -> AsyncGenerator[str, None]:
     """Chat via Agent SDK + MCP tools (OAuth path). Agent SDK handles tool calling natively."""
+    import asyncio
     import os
-    from engine.agents.service import AgentService
-    from engine.agents.tools.chat_mcp import create_chat_mcp_server
+    import queue
+
+    from engine.agents.service import AgentService, MCPRunOptions
+    from engine.agents.tools.chat_mcp import CHAT_TOOL_NAMES, create_chat_mcp_server
     from engine.storage.engine import get_sync_session_factory
 
     sync_url = os.environ.get("DATABASE_URL_SYNC", "")
@@ -497,70 +510,47 @@ async def _chat_stream_mcp(db, llm, messages: list[dict]) -> AsyncGenerator[str,
         yield _sse("error", {"message": "DATABASE_URL_SYNC not configured"})
         return
 
-    session_factory = get_sync_session_factory(sync_url)
-    session = session_factory()
+    session = get_sync_session_factory(sync_url)()
     try:
         mcp_server = create_chat_mcp_server(session)
-
-        # Build prompt from system + messages
-        parts = [SYSTEM_PROMPT]
-        for m in messages:
-            role = m["role"]
-            content = m["content"] if isinstance(m["content"], str) else json.dumps(m["content"])
-            parts.append(f"[{role}]: {content}")
-        prompt = "\n\n".join(parts)
-
+        prompt = _build_chat_prompt(messages)
         yield _sse("tool_call", {"name": "thinking", "label": "Thinking..."})
 
-        import asyncio
-        import queue
-
         tool_queue: queue.Queue[str | None] = queue.Queue()
+        allowed = [f"mcp__chat__{n}" for n in CHAT_TOOL_NAMES] + ["WebSearch"]
 
-        def _on_tool_call(name: str):
-            tool_queue.put(name)
-
-        def _run_mcp():
-            agent = AgentService(llm)
-            result = agent.run_with_mcp(
-                prompt=prompt,
-                mcp_server=mcp_server,
-                mcp_name="chat",
-                stage="chat",
-                session=session,
-                model=MODEL_FAST,
-                max_turns=10,
-                on_tool_call=_on_tool_call,
+        def _run():
+            result = AgentService(llm).run_with_mcp(
+                prompt=prompt, mcp_server=mcp_server, mcp_name="chat",
+                stage="chat", session=session, model=MODEL_FAST, max_turns=10,
+                options=MCPRunOptions(
+                    on_tool_call=lambda name: tool_queue.put(name),
+                    allowed_tools=allowed,
+                ),
             )
-            tool_queue.put(None)  # signal done
+            tool_queue.put(None)
             return result
 
-        loop = asyncio.get_event_loop()
-        future = loop.run_in_executor(None, _run_mcp)
+        future = asyncio.get_event_loop().run_in_executor(None, _run)
 
-        # Yield tool call throbbing events while MCP runs
         while True:
             try:
                 name = await asyncio.to_thread(tool_queue.get, timeout=0.5)
                 if name is None:
                     break
-                label = TOOL_LABELS.get(name, name)
                 logger.info("chat(mcp): tool %s", name)
-                yield _sse("tool_call", {"name": name, "label": label})
+                yield _sse("tool_call", {"name": name, "label": TOOL_LABELS.get(name, name)})
             except Exception:
                 if future.done():
                     break
 
         result = await future
         reply = _clean_reply(result.result_text)
-        total_input = result.input_tokens
-        total_output = result.output_tokens
-
         await db.append_chat_message("assistant", reply, json.dumps([], default=str))
-        await _record_usage(db, total_input, total_output)
-        logger.info("chat(mcp): done, %d in, %d out", total_input, total_output)
+        await _record_usage(db, result.input_tokens, result.output_tokens)
+        logger.info("chat(mcp): done, %d in, %d out", result.input_tokens, result.output_tokens)
         yield _sse("text", {"content": reply, "proposals": [],
-                            "input_tokens": total_input, "output_tokens": total_output})
+                            "input_tokens": result.input_tokens, "output_tokens": result.output_tokens})
     except Exception as e:
         logger.exception("chat(mcp): failed")
         yield _sse("error", {"message": f"Chat failed: {e}"})

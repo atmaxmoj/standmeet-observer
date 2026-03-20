@@ -39,6 +39,13 @@ class AgentResult:
     output_tokens: int
 
 
+@dataclass
+class MCPRunOptions:
+    """Optional settings for run_with_mcp."""
+    on_tool_call: Callable[[str], None] | None = None
+    allowed_tools: list[str] | None = None
+
+
 class AgentService:
     """Multi-turn tool interactions on top of LLMClient."""
 
@@ -151,12 +158,13 @@ class AgentService:
         session: Session,
         model: str = "",
         max_turns: int = 15,
-        on_tool_call: Callable[[str], None] | None = None,
+        options: MCPRunOptions | None = None,
     ) -> AgentResult:
         """Multi-turn agentic with MCP tools via Agent SDK.
 
         Only method that uses Agent SDK — needed for MCP tool integration.
         """
+        opts = options or MCPRunOptions()
         from claude_agent_sdk import query as sdk_query, ClaudeAgentOptions, ResultMessage
         from engine.config import MODEL_DEEP
 
@@ -191,6 +199,7 @@ class AgentService:
                             "instance": mcp_server._mcp_server,
                         },
                     },
+                    **({"allowed_tools": opts.allowed_tools} if opts.allowed_tools is not None else {}),
                     env=env,
                 ),
             ):
@@ -200,11 +209,11 @@ class AgentService:
                     result_text = msg.result or ""
                     cost_usd = msg.total_cost_usd
                     usage = msg.usage or {}
-                elif on_tool_call and hasattr(msg, "content"):
+                elif opts.on_tool_call and hasattr(msg, "content"):
                     for block in (msg.content if isinstance(msg.content, list) else []):
                         if hasattr(block, "name") and block.name.startswith(f"mcp__{mcp_name}__"):
                             tool_name = block.name.removeprefix(f"mcp__{mcp_name}__")
-                            on_tool_call(tool_name)
+                            opts.on_tool_call(tool_name)
 
         asyncio.run(_run())
 
