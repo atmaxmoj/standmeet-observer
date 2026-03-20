@@ -287,7 +287,7 @@ def _compose(compose_test, *args):
 def _test_unit(compose_test, results_dir):
     """Layer 1: unit tests (no DB, pure logic)."""
     results = []
-    print("==> [1/4] Source framework unit tests (Docker)...")
+    print("==> [1/3] Source framework unit tests (Docker)...")
     sources_log = results_dir / "sources.log"
     with open(sources_log, "w") as log:
         r = subprocess.run(
@@ -298,7 +298,7 @@ def _test_unit(compose_test, results_dir):
     if r.returncode != 0:
         print(f"  See {sources_log}")
 
-    print("\n==> [1/4] Engine unit tests (Docker, no DB)...")
+    print("\n==> [1/3] Engine unit tests (Docker, no DB)...")
     unit_log = results_dir / "unit.log"
     with open(unit_log, "w") as log:
         r = subprocess.run(
@@ -309,7 +309,7 @@ def _test_unit(compose_test, results_dir):
     if r.returncode != 0:
         print(f"  See {unit_log}")
 
-    print("\n==> [1/4] Web unit tests (Docker, vitest)...")
+    print("\n==> [1/3] Web unit tests (Docker, vitest)...")
     vitest_log = results_dir / "vitest.log"
     with open(vitest_log, "w") as log:
         r = subprocess.run(
@@ -322,10 +322,12 @@ def _test_unit(compose_test, results_dir):
     return results
 
 
-def _test_db(compose_test, results_dir):
-    """Layer 2: DB integration tests (needs PostgreSQL)."""
+def _test_integration(compose_test, results_dir):
+    """Layer 2: integration tests (DB + real LLM)."""
     results = []
-    print("\n==> [2/4] Engine DB tests (Docker + PostgreSQL)...")
+
+    # 2a: Engine DB tests (pytest with PostgreSQL)
+    print("\n==> [2/3] Engine DB tests (Docker + PostgreSQL)...")
     _compose(compose_test, "up", "-d", "--build", "--wait", "db-test")
     engine_log = results_dir / "engine.log"
     with open(engine_log, "w") as log:
@@ -336,18 +338,15 @@ def _test_db(compose_test, results_dir):
     results.append(("engine-db", r.returncode))
     if r.returncode != 0:
         print(f"  See {engine_log}")
-    return results
 
-
-def _test_integration(compose_test, results_dir):
-    """Layer 3: integration tests (real LLM)."""
+    # 2b: Real LLM integration tests (optional, needs API key)
     integration_dir = ROOT / "tests" / "integration"
     test_files = sorted(integration_dir.glob("test_*.py")) if integration_dir.exists() else []
     if not test_files:
-        print("\n==> [3/4] No integration tests found, skipping")
-        return []
+        print("\n==> [2/3] No LLM integration tests found, skipping")
+        return results
 
-    print("\n==> [3/4] Integration tests (Docker, real LLM)...")
+    print("\n==> [2/3] LLM integration tests (Docker, real LLM)...")
     _compose(compose_test, "up", "-d", "--build", "--wait", "engine-test")
     _compose(compose_test, "exec", "-T", "engine-test", "mkdir", "-p", "/app/tests/integration")
     _compose(compose_test, "cp", str(integration_dir) + "/.", "engine-test:/app/tests/integration")
@@ -370,12 +369,13 @@ def _test_integration(compose_test, results_dir):
     if failed_tests:
         print(f"  Failed: {', '.join(failed_tests)}")
         print(f"  See {integration_log}")
-    return [("integration", 1 if failed_tests else 0)]
+    results.append(("integration", 1 if failed_tests else 0))
+    return results
 
 
 def _test_e2e(compose_test, results_dir):
-    """Layer 4: Playwright e2e (real LLM, full pipeline)."""
-    print("\n==> [4/4] Playwright e2e tests (Docker, real LLM)...")
+    """Layer 3: Playwright e2e (real LLM, full pipeline)."""
+    print("\n==> [3/3] Playwright e2e tests (Docker, real LLM)...")
     _compose(compose_test, "build", "playwright")
     _compose(compose_test, "up", "-d", "--build", "--wait", "engine-test")
     web_log = results_dir / "web.log"
@@ -400,10 +400,9 @@ def _test_e2e(compose_test, results_dir):
 
 def cmd_test():
     """Run tests. Usage: npm test [-- <suite>]
-    Suites: unit, db, integration, e2e, all (default: all)
-      unit:        Pure logic tests, no DB (sources + engine unit)
-      db:          Engine tests that need PostgreSQL
-      integration: Real LLM tests
+    Suites: unit, integration, e2e, all (default: all)
+      unit:        Pure logic tests, no DB (sources + engine + web)
+      integration: DB + real LLM tests
       e2e:         Playwright browser tests
     """
     suite = sys.argv[2] if len(sys.argv) > 2 else "all"
@@ -425,8 +424,6 @@ def cmd_test():
     results = []
     if suite in ("unit", "all"):
         results.extend(_test_unit(compose_test, results_dir))
-    if suite in ("db", "all"):
-        results.extend(_test_db(compose_test, results_dir))
     if suite in ("integration", "all"):
         results.extend(_test_integration(compose_test, results_dir))
     if suite in ("e2e", "all"):
@@ -435,7 +432,7 @@ def cmd_test():
     _compose(compose_test, "down", "-v")
 
     if not results:
-        sys.exit(f"Unknown suite: {suite}. Available: unit, db, integration, e2e, all")
+        sys.exit(f"Unknown suite: {suite}. Available: unit, integration, e2e, all")
 
     print("\n==> Results:")
     for name, rc in results:
