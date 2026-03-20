@@ -24,6 +24,7 @@ services:
       - engine-data:/data
       - ${HOME}/.observer/frames:/data/frames:ro
       - ./sources/builtin:/app/sources/builtin:ro
+      - ./src:/app/src:ro
     environment:
       - SOURCES_DIR=/app/sources/builtin
       - DATABASE_URL=postgresql+asyncpg://observer:observer@db:5432/observer

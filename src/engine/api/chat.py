@@ -485,7 +485,7 @@ async def _chat_stream(db, llm, messages: list[dict]) -> AsyncGenerator[str, Non
             yield sse
 
 
-async def _chat_stream_mcp(db, llm, messages: list[dict]) -> AsyncGenerator[str, None]:
+async def _chat_stream_mcp(db, llm, messages: list[dict]) -> AsyncGenerator[str, None]:  # noqa: PLR0915
     """Chat via Agent SDK + MCP tools (OAuth path). Agent SDK handles tool calling natively."""
     import os
     from engine.agents.service import AgentService
@@ -513,18 +513,45 @@ async def _chat_stream_mcp(db, llm, messages: list[dict]) -> AsyncGenerator[str,
         yield _sse("tool_call", {"name": "thinking", "label": "Thinking..."})
 
         import asyncio
-        agent = AgentService(llm)
-        result = await asyncio.to_thread(
-            agent.run_with_mcp,
-            prompt=prompt,
-            mcp_server=mcp_server,
-            mcp_name="chat",
-            stage="chat",
-            session=session,
-            model=MODEL_FAST,
-            max_turns=10,
-        )
+        import queue
 
+        tool_queue: queue.Queue[str | None] = queue.Queue()
+
+        def _on_tool_call(name: str):
+            tool_queue.put(name)
+
+        def _run_mcp():
+            agent = AgentService(llm)
+            result = agent.run_with_mcp(
+                prompt=prompt,
+                mcp_server=mcp_server,
+                mcp_name="chat",
+                stage="chat",
+                session=session,
+                model=MODEL_FAST,
+                max_turns=10,
+                on_tool_call=_on_tool_call,
+            )
+            tool_queue.put(None)  # signal done
+            return result
+
+        loop = asyncio.get_event_loop()
+        future = loop.run_in_executor(None, _run_mcp)
+
+        # Yield tool call throbbing events while MCP runs
+        while True:
+            try:
+                name = await asyncio.to_thread(tool_queue.get, timeout=0.5)
+                if name is None:
+                    break
+                label = TOOL_LABELS.get(name, name)
+                logger.info("chat(mcp): tool %s", name)
+                yield _sse("tool_call", {"name": name, "label": label})
+            except Exception:
+                if future.done():
+                    break
+
+        result = await future
         reply = _clean_reply(result.result_text)
         total_input = result.input_tokens
         total_output = result.output_tokens

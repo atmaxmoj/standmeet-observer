@@ -1,0 +1,17 @@
+.venv
+.git
+.pytest_cache
+.ruff_cache
+.import_linter_cache
+__pycache__
+node_modules
+web
+tests
+tests_unit
+data
+experiments
+scripts
+deep_episode_result.json
+*.log
+.env
+.husky
