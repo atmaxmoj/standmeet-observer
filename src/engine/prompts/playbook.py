@@ -48,6 +48,3 @@ Rules:
 - "boundary" is critical: it defines when a behavior SWITCHES type (e.g., strategic investigation becomes avoidance when it extends indefinitely without execution).
 
 Output ONLY the JSON array."""
-
-# Backwards compat alias
-DISTILL_PROMPT = PLAYBOOK_PROMPT

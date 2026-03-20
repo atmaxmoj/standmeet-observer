@@ -7,6 +7,9 @@ uv run ruff check src/ cli.py || exit 1
 # Python: circular import check (import-linter)
 PYTHONPATH=src uv run lint-imports || exit 1
 
+# Python: dead code check (vulture)
+uv run vulture || exit 1
+
 # Python: unit tests (no DB, pure logic)
 PYTHONPATH=src uv run pytest tests_unit/ -q || exit 1
 

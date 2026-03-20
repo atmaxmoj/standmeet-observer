@@ -415,6 +415,7 @@ def cmd_test():
     checks = [
         ("ruff", ["uv", "run", "ruff", "check", "src/", "tests/", "tests_unit/", "cli.py"], ROOT, None),
         ("lint-imports", ["uv", "run", "lint-imports"], ROOT, env_with_pythonpath),
+        ("vulture", ["uv", "run", "vulture"], ROOT, None),
         ("tsc", ["npx", "tsc", "--noEmit"], ROOT / "web", None),
         ("eslint", ["npx", "eslint", "src/", "--max-warnings", "0"], ROOT / "web", None),
         ("knip", ["npx", "knip"], ROOT / "web", None),

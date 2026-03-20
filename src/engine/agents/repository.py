@@ -7,7 +7,7 @@ import json
 import logging
 import os
 
-from sqlalchemy import select, func, delete
+from sqlalchemy import delete, select, func
 from sqlalchemy.orm import Session
 
 from engine.storage.session import ago
@@ -42,14 +42,6 @@ def get_recent_episodes(session: Session, hours: int = 24) -> list[dict]:
     ).all()
     return [{"id": r[0], "summary": r[1], "app_names": r[2], "started_at": r[3], "ended_at": r[4]} for r in rows]
 
-
-def get_episodes_by_app(session: Session, app_name: str) -> list[dict]:
-    rows = session.execute(
-        select(Episode.id, Episode.summary, Episode.app_names, Episode.started_at, Episode.ended_at)
-        .where(Episode.app_names.contains(app_name))
-        .order_by(Episode.id.desc()).limit(20)
-    ).all()
-    return [{"id": r[0], "summary": r[1], "app_names": r[2], "started_at": r[3], "ended_at": r[4]} for r in rows]
 
 
 def get_episode_detail(session: Session, episode_id: int) -> dict | None:
@@ -90,29 +82,6 @@ def get_recent_frames(session: Session, hours: int = 24, limit: int = 50) -> lis
              "text": r[4], "display_id": r[5]} for r in rows]
 
 
-def get_frames_by_app(session: Session, app_name: str, limit: int = 30) -> list[dict]:
-    rows = session.execute(
-        select(FrameModel.id, FrameModel.timestamp, FrameModel.app_name,
-               FrameModel.window_name, func.substr(FrameModel.text, 1, 300).label("text"),
-               FrameModel.display_id)
-        .where(FrameModel.app_name.contains(app_name))
-        .order_by(FrameModel.id.desc()).limit(limit)
-    ).all()
-    return [{"id": r[0], "timestamp": r[1], "app_name": r[2], "window_name": r[3],
-             "text": r[4], "display_id": r[5]} for r in rows]
-
-
-def get_recent_audio(session: Session, hours: int = 24, limit: int = 50) -> list[dict]:
-    rows = session.execute(
-        select(AudioFrame.id, AudioFrame.timestamp, AudioFrame.text,
-               AudioFrame.language, AudioFrame.duration_seconds, AudioFrame.source)
-        .where(AudioFrame.created_at >= ago(hours=hours))
-        .order_by(AudioFrame.id.desc()).limit(limit)
-    ).all()
-    return [{"id": r[0], "timestamp": r[1], "text": r[2], "language": r[3],
-             "duration_seconds": r[4], "source": r[5]} for r in rows]
-
-
 def get_recent_os_events(session: Session, hours: int = 24, limit: int = 50) -> list[dict]:
     rows = session.execute(
         select(OsEvent.id, OsEvent.timestamp, OsEvent.event_type, OsEvent.source, OsEvent.data)
@@ -150,12 +119,6 @@ def get_playbook_by_name(session: Session, name: str) -> dict | None:
     return result
 
 
-def get_playbook_by_id(session: Session, entry_id: int) -> dict | None:
-    row = session.get(PlaybookEntry, entry_id)
-    result = _pb_dict(row) if row else None
-    return result
-
-
 def write_playbook_entry(
     session: Session,
     name: str, context: str, action: str,
@@ -174,11 +137,6 @@ def write_playbook_entry(
             name=name, context=context, action=action,
             confidence=confidence, maturity=maturity, evidence=evidence,
         ))
-    session.flush()
-
-
-def delete_playbook_entry(session: Session, entry_id: int):
-    session.execute(delete(PlaybookEntry).where(PlaybookEntry.id == entry_id))
     session.flush()
 
 
@@ -256,45 +214,6 @@ def write_routine(
             steps=steps, uses=uses, confidence=confidence, maturity=maturity,
         ))
     session.flush()
-
-
-# ── Trend queries ──
-
-
-def get_stale_entries(session: Session, days: int = 14) -> list[dict]:
-    rows = session.execute(
-        select(PlaybookEntry)
-        .where((PlaybookEntry.last_evidence_at.is_(None))
-               | (PlaybookEntry.last_evidence_at < ago(days=days)))
-        .order_by(PlaybookEntry.confidence.desc())
-    ).scalars().all()
-    result = [
-        {"id": r.id, "name": r.name, "confidence": r.confidence, "maturity": r.maturity,
-         "evidence": r.evidence, "last_evidence_at": r.last_evidence_at, "updated_at": r.updated_at}
-        for r in rows
-    ]
-    return result
-
-
-def get_similar_entries(session: Session, name: str) -> list[dict]:
-    target_words = set(name.split("-"))
-    if not target_words:
-        return []
-    rows = session.execute(
-        select(PlaybookEntry).where(PlaybookEntry.name != name)
-        .order_by(PlaybookEntry.confidence.desc())
-    ).scalars().all()
-    results = []
-    for r in rows:
-        other_words = set(r.name.split("-"))
-        intersection = target_words & other_words
-        union = target_words | other_words
-        sim = len(intersection) / len(union) if union else 0
-        if sim > 0.3:
-            entry = _pb_dict(r)
-            entry["similarity"] = round(sim, 2)
-            results.append(entry)
-    return sorted(results, key=lambda x: x["similarity"], reverse=True)
 
 
 # ── Dedup ──

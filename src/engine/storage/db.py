@@ -346,15 +346,6 @@ class DB:
             )).all()
             return [{"id": r[0], "summary": r[1], "app_names": r[2], "started_at": r[3], "ended_at": r[4]} for r in rows]
 
-    async def get_episodes_by_app(self, app_name: str, limit: int = 20) -> list[dict]:
-        async with self._session() as s:
-            rows = (await s.execute(
-                select(Episode.id, Episode.summary, Episode.app_names, Episode.started_at, Episode.ended_at)
-                .where(Episode.app_names.contains(app_name))
-                .order_by(Episode.id.desc()).limit(limit)
-            )).all()
-            return [{"id": r[0], "summary": r[1], "app_names": r[2], "started_at": r[3], "ended_at": r[4]} for r in rows]
-
     async def get_episodes_by_timerange(self, hours: int = 24) -> list[dict]:
         async with self._session() as s:
             rows = (await s.execute(

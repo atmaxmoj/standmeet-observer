@@ -57,7 +57,23 @@ layers = [
     "engine.config",
 ]
 
+[tool.vulture]
+paths = ["src/engine", "vulture_whitelist.py"]
+min_confidence = 60
+ignore_decorators = [
+    "@router.*",
+    "@app.*",
+    "@mcp.*",
+    "@pytest.*",
+    "@log_mutation",
+]
+ignore_names = [
+    "model_config",
+    "Meta",
+]
+
 [dependency-groups]
 dev = [
     "import-linter>=2.11",
+    "vulture>=2.15",
 ]
