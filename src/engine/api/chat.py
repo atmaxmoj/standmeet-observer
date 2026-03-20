@@ -474,18 +474,10 @@ async def _chat_stream(db, llm, messages: list[dict]) -> AsyncGenerator[str, Non
     tools = _make_read_tools(db)
     proposals: list[dict] = []
 
-    # Build sync tool handlers from chat's async _handle_tool
-    import asyncio
-
-    def _make_sync_handler(tool_db, tool_name):
-        def handler(**kwargs):
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as pool:
-                    result, proposal = pool.submit(asyncio.run, _handle_tool(tool_db, tool_name, kwargs)).result()
-            else:
-                result, proposal = asyncio.run(_handle_tool(tool_db, tool_name, kwargs))
+    # Async tool handlers — astream supports both sync and async
+    async def _make_handler(tool_name):
+        async def handler(**kwargs):
+            result, proposal = await _handle_tool(db, tool_name, kwargs)
             if proposal:
                 proposals.append(proposal)
             return result
@@ -493,7 +485,14 @@ async def _chat_stream(db, llm, messages: list[dict]) -> AsyncGenerator[str, Non
 
     tool_handlers = {}
     for t in tools:
-        tool_handlers[t["name"]] = _make_sync_handler(db, t["name"])
+        # Need to capture tool name properly in closure
+        name = t["name"]
+        async def _handler(_name=name, **kwargs):
+            result, proposal = await _handle_tool(db, _name, kwargs)
+            if proposal:
+                proposals.append(proposal)
+            return result
+        tool_handlers[name] = _handler
 
     logger.info("chat: starting with %d messages", len(messages))
 

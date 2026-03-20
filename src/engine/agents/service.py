@@ -71,24 +71,35 @@ class AgentService:
     ):
         """Async generator — yields events during multi-turn tool loop.
 
+        tool_handlers values can be sync or async callables.
+
+        For DirectAPIClient: uses native amessages_create with tool_use blocks.
+        For AgentSDKClient (OAuth): wraps tools as MCP server, uses Agent SDK.
+
         Yields dicts with "type" key:
           {"type": "tool_call", "name": ..., "input": ..., "result": ...}
           {"type": "response", "content": [...], "stop_reason": ..., "input_tokens": ..., "output_tokens": ...}
           {"type": "error", "message": ...}
-
-        Messages list is modified in-place (tool results appended).
         """
+        from engine.llm.adapters.agent_sdk import AgentSDKClient
+        if isinstance(self.llm, AgentSDKClient):
+            async for event in self._astream_via_mcp(messages, model, tools, tool_handlers, system, max_turns):
+                yield event
+        else:
+            async for event in self._astream_native(messages, model, tools, tool_handlers, system, max_turns):
+                yield event
+
+    async def _astream_native(self, messages, model, tools, tool_handlers, system, max_turns):
+        """Native API path — uses amessages_create with tool_use blocks."""
         total_input = 0
         total_output = 0
+        resp = None
 
         for _turn in range(max_turns):
             try:
                 resp = await self.llm.amessages_create(
                     messages=messages, model=model, tools=tools, system=system,
                 )
-            except NotImplementedError:
-                yield {"type": "error", "message": "LLM backend does not support chat."}
-                return
             except Exception as e:
                 logger.exception("astream: LLM call failed")
                 yield {"type": "error", "message": f"LLM call failed: {e}"}
@@ -96,68 +107,102 @@ class AgentService:
 
             total_input += resp.input_tokens
             total_output += resp.output_tokens
-
             tool_uses = [b for b in resp.content if b.type == "tool_use"]
 
             if not tool_uses or resp.stop_reason == "end_turn":
-                yield {
-                    "type": "response",
-                    "content": resp.content,
-                    "stop_reason": resp.stop_reason,
-                    "input_tokens": total_input,
-                    "output_tokens": total_output,
-                }
+                yield {"type": "response", "content": resp.content, "stop_reason": resp.stop_reason,
+                       "input_tokens": total_input, "output_tokens": total_output}
                 return
 
-            # Build assistant message
             messages.append({"role": "assistant", "content": [
                 {"type": "tool_use", "id": b.tool_use_id, "name": b.tool_name, "input": b.tool_input}
                 for b in tool_uses
             ]})
-
-            # Execute tools, yield each
             tool_results = []
             for tu in tool_uses:
                 handler = tool_handlers.get(tu.tool_name)
-                result = None
-                error = None
+                result, error = None, None
                 if handler:
                     try:
-                        result = handler(**(tu.tool_input or {}))
+                        import inspect
+                        if inspect.iscoroutinefunction(handler):
+                            result = await handler(**(tu.tool_input or {}))
+                        else:
+                            result = handler(**(tu.tool_input or {}))
                     except Exception as e:
-                        logger.warning("Tool %s failed: %s", tu.tool_name, e)
                         error = str(e)
                 else:
                     error = f"Unknown tool: {tu.tool_name}"
-
-                yield {
-                    "type": "tool_call",
-                    "name": tu.tool_name,
-                    "input": tu.tool_input,
-                    "result": result,
-                    "error": error,
-                }
-
-                if error:
-                    tool_results.append({
-                        "type": "tool_result", "tool_use_id": tu.tool_use_id,
-                        "content": json.dumps({"error": error}), "is_error": True,
-                    })
-                else:
-                    tool_results.append({
-                        "type": "tool_result", "tool_use_id": tu.tool_use_id,
-                        "content": json.dumps(result, default=str) if not isinstance(result, str) else result,
-                    })
+                yield {"type": "tool_call", "name": tu.tool_name, "input": tu.tool_input, "result": result, "error": error}
+                content = json.dumps({"error": error}) if error else (json.dumps(result, default=str) if not isinstance(result, str) else result)
+                tool_results.append({"type": "tool_result", "tool_use_id": tu.tool_use_id, "content": content, **({"is_error": True} if error else {})})
             messages.append({"role": "user", "content": tool_results})
 
-        # Max turns
-        yield {
-            "type": "response",
-            "content": resp.content if 'resp' in dir() else [],
-            "stop_reason": "max_turns",
-            "input_tokens": total_input,
-            "output_tokens": total_output,
-        }
+        yield {"type": "response", "content": resp.content if resp else [], "stop_reason": "max_turns",
+               "input_tokens": total_input, "output_tokens": total_output}
+
+    async def _astream_via_mcp(self, messages, model, tools, tool_handlers, system, max_turns):
+        """OAuth path — wraps tools as MCP server, runs via Agent SDK.
+
+        Agent SDK handles tool calling natively. We yield a single response event.
+        """
+        from mcp.server.fastmcp import FastMCP
+
+        # Build MCP server from tool definitions
+        mcp = FastMCP("chat-tools")
+        for tool_def in tools:
+            name = tool_def["name"]
+            handler = tool_handlers.get(name)
+            if handler:
+                # Register as MCP tool
+                mcp.tool(name=name, description=tool_def.get("description", ""))(handler)
+
+        # Build prompt from messages
+        parts = []
+        if system:
+            parts.append(system)
+        for m in messages:
+            content = m["content"] if isinstance(m["content"], str) else json.dumps(m["content"])
+            parts.append(f"[{m['role']}]: {content}")
+        prompt = "\n\n".join(parts)
+
+        try:
+            from claude_agent_sdk import query as sdk_query, ClaudeAgentOptions, ResultMessage
+
+            env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
+            token = os.environ.get("CLAUDE_CODE_OAUTH_TOKEN", "")
+            if token:
+                env["CLAUDE_CODE_OAUTH_TOKEN"] = token
+                env.pop("ANTHROPIC_AUTH_TOKEN", None)
+                env.pop("ANTHROPIC_API_KEY", None)
+
+            result_text = ""
+            usage = {}
+            async for msg in sdk_query(
+                prompt=prompt,
+                options=ClaudeAgentOptions(
+                    model=model,
+                    max_turns=max_turns,
+                    permission_mode="bypassPermissions",
+                    mcp_servers={"chat": {"type": "sdk", "name": "chat-tools", "instance": mcp._mcp_server}},
+                    env=env,
+                ),
+            ):
+                if isinstance(msg, ResultMessage):
+                    result_text = msg.result or ""
+                    usage = msg.usage or {}
+
+            from engine.llm.types import ContentBlock
+            yield {
+                "type": "response",
+                "content": [ContentBlock(type="text", text=result_text)],
+                "stop_reason": "end_turn",
+                "input_tokens": usage.get("input_tokens", 0),
+                "output_tokens": usage.get("output_tokens", 0),
+            }
+        except Exception as e:
+            logger.exception("astream_via_mcp failed")
+            yield {"type": "error", "message": f"Agent SDK chat failed: {e}"}
 
     # ── Agent SDK + MCP (agentic distill/compose) ──
 
