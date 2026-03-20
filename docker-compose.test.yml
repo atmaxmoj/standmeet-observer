@@ -1,4 +1,4 @@
-name: bisimulator-test
+name: observer-test
 
 services:
   db-test:
@@ -12,6 +12,19 @@ services:
       interval: 3s
       timeout: 2s
       retries: 5
+
+  pytest-sources:
+    build:
+      context: sources/framework
+      dockerfile: Dockerfile.test
+
+  pytest-unit:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    environment:
+      - ANTHROPIC_API_KEY=sk-fake-test-key
+    command: ["uv", "run", "pytest", "tests_unit/", "-q", "--tb=short"]
 
   engine-test:
     build: .

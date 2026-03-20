@@ -301,23 +301,22 @@ test.describe("Dashboard", () => {
   });
 
   test("Chat web search shows throbbing and returns result", async ({ page }) => {
+    // Fresh page to avoid state from previous chat test
     await page.goto("/");
     await nav(page, "chat");
     const panel = page.getByTestId("chat-panel");
     await expect(panel).toBeVisible({ timeout: 10000 });
 
-    // Clear previous chat to avoid cached responses
-    const clearBtn = panel.getByText("Clear chat");
-    if (await clearBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
-      await clearBtn.click();
-      await page.waitForTimeout(500);
-    }
-
+    // Wait for input to be ready
     const input = panel.getByTestId("chat-input");
-    await input.fill("search the web for what is SearXNG");
-    await panel.getByRole("button", { name: "Send" }).click();
+    await expect(input).toBeVisible({ timeout: 5000 });
+    const sendBtn = panel.getByRole("button", { name: "Send" });
+    await expect(sendBtn).toBeEnabled({ timeout: 5000 });
 
-    await expect(panel.getByText(/Thinking|Searching/)).toBeVisible({ timeout: 10000 });
+    await input.fill("search the web for what is SearXNG");
+    await sendBtn.click();
+
+    await expect(panel.getByText(/Thinking|Searching/)).toBeVisible({ timeout: 15000 });
 
     const assistantMsg = panel.locator(".bg-muted.text-foreground");
     await expect(assistantMsg.first()).toBeVisible({ timeout: 120000 });

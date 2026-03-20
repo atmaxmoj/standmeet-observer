@@ -81,9 +81,9 @@ class AgentService:
           {"type": "response", "content": [...], "stop_reason": ..., "input_tokens": ..., "output_tokens": ...}
           {"type": "error", "message": ...}
         """
-        # Always use native path. For AgentSDKClient (OAuth), amessages_create
-        # puts tools in prompt text — LLM may not use them (known limitation).
-        # MCP path doesn't work for chat because FastMCP can't wrap async handlers.
+        # Single path for all backends. AgentSDKClient.amessages_create()
+        # parses tool_use XML from text responses, so _astream_native works
+        # for both direct API and OAuth/Agent SDK.
         async for event in self._astream_native(messages, model, tools, tool_handlers, system, max_turns):
             yield event
 
@@ -139,67 +139,6 @@ class AgentService:
 
         yield {"type": "response", "content": resp.content if resp else [], "stop_reason": "max_turns",
                "input_tokens": total_input, "output_tokens": total_output}
-
-    async def _astream_via_mcp(self, messages, model, tools, tool_handlers, system, max_turns):
-        """OAuth path — wraps tools as MCP server, runs via Agent SDK."""
-        logger.info("astream: using MCP/Agent SDK path (%d tools)", len(tools))
-        from mcp.server.fastmcp import FastMCP
-
-        # Build MCP server from tool definitions
-        mcp = FastMCP("chat-tools")
-        for tool_def in tools:
-            name = tool_def["name"]
-            handler = tool_handlers.get(name)
-            if handler:
-                # Register as MCP tool
-                mcp.tool(name=name, description=tool_def.get("description", ""))(handler)
-
-        # Build prompt from messages
-        parts = []
-        if system:
-            parts.append(system)
-        for m in messages:
-            content = m["content"] if isinstance(m["content"], str) else json.dumps(m["content"])
-            parts.append(f"[{m['role']}]: {content}")
-        prompt = "\n\n".join(parts)
-
-        try:
-            from claude_agent_sdk import query as sdk_query, ClaudeAgentOptions, ResultMessage
-
-            env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
-            token = os.environ.get("CLAUDE_CODE_OAUTH_TOKEN", "")
-            if token:
-                env["CLAUDE_CODE_OAUTH_TOKEN"] = token
-                env.pop("ANTHROPIC_AUTH_TOKEN", None)
-                env.pop("ANTHROPIC_API_KEY", None)
-
-            result_text = ""
-            usage = {}
-            async for msg in sdk_query(
-                prompt=prompt,
-                options=ClaudeAgentOptions(
-                    model=model,
-                    max_turns=max_turns,
-                    permission_mode="bypassPermissions",
-                    mcp_servers={"chat": {"type": "sdk", "name": "chat-tools", "instance": mcp._mcp_server}},
-                    env=env,
-                ),
-            ):
-                if isinstance(msg, ResultMessage):
-                    result_text = msg.result or ""
-                    usage = msg.usage or {}
-
-            from engine.llm.types import ContentBlock
-            yield {
-                "type": "response",
-                "content": [ContentBlock(type="text", text=result_text)],
-                "stop_reason": "end_turn",
-                "input_tokens": usage.get("input_tokens", 0),
-                "output_tokens": usage.get("output_tokens", 0),
-            }
-        except Exception as e:
-            logger.exception("astream_via_mcp failed")
-            yield {"type": "error", "message": f"Agent SDK chat failed: {e}"}
 
     # ── Agent SDK + MCP (agentic distill/compose) ──
 

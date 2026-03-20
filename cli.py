@@ -281,39 +281,62 @@ def cmd_logs():
 
 def _compose(compose_test, *args):
     """Run docker compose with the test project."""
-    return run(["docker", "compose", "-p", "bisimulator-test", "-f", compose_test] + list(args), cwd=ROOT)
+    return run(["docker", "compose", "-p", "observer-test", "-f", compose_test] + list(args), cwd=ROOT)
 
 
 def _test_unit(compose_test, results_dir):
-    """Layer 1: unit tests (mock LLM)."""
+    """Layer 1: unit tests (no DB, pure logic)."""
     results = []
-    print("==> [1/3] Source framework unit tests...")
-    r = run(["uv", "run", "--extra", "test", "pytest", "-v"], cwd=ROOT / "sources" / "framework")
+    print("==> [1/4] Source framework unit tests (Docker)...")
+    sources_log = results_dir / "sources.log"
+    with open(sources_log, "w") as log:
+        r = subprocess.run(
+            ["docker", "compose", "-p", "observer-test", "-f", compose_test, "run", "--rm", "pytest-sources"],
+            cwd=ROOT, stdout=log, stderr=subprocess.STDOUT,
+        )
     results.append(("sources", r.returncode))
+    if r.returncode != 0:
+        print(f"  See {sources_log}")
 
-    print("\n==> [1/3] Engine unit tests (Docker)...")
+    print("\n==> [1/4] Engine unit tests (Docker, no DB)...")
+    unit_log = results_dir / "unit.log"
+    with open(unit_log, "w") as log:
+        r = subprocess.run(
+            ["docker", "compose", "-p", "observer-test", "-f", compose_test, "run", "--rm", "pytest-unit"],
+            cwd=ROOT, stdout=log, stderr=subprocess.STDOUT,
+        )
+    results.append(("unit", r.returncode))
+    if r.returncode != 0:
+        print(f"  See {unit_log}")
+    return results
+
+
+def _test_db(compose_test, results_dir):
+    """Layer 2: DB integration tests (needs PostgreSQL)."""
+    results = []
+    print("\n==> [2/4] Engine DB tests (Docker + PostgreSQL)...")
     _compose(compose_test, "up", "-d", "--build", "--wait", "db-test")
     engine_log = results_dir / "engine.log"
     with open(engine_log, "w") as log:
         r = subprocess.run(
-            ["docker", "compose", "-p", "bisimulator-test", "-f", compose_test, "run", "--rm", "pytest"],
+            ["docker", "compose", "-p", "observer-test", "-f", compose_test, "run", "--rm", "pytest"],
             cwd=ROOT, stdout=log, stderr=subprocess.STDOUT,
         )
-    results.append(("engine", r.returncode))
+    results.append(("engine-db", r.returncode))
     if r.returncode != 0:
         print(f"  See {engine_log}")
     return results
 
 
 def _test_integration(compose_test, results_dir):
-    """Layer 2: integration tests (real LLM)."""
+    """Layer 3: integration tests (real LLM)."""
     integration_dir = ROOT / "tests" / "integration"
     test_files = sorted(integration_dir.glob("test_*.py")) if integration_dir.exists() else []
     if not test_files:
-        print("\n==> [2/3] No integration tests found, skipping")
+        print("\n==> [3/4] No integration tests found, skipping")
         return []
 
-    print("\n==> [2/3] Integration tests (Docker, real LLM)...")
+    print("\n==> [3/4] Integration tests (Docker, real LLM)...")
     _compose(compose_test, "up", "-d", "--build", "--wait", "engine-test")
     _compose(compose_test, "exec", "-T", "engine-test", "mkdir", "-p", "/app/tests/integration")
     _compose(compose_test, "cp", str(integration_dir) + "/.", "engine-test:/app/tests/integration")
@@ -324,7 +347,7 @@ def _test_integration(compose_test, results_dir):
         for tf in test_files:
             print(f"  Running {tf.name}...")
             r = subprocess.run(
-                ["docker", "compose", "-p", "bisimulator-test", "-f", compose_test,
+                ["docker", "compose", "-p", "observer-test", "-f", compose_test,
                  "exec", "-T", "-u", "engine", "engine-test",
                  "uv", "run", "python", "-u", f"/app/tests/integration/{tf.name}"],
                 cwd=ROOT, stdout=log, stderr=subprocess.STDOUT,
@@ -340,14 +363,14 @@ def _test_integration(compose_test, results_dir):
 
 
 def _test_e2e(compose_test, results_dir):
-    """Layer 3: Playwright e2e (real LLM, full pipeline)."""
-    print("\n==> [3/3] Playwright e2e tests (Docker, real LLM)...")
+    """Layer 4: Playwright e2e (real LLM, full pipeline)."""
+    print("\n==> [4/4] Playwright e2e tests (Docker, real LLM)...")
     _compose(compose_test, "build", "playwright")
     _compose(compose_test, "up", "-d", "--build", "--wait", "engine-test")
     web_log = results_dir / "web.log"
     with open(web_log, "w") as log:
         r = subprocess.run(
-            ["docker", "compose", "-p", "bisimulator-test", "-f", compose_test, "run", "--rm", "playwright"],
+            ["docker", "compose", "-p", "observer-test", "-f", compose_test, "run", "--rm", "playwright"],
             cwd=ROOT, stdout=log, stderr=subprocess.STDOUT,
         )
     _compose(compose_test, "cp", "engine-test:/data/.", str(results_dir / "web-data"))
@@ -355,7 +378,7 @@ def _test_e2e(compose_test, results_dir):
     engine_e2e_log = results_dir / "engine-e2e.log"
     with open(engine_e2e_log, "w") as elog:
         subprocess.run(
-            ["docker", "compose", "-p", "bisimulator-test", "-f", compose_test, "logs", "engine-test"],
+            ["docker", "compose", "-p", "observer-test", "-f", compose_test, "logs", "engine-test"],
             cwd=ROOT, stdout=elog, stderr=subprocess.STDOUT,
         )
     if r.returncode != 0:
@@ -366,7 +389,11 @@ def _test_e2e(compose_test, results_dir):
 
 def cmd_test():
     """Run tests. Usage: npm test [-- <suite>]
-    Suites: unit, integration, e2e, all (default: all)
+    Suites: unit, db, integration, e2e, all (default: all)
+      unit:        Pure logic tests, no DB (sources + engine unit)
+      db:          Engine tests that need PostgreSQL
+      integration: Real LLM tests
+      e2e:         Playwright browser tests
     """
     suite = sys.argv[2] if len(sys.argv) > 2 else "all"
     compose_test = str(ROOT / "docker-compose.test.yml")
@@ -375,7 +402,7 @@ def cmd_test():
 
     print("==> Running code checks...")
     for name, cmd, cwd in [
-        ("ruff", ["uv", "run", "ruff", "check", "src/", "tests/", "cli.py"], ROOT),
+        ("ruff", ["uv", "run", "ruff", "check", "src/", "tests/", "tests_unit/", "cli.py"], ROOT),
         ("tsc", ["npx", "tsc", "--noEmit"], ROOT / "web"),
         ("eslint", ["npx", "eslint", "src/", "--max-warnings", "0"], ROOT / "web"),
         ("knip", ["npx", "knip"], ROOT / "web"),
@@ -387,6 +414,8 @@ def cmd_test():
     results = []
     if suite in ("unit", "all"):
         results.extend(_test_unit(compose_test, results_dir))
+    if suite in ("db", "all"):
+        results.extend(_test_db(compose_test, results_dir))
     if suite in ("integration", "all"):
         results.extend(_test_integration(compose_test, results_dir))
     if suite in ("e2e", "all"):
@@ -395,7 +424,7 @@ def cmd_test():
     _compose(compose_test, "down", "-v")
 
     if not results:
-        sys.exit(f"Unknown suite: {suite}. Available: unit, integration, e2e, all")
+        sys.exit(f"Unknown suite: {suite}. Available: unit, db, integration, e2e, all")
 
     print("\n==> Results:")
     for name, rc in results:

@@ -68,8 +68,12 @@ class AgentSDKClient(LLMClient):
         system: str = "",
         max_tokens: int = 4096,
     ) -> MessageResponse:
-        """Single-turn LLM call via Agent SDK. Supports tools via text parsing."""
-        # Build a single prompt from messages
+        """Single-turn LLM call via Agent SDK. Parses tool_use from text."""
+        import json
+        import re
+        import uuid
+
+        # Build a single prompt from messages + tool definitions
         parts = []
         if system:
             parts.append(f"[System] {system}")
@@ -78,10 +82,53 @@ class AgentSDKClient(LLMClient):
             content = m["content"] if isinstance(m["content"], str) else str(m["content"])
             parts.append(f"[{role}] {content}")
         if tools:
-            parts.append(f"[Available tools] {[t['name'] for t in tools]}")
+            tool_lines = []
+            for t in tools:
+                schema = json.dumps(t.get("input_schema", {}))
+                tool_lines.append(f"- {t['name']}: {t.get('description', '')} Input schema: {schema}")
+            parts.append(
+                "You have these tools available. To call a tool, respond with XML:\n"
+                "<tool_use><name>TOOL_NAME</name><input>JSON_OBJECT</input></tool_use>\n\n"
+                + "\n".join(tool_lines)
+            )
         prompt = "\n\n".join(parts)
 
         resp = await self.acomplete(prompt, model)
+
+        # Parse tool_use XML tags from response text
+        content_blocks: list[ContentBlock] = []
+        tool_pattern = re.compile(
+            r'<tool_use>\s*<name>([\w_]+)</name>\s*<input>(.*?)</input>\s*</tool_use>',
+            re.DOTALL,
+        )
+        matches = list(tool_pattern.finditer(resp.text))
+
+        if matches:
+            # Extract text before first tool call
+            text_before = resp.text[:matches[0].start()].strip()
+            if text_before:
+                content_blocks.append(ContentBlock(type="text", text=text_before))
+
+            for m in matches:
+                tool_name = m.group(1)
+                try:
+                    tool_input = json.loads(m.group(2).strip())
+                except (json.JSONDecodeError, ValueError):
+                    tool_input = {}
+                content_blocks.append(ContentBlock(
+                    type="tool_use",
+                    tool_name=tool_name,
+                    tool_input=tool_input,
+                    tool_use_id=f"toolu_{uuid.uuid4().hex[:24]}",
+                ))
+
+            return MessageResponse(
+                content=content_blocks,
+                stop_reason="tool_use",
+                input_tokens=resp.input_tokens,
+                output_tokens=resp.output_tokens,
+            )
+
         return MessageResponse(
             content=[ContentBlock(type="text", text=resp.text)],
             stop_reason="end_turn",

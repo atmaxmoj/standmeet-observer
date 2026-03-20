@@ -7,11 +7,10 @@ uv run ruff check src/ cli.py || exit 1
 # Python: circular import check (import-linter)
 PYTHONPATH=src uv run lint-imports || exit 1
 
-# Python: engine tests
-PYTHONPATH=src uv run pytest tests/ -q || exit 1
+# Python: unit tests (no DB, pure logic)
+PYTHONPATH=src uv run pytest tests_unit/ -q || exit 1
 
-# Python: source framework tests
-(cd sources/framework && uv run --extra test pytest tests/ -q) || exit 1
+# Python: source framework unit tests (Docker — skipped in pre-commit, run via npm test)
 
 # JS/TS: TypeScript compile check
 (cd web && npx tsc -b) || exit 1

@@ -9,8 +9,10 @@ RUN uv sync --extra test --no-install-project
 
 COPY src/ src/
 COPY tests/ tests/
+COPY tests_unit/ tests_unit/
 COPY sources/builtin/ sources/builtin/
 COPY cli.py .
 
 ENV PYTHONPATH=/app/src
-CMD ["uv", "run", "pytest", "tests/", "-q", "--tb=short"]
+# Default: run integration tests (DB-dependent). Override CMD for unit tests.
+CMD ["uv", "run", "pytest", "tests/", "--ignore=tests/unit", "--ignore=tests/integration", "-q", "--tb=short"]
