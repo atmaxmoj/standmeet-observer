@@ -81,13 +81,11 @@ class AgentService:
           {"type": "response", "content": [...], "stop_reason": ..., "input_tokens": ..., "output_tokens": ...}
           {"type": "error", "message": ...}
         """
-        from engine.llm.adapters.agent_sdk import AgentSDKClient
-        if isinstance(self.llm, AgentSDKClient):
-            async for event in self._astream_via_mcp(messages, model, tools, tool_handlers, system, max_turns):
-                yield event
-        else:
-            async for event in self._astream_native(messages, model, tools, tool_handlers, system, max_turns):
-                yield event
+        # Always use native path. For AgentSDKClient (OAuth), amessages_create
+        # puts tools in prompt text — LLM may not use them (known limitation).
+        # MCP path doesn't work for chat because FastMCP can't wrap async handlers.
+        async for event in self._astream_native(messages, model, tools, tool_handlers, system, max_turns):
+            yield event
 
     async def _astream_native(self, messages, model, tools, tool_handlers, system, max_turns):
         """Native API path — uses amessages_create with tool_use blocks."""

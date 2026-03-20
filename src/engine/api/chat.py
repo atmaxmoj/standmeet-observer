@@ -475,7 +475,7 @@ async def _chat_stream(db, llm, messages: list[dict]) -> AsyncGenerator[str, Non
     proposals: list[dict] = []
 
     # Async tool handlers — astream supports both sync and async
-    async def _make_handler(tool_name):
+    def _make_handler(tool_name):
         async def handler(**kwargs):
             result, proposal = await _handle_tool(db, tool_name, kwargs)
             if proposal:
@@ -483,16 +483,7 @@ async def _chat_stream(db, llm, messages: list[dict]) -> AsyncGenerator[str, Non
             return result
         return handler
 
-    tool_handlers = {}
-    for t in tools:
-        # Need to capture tool name properly in closure
-        name = t["name"]
-        async def _handler(_name=name, **kwargs):
-            result, proposal = await _handle_tool(db, _name, kwargs)
-            if proposal:
-                proposals.append(proposal)
-            return result
-        tool_handlers[name] = _handler
+    tool_handlers = {t["name"]: _make_handler(t["name"]) for t in tools}
 
     logger.info("chat: starting with %d messages", len(messages))
 
