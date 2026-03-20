@@ -306,6 +306,13 @@ test.describe("Dashboard", () => {
     const panel = page.getByTestId("chat-panel");
     await expect(panel).toBeVisible({ timeout: 10000 });
 
+    // Clear previous chat to avoid cached responses
+    const clearBtn = panel.getByText("Clear chat");
+    if (await clearBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
+      await clearBtn.click();
+      await page.waitForTimeout(500);
+    }
+
     const input = panel.getByTestId("chat-input");
     await input.fill("search the web for what is SearXNG");
     await panel.getByRole("button", { name: "Send" }).click();
