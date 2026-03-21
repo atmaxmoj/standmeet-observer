@@ -69,8 +69,8 @@ services:
 
   playwright:
     build:
-      context: .
-      dockerfile: web/Dockerfile.test
+      context: web
+      dockerfile: Dockerfile.test
     depends_on:
       engine-test:
         condition: service_healthy

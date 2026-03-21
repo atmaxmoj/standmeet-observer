@@ -83,7 +83,7 @@ def run_with_mcp(
     session: Session,
     auth_token: str,
     model: str = "",
-    max_turns: int = 15,
+    max_turns: int = 40,
 ) -> AgentResult:
     """Multi-turn agentic run with MCP tools via Agent SDK."""
     from claude_agent_sdk import query as sdk_query, ClaudeAgentOptions, ResultMessage

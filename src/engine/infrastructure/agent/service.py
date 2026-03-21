@@ -85,7 +85,7 @@ class AgentService:
         stage: str,
         session: Session,
         model: str = "",
-        max_turns: int = 15,
+        max_turns: int = 40,
     ) -> sdk.AgentResult:
         """Multi-turn agentic run with MCP tools.
 
