@@ -55,6 +55,7 @@ layers = [
     "engine.prompts",
     "engine.storage",
     "engine.config",
+    "engine.domain",
 ]
 
 [tool.vulture]

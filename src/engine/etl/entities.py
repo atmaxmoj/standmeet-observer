@@ -1,23 +1,5 @@
-"""Frame dataclass used across the pipeline."""
+"""Re-export from domain layer."""
 
-from dataclasses import dataclass
+from engine.domain.observation.entity import Frame
 
-
-@dataclass
-class Frame:
-    """
-    A single observation from any source.
-
-    source: where this came from ("capture", "audio", ...)
-    app_name: the application context (for capture: the focused app)
-    text: the signal content (OCR text, transcription, ...)
-    image_path: relative path to compressed screenshot (empty if no image)
-    """
-
-    id: int
-    source: str
-    text: str
-    app_name: str
-    window_name: str
-    timestamp: str
-    image_path: str = ""
+__all__ = ["Frame"]

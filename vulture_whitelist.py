@@ -50,3 +50,8 @@ record_snapshot  # noqa
 # Validation function — has unit tests, should be wired into MCP write tools
 validate_playbooks  # noqa
 
+# Domain entities — newly created, callers being migrated
+Playbook  # noqa
+VALID_TYPES  # noqa
+validate_playbook_entry  # noqa
+
