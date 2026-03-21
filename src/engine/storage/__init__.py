@@ -1,8 +1,7 @@
-"""Storage layer — re-exports."""
-
-from engine.storage.db import DB, CHAT_WINDOW_SIZE
-from engine.storage.models import Base
-from engine.storage.memory_file import (
+"""Re-export from infrastructure layer."""
+from engine.infrastructure.persistence.db import DB, CHAT_WINDOW_SIZE
+from engine.infrastructure.persistence.models import Base
+from engine.infrastructure.persistence.memory_file import (
     write_playbook, write_routine, delete_playbook, MEMORY_DIR,
 )
 

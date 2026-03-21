@@ -112,8 +112,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from engine.api.routes import router  # noqa: E402
-from engine.api.chat import router as chat_router  # noqa: E402
+from engine.interfaces.api.routes import router  # noqa: E402
+from engine.interfaces.api.chat import router as chat_router  # noqa: E402
 
 app.include_router(router)
 app.include_router(chat_router)

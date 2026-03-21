@@ -45,7 +45,7 @@ include_external_packages = false
 name = "Engine layered architecture"
 type = "layers"
 layers = [
-    "engine.api",
+    "engine.interfaces",
     "engine.scheduler",
     "engine.application",
     "engine.infrastructure",

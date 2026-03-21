@@ -129,7 +129,7 @@ def run_with_mcp(
     output_tokens = usage.get("output_tokens", 0)
     cost = cost_usd or 0
 
-    from engine.storage.sync_db import SyncDB
+    from engine.infrastructure.persistence.sync_db import SyncDB
     db = SyncDB(session)
     db.record_usage(model, stage, input_tokens, output_tokens, cost)
     db.insert_pipeline_log(stage, prompt, result_text[:5000], model, input_tokens, output_tokens, cost)
