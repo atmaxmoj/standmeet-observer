@@ -46,3 +46,7 @@ process_window  # noqa
 
 # Repository functions called from ToolDef-based tools (audit.py)
 record_snapshot  # noqa
+
+# Validation function — has unit tests, should be wired into MCP write tools
+validate_playbooks  # noqa
+

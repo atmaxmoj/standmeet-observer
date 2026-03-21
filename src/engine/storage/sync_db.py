@@ -112,29 +112,6 @@ class SyncDB:
         rows = self.session.execute(stmt).scalars().all()
         return [self._routine_to_dict(r) for r in rows]
 
-    def upsert_routine(
-        self, name: str, trigger: str, goal: str,
-        steps: str, uses: str, confidence: float, maturity: str,
-    ):
-        existing = self.session.execute(
-            select(Routine).where(Routine.name == name)
-        ).scalar_one_or_none()
-        if existing:
-            existing.trigger = trigger
-            existing.goal = goal
-            existing.steps = steps
-            existing.uses = uses
-            existing.confidence = confidence
-            existing.maturity = maturity
-            existing.updated_at = func.now()
-        else:
-            self.session.add(Routine(
-                name=name, trigger=trigger, goal=goal,
-                steps=steps, uses=uses,
-                confidence=confidence, maturity=maturity,
-            ))
-        self.session.flush()
-
     def count_recent_routines(self, hours: int = 1) -> int:
         stmt = select(func.count()).select_from(Routine).where(
             Routine.updated_at >= ago(hours=hours)

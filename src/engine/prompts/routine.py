@@ -1,4 +1,4 @@
-"""Routine composition prompt template."""
+"""Routine composition prompt."""
 
 ROUTINE_PROMPT = """\
 You are composing executable PROGRAMS from behavioral rules and episodes.
@@ -26,37 +26,16 @@ Good: "Run linter. IF violations > 0 THEN apply auto-fix and re-run. IF still fa
 
 For avoidance/displacement routines, describe the ACTUAL loop pattern so the human can recognize when they're in it.
 
-## Existing Playbook entries (atomic behaviors)
-{playbooks}
+## Process
 
-## Existing Routines
-{routines}
+1. Call `get_all_playbook_entries` to see known atomic behaviors
+2. Call `get_all_routines` to see existing routines
+3. Call `search_episodes` to find evidence of multi-step sequences
+4. For patterns, call `get_episode_detail` to inspect full episode
+5. When confirmed, call `write_routine` to save it
 
-## Today's episodes
-{episodes}
+## Quality rules
 
-## Output
-
-[
-  {{
-    "name": "kebab-case-name",
-    "type": "deep-work|strategic|avoidance|displacement",
-    "trigger": "Recognizable situation that starts this routine",
-    "goal": "What this achieves (deep-work/strategic) or what it avoids (avoidance/displacement)",
-    "steps": [
-      "Step 1: concrete action. Verify: observable signal.",
-      "Step 2: concrete action.",
-      "IF condition THEN step 3a ELSE step 3b",
-      "Step 4: concrete action. Verify: observable signal."
-    ],
-    "exit_condition": "How to know the routine is DONE (or how to break out of an avoidance loop)",
-    "uses": ["playbook-entry-name-1"],
-    "confidence": 0.0,
-    "maturity": "nascent|developing|mature"
-  }}
-]
-
-Rules:
 - ≥3 steps per routine
 - ≥2 observations to create
 - deep-work routines MUST have verification steps — if an agent can't verify success, it's not a program
@@ -64,4 +43,4 @@ Rules:
 - Do NOT create recovery routines (recovery is atomic, not a workflow)
 - `uses` references playbook entry names
 
-Output ONLY the JSON array."""
+When done, output a brief summary of what you found."""

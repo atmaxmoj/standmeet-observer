@@ -1,4 +1,4 @@
-"""Playbook distillation prompt template."""
+"""Playbook distillation prompt."""
 
 PLAYBOOK_PROMPT = """\
 You are extracting reusable behavioral rules from someone's work journal.
@@ -20,31 +20,21 @@ Extract PATTERNS from specific instances. Abstract tool-specific details into tr
 WRONG: "When docker cp fails: mkdir -p first"
 RIGHT: "When a file operation fails due to missing path: create the path structure first, then retry"
 
-## Existing rules
-{playbooks}
+## Process
 
-## Recent episodes
-{episodes}
+1. Call `get_all_playbook_entries` to see existing rules
+2. Call `search_episodes` with relevant keywords to find evidence
+3. For interesting patterns, call `get_episode_frames` to verify against raw data
+4. When you've confirmed a pattern, call `write_playbook_entry` to save it
 
-## Output
+## Quality rules
 
-[
-  {{
-    "name": "kebab-case-name",
-    "type": "deep-work|strategic|recovery|avoidance|displacement",
-    "when": "Recognizable situation type (transferable)",
-    "then": "Behavioral pattern (transferable)",
-    "because": "The value or reasoning driving this",
-    "boundary": "When this does NOT apply, or when it crosses into a different type (null if unknown)",
-    "confidence": 0.0,
-    "maturity": "nascent|developing|mature|mastered",
-    "evidence": [1, 2, 3]
-  }}
-]
-
-Rules:
-- Be aggressive — extract from single episodes too (confidence 0.2). Aim for 8-15 rules.
+- Rules must be TRANSFERABLE — apply to anyone in similar situations
+- Abstract away specific tools into situation types
+- "boundary" field is critical: defines when behavior SWITCHES type
+- Classify every rule as deep-work, strategic, recovery, avoidance, or displacement
+- Minimum confidence 0.2 for single-episode, 0.6 for multi-episode
+- Be aggressive — extract from single strong episodes. Aim for 8-15 rules.
 - Every type should have at least 1 entry if evidence exists.
-- "boundary" is critical: it defines when a behavior SWITCHES type (e.g., strategic investigation becomes avoidance when it extends indefinitely without execution).
 
-Output ONLY the JSON array."""
+When done, output a brief summary of what you found."""
