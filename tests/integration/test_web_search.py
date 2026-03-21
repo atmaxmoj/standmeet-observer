@@ -25,7 +25,7 @@ def save_result(name: str, data: dict):
 
 def test_web_search_returns_results():
     """web_search should return a non-empty list of results."""
-    from engine.pipeline.chat import web_search as _web_search
+    from engine.application.chat import web_search as _web_search
 
     results = asyncio.run(_web_search("what is Python programming language", max_results=3))
     save_result("basic", {"query": "what is Python programming language", "results": results})
@@ -42,7 +42,7 @@ def test_web_search_recent_content():
 
     If results mention today's date or very recent events, it actually searched.
     """
-    from engine.pipeline.chat import web_search as _web_search
+    from engine.application.chat import web_search as _web_search
 
     today = datetime.now().strftime("%Y-%m-%d")
     query = f"news today {today}"
@@ -59,7 +59,7 @@ def test_web_search_recent_content():
 
 def test_web_search_url_validity():
     """Returned URLs should look like real URLs (http/https)."""
-    from engine.pipeline.chat import web_search as _web_search
+    from engine.application.chat import web_search as _web_search
 
     results = asyncio.run(_web_search("SearXNG meta search engine github", max_results=3))
     save_result("urls", {"query": "SearXNG meta search engine github", "results": results})
@@ -72,7 +72,7 @@ def test_web_search_url_validity():
 
 def test_web_search_handles_empty_query():
     """Empty query should not crash."""
-    from engine.pipeline.chat import web_search as _web_search
+    from engine.application.chat import web_search as _web_search
 
     results = asyncio.run(_web_search(""))
     save_result("empty", {"query": "", "results": results})

@@ -9,7 +9,7 @@ import logging
 from sqlalchemy.orm import Session
 
 from engine.config import MODEL_FAST, Settings
-from engine.prompts.episode import EPISODE_PROMPT
+from engine.domain.prompt.episode import EPISODE_PROMPT
 from engine.storage.sync_db import SyncDB
 from engine.etl.collect import load_frames, store_episodes
 from engine.pipeline.stages.extract import build_context
@@ -77,7 +77,7 @@ def run_distill(settings: Settings, session: Session) -> int:
     Returns count of entries created/updated. Caller must session.commit().
     """
     from engine.agents.service import AgentService
-    from engine.prompts.playbook import PLAYBOOK_PROMPT
+    from engine.domain.prompt.playbook import PLAYBOOK_PROMPT
     from engine.agents.tools.distill_mcp import create_distill_mcp_server
 
     db = SyncDB(session)
@@ -101,7 +101,7 @@ def run_routines(settings: Settings, session: Session) -> int:
     Returns count. Caller must session.commit().
     """
     from engine.agents.service import AgentService
-    from engine.prompts.routine import ROUTINE_PROMPT
+    from engine.domain.prompt.routine import ROUTINE_PROMPT
     from engine.agents.tools.compose_mcp import create_compose_mcp_server
 
     db = SyncDB(session)

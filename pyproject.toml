@@ -47,6 +47,7 @@ type = "layers"
 layers = [
     "engine.api",
     "engine.scheduler",
+    "engine.application",
     "engine.pipeline",
     "engine.agents",
     "engine.etl",

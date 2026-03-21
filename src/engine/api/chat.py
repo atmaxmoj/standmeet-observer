@@ -6,7 +6,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from engine.pipeline.chat import chat_stream, exec_delete, exec_update_playbook
+from engine.application.chat import chat_stream, exec_delete, exec_update_playbook
 
 router = APIRouter()
 

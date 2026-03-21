@@ -318,7 +318,7 @@ async def pipeline_logs(request: Request, limit: int = 50, offset: int = 0, sear
 
 @router.post("/engine/distill")
 async def trigger_distill(request: Request):
-    from engine.pipeline.distill import daily_distill
+    from engine.application.distill_playbooks import distill_playbooks as daily_distill
 
     db = request.app.state.db
     count = await daily_distill(request.app.state.settings, db)
@@ -334,7 +334,7 @@ async def list_routines(request: Request, search: str = ""):
 
 @router.post("/engine/routines")
 async def trigger_routines(request: Request):
-    from engine.pipeline.routines import daily_routines
+    from engine.application.compose_routines import compose_routines as daily_routines
 
     db = request.app.state.db
     count = await daily_routines(request.app.state.settings, db)
