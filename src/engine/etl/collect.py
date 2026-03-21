@@ -1,8 +1,2 @@
-"""Stage: collect frames from DB by IDs + store episodes.
-
-Delegates to etl/repository.py for actual DB access.
-"""
-
-from engine.etl.repository import load_frames, store_episodes
-
-__all__ = ["load_frames", "store_episodes"]
+"""Re-export from infrastructure layer."""
+from engine.infrastructure.etl.collect import *  # noqa: F401, F403
