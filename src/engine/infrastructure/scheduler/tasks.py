@@ -13,9 +13,9 @@ from pathlib import Path
 from huey import SqliteHuey, crontab
 
 from engine.config import Settings, MODEL_DEEP, DAILY_COST_CAP_USD
-from engine.etl.filter import should_keep, detect_windows
-from engine.pipeline.budget import check_daily_budget
-from engine.pipeline.orchestrator import run_episode, run_distill, run_routines
+from engine.domain.observation.filter import should_keep, detect_windows
+from engine.infrastructure.pipeline.budget import check_daily_budget
+from engine.infrastructure.pipeline.orchestrator import run_episode, run_distill, run_routines
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ huey = _get_huey()
 
 def _get_session():
     """Get a SQLAlchemy session for ORM operations."""
-    from engine.storage.engine import get_sync_session_factory
+    from engine.infrastructure.persistence.engine import get_sync_session_factory
     factory = get_sync_session_factory(_get_settings().database_url_sync)
     return factory()
 
@@ -64,7 +64,7 @@ def _enqueue_window(window: list):
 
 def _mark_all_processed(session, screen_ids, audio_ids, os_ids, source_ids, registry, remainder):
     """Mark frames as processed, excluding remainder."""
-    from engine.etl.repository import mark_source_processed
+    from engine.infrastructure.etl.repository import mark_source_processed
     remainder_ids = {f.id for f in remainder}
     _mark_processed(session, screen_ids - remainder_ids, audio_ids - remainder_ids, os_ids - remainder_ids)
     if registry and source_ids:
@@ -84,8 +84,8 @@ def on_new_data():
     """Check unprocessed frames for complete windows. Deduplicated by lock."""
     session = _get_session()
     try:
-        from engine.etl.repository import load_unprocessed_frames, load_unprocessed_source_frames
-        from engine.etl.sources.manifest_registry import get_global_registry
+        from engine.infrastructure.etl.repository import load_unprocessed_frames, load_unprocessed_source_frames
+        from engine.infrastructure.etl.sources.manifest_registry import get_global_registry
         screen_frames, audio_frames, os_frames = load_unprocessed_frames(session)
 
         registry = get_global_registry()
@@ -144,7 +144,7 @@ def _mark_processed(
     os_event_ids: set[int] | None = None,
 ):
     """Mark frames as processed in DB."""
-    from engine.etl.repository import mark_processed
+    from engine.infrastructure.etl.repository import mark_processed
     mark_processed(session, screen_ids, audio_ids, os_event_ids)
 
 
@@ -263,7 +263,7 @@ Output a brief summary of what you did when finished."""
 
 def _build_gc_prompt() -> str:
     """Build GC prompt with manifest source info."""
-    from engine.etl.sources.manifest_registry import get_global_registry
+    from engine.infrastructure.etl.sources.manifest_registry import get_global_registry
     registry = get_global_registry()
     extra = ""
     if registry:
@@ -284,9 +284,9 @@ def _build_gc_prompt() -> str:
 @huey.periodic_task(crontab(hour="4", minute="0"))
 def daily_gc_task():
     """Daily garbage collection: decay + agent-driven audit. Runs every day at 4am (after distill at 3am)."""
-    from engine.pipeline.decay import decay_confidence, decay_routines
-    from engine.agents.tools.dedup import make_dedup_tools
-    from engine.agents.tools.audit import make_audit_tools, make_manifest_purge_tools
+    from engine.infrastructure.pipeline.decay import decay_confidence, decay_routines
+    from engine.infrastructure.agent.tools.dedup import make_dedup_tools
+    from engine.infrastructure.agent.tools.audit import make_audit_tools, make_manifest_purge_tools
 
     session = _get_session()
     try:
@@ -303,12 +303,12 @@ def daily_gc_task():
         # Phase 2: Agent-driven audit (only if LLM supports tools)
         gc_tools = make_dedup_tools(session) + make_audit_tools(session) + make_manifest_purge_tools(session)
         try:
-            from engine.agents.service import AgentService
+            from engine.infrastructure.agent.service import AgentService
             gc_prompt = _build_gc_prompt()
             resp = AgentService(_get_settings()).run(
                 gc_prompt, MODEL_DEEP, gc_tools, max_turns=10,
             )
-            from engine.storage.sync_db import SyncDB
+            from engine.infrastructure.persistence.sync_db import SyncDB
             cost = resp.cost_usd or 0
             db = SyncDB(session)
             db.record_usage(MODEL_DEEP, "gc", resp.input_tokens, resp.output_tokens, cost)

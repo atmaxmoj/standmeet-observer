@@ -56,10 +56,10 @@ async def app_with_zsh_source(tmp_path):
 
     os.environ["SOURCES_DIR"] = str(tmp_path / "sources")
 
-    from engine.etl.sources.manifest_registry import (
+    from engine.infrastructure.etl.sources.manifest_registry import (
         ManifestRegistry, create_table_for_manifest, load_manifest_data,
     )
-    from engine.storage.models import Base
+    from engine.infrastructure.persistence.models import Base
 
     # Create ORM tables + manifest table in own schema
     schema_engine = _ce(sync_url)
@@ -74,7 +74,7 @@ async def app_with_zsh_source(tmp_path):
     registry.register(manifest)
 
     from fastapi import FastAPI
-    from engine.api.routes import router
+    from engine.interfaces.api.routes import router
 
     app = FastAPI()
     app.include_router(router)

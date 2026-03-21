@@ -1,8 +1,8 @@
 """Tests for episode recall tools."""
 
 import pytest
-from engine.storage.models import Episode
-from engine.agents.repository import search_episodes, get_recent_episodes, get_episodes_by_app
+from engine.infrastructure.persistence.models import Episode
+from engine.infrastructure.agent.repository import search_episodes, get_recent_episodes, get_episodes_by_app
 
 
 @pytest.fixture

@@ -2,7 +2,7 @@
 
 from sqlalchemy.orm import Session
 
-from engine.llm.types import ToolDef
+from engine.infrastructure.llm.types import ToolDef
 from engine.infrastructure.agent import repository as repo
 
 
@@ -134,7 +134,7 @@ def make_audit_tools(session: Session) -> list[ToolDef]:
 
 def make_manifest_purge_tools(session: Session) -> list[ToolDef]:
     """Generate purge tools for manifest-based sources."""
-    from engine.etl.sources.manifest_registry import get_global_registry
+    from engine.infrastructure.etl.sources.manifest_registry import get_global_registry
     from sqlalchemy import text
 
     registry = get_global_registry()
@@ -150,7 +150,7 @@ def make_manifest_purge_tools(session: Session) -> list[ToolDef]:
 
         def make_purge(sn, tbl):
             def purge(older_than_days):
-                from engine.storage.session import ago
+                from engine.infrastructure.persistence.session import ago
                 cutoff = ago(days=older_than_days)
                 result = session.execute(text(
                     f"DELETE FROM {tbl} WHERE processed = 1 AND created_at < :cutoff"

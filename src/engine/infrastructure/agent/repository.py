@@ -10,8 +10,8 @@ import os
 from sqlalchemy import delete, select, func
 from sqlalchemy.orm import Session
 
-from engine.storage.session import ago
-from engine.storage.models import (
+from engine.infrastructure.persistence.session import ago
+from engine.infrastructure.persistence.models import (
     Frame as FrameModel, AudioFrame, OsEvent, Episode,
     PlaybookEntry, PlaybookHistory, Routine, PipelineLog,
 )
@@ -334,7 +334,7 @@ def get_data_stats(session: Session) -> dict:
             stats[name] = {"total": total}
 
     # Add manifest source stats
-    from engine.etl.sources.manifest_registry import get_global_registry
+    from engine.infrastructure.etl.sources.manifest_registry import get_global_registry
     from sqlalchemy import text as sa_text
     registry = get_global_registry()
     if registry:
@@ -361,7 +361,7 @@ def get_oldest_processed(session: Session) -> dict:
     result["pipeline_logs"] = session.execute(select(func.min(PipelineLog.created_at))).scalar()
 
     # Add manifest source oldest processed
-    from engine.etl.sources.manifest_registry import get_global_registry
+    from engine.infrastructure.etl.sources.manifest_registry import get_global_registry
     from sqlalchemy import text as sa_text
     registry = get_global_registry()
     if registry:

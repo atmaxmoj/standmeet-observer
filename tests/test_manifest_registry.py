@@ -9,7 +9,7 @@ import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
-from engine.etl.sources.manifest_registry import (
+from engine.infrastructure.etl.sources.manifest_registry import (
     ManifestCaptureSource,
     ManifestRegistry,
     load_manifest_data,
@@ -18,7 +18,7 @@ from engine.etl.sources.manifest_registry import (
     insert_record,
     query_records,
 )
-from engine.etl.entities import Frame
+from engine.domain.observation.entity import Frame
 
 
 ZSH_MANIFEST = {

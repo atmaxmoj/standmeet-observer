@@ -7,7 +7,7 @@ import logging
 
 from sqlalchemy.orm import Session
 
-from engine.pipeline.repository import get_daily_spend, get_budget_cap
+from engine.infrastructure.pipeline.repository import get_daily_spend, get_budget_cap
 
 logger = logging.getLogger(__name__)
 

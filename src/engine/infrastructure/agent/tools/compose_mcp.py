@@ -5,7 +5,7 @@ import json
 from sqlalchemy.orm import Session
 from mcp.server.fastmcp import FastMCP
 
-from engine.observability.logger import log_tool_call
+from engine.infrastructure.observability.logger import log_tool_call
 from engine.infrastructure.agent import repository as repo
 
 STAGE = "compose_agentic"

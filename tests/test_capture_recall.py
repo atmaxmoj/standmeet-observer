@@ -1,8 +1,8 @@
 """Tests for raw capture data recall tools."""
 
 import pytest
-from engine.storage.models import Frame, AudioFrame, OsEvent
-from engine.agents.repository import (
+from engine.infrastructure.persistence.models import Frame, AudioFrame, OsEvent
+from engine.infrastructure.agent.repository import (
     get_recent_frames,
     get_frames_by_app,
     get_recent_audio,

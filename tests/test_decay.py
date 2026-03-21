@@ -2,8 +2,8 @@
 
 from datetime import datetime, timedelta, timezone
 import pytest
-from engine.storage.models import PlaybookEntry, Routine
-from engine.pipeline.decay import decay_confidence
+from engine.infrastructure.persistence.models import PlaybookEntry, Routine
+from engine.infrastructure.pipeline.decay import decay_confidence
 
 
 @pytest.fixture
@@ -83,11 +83,11 @@ def _insert_routine(session, name, confidence, updated_at=None):
 
 class TestRoutineDecay:
     def test_empty_db(self, session):
-        from engine.pipeline.decay import decay_routines
+        from engine.infrastructure.pipeline.decay import decay_routines
         assert decay_routines(session) == 0
 
     def test_recent_routine_no_decay(self, session):
-        from engine.pipeline.decay import decay_routines
+        from engine.infrastructure.pipeline.decay import decay_routines
         recent = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
         _insert_routine(session, "fresh-routine", 0.8, updated_at=recent)
         assert decay_routines(session) == 0
@@ -96,7 +96,7 @@ class TestRoutineDecay:
         assert row.confidence == 0.8
 
     def test_old_routine_decays(self, session):
-        from engine.pipeline.decay import decay_routines
+        from engine.infrastructure.pipeline.decay import decay_routines
         old = (datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=45)).isoformat()
         _insert_routine(session, "old-routine", 0.8, updated_at=old)
         assert decay_routines(session) == 1
@@ -106,7 +106,7 @@ class TestRoutineDecay:
         assert abs(row.confidence - 0.4) < 0.01
 
     def test_very_old_routine_hits_floor(self, session):
-        from engine.pipeline.decay import decay_routines
+        from engine.infrastructure.pipeline.decay import decay_routines
         old = (datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=180)).isoformat()
         _insert_routine(session, "ancient-routine", 0.8, updated_at=old)
         assert decay_routines(session) == 1

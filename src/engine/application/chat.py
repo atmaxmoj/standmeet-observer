@@ -13,9 +13,9 @@ from collections.abc import AsyncGenerator
 from typing import Any
 
 from engine.config import MODEL_FAST, TOKEN_COSTS
-from engine.observability.logger import log_mutation
+from engine.infrastructure.observability.logger import log_mutation
 from engine.domain.prompt.chat import SYSTEM_PROMPT, TOOL_LABELS
-from engine.storage.memory_file import write_playbook, delete_playbook
+from engine.infrastructure.persistence.memory_file import write_playbook, delete_playbook
 
 logger = logging.getLogger(__name__)
 
@@ -387,7 +387,7 @@ async def chat_stream(db, settings, messages: list[dict], *, agent=None) -> Asyn
 async def _stream_mcp(db, agent, messages: list[dict]) -> AsyncGenerator[str, None]:
     """Chat via Agent SDK + MCP tools (OAuth path)."""
     from engine.infrastructure.agent.tools.chat_mcp import create_chat_mcp_server
-    from engine.storage.engine import get_sync_session_factory
+    from engine.infrastructure.persistence.engine import get_sync_session_factory
 
     sync_url = os.environ.get("DATABASE_URL_SYNC", "")
     if not sync_url:

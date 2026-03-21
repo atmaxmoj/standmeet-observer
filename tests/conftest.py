@@ -11,8 +11,8 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
-from engine.storage.db import DB
-from engine.storage.models import Base
+from engine.infrastructure.persistence.db import DB
+from engine.infrastructure.persistence.models import Base
 
 import os
 

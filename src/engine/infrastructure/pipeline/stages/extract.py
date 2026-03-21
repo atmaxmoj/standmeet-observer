@@ -8,17 +8,17 @@ import json
 import logging
 
 from engine.config import MODEL_FAST
-from engine.etl.entities import Frame
-from engine.prompts.episode import EPISODE_PROMPT
-from engine.llm.types import LLMResponse
-from engine.pipeline.stages.validate import strip_fence
+from engine.domain.observation.entity import Frame
+from engine.domain.prompt.episode import EPISODE_PROMPT
+from engine.infrastructure.llm.types import LLMResponse
+from engine.infrastructure.pipeline.stages.validate import strip_fence
 
 logger = logging.getLogger(__name__)
 
 
 def build_context(frames: list[Frame]) -> str:
     """Build the text context from a list of frames (capture + audio + os_event + manifest sources)."""
-    from engine.etl.sources.manifest_registry import get_global_registry
+    from engine.infrastructure.etl.sources.manifest_registry import get_global_registry
 
     registry = get_global_registry()
 

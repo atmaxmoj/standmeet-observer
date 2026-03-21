@@ -12,7 +12,7 @@ from pathlib import Path
 from fastapi import FastAPI
 
 from engine.config import Settings
-from engine.storage.db import DB
+from engine.infrastructure.persistence.db import DB
 
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "DEBUG").upper()
 
@@ -26,7 +26,7 @@ logger = logging.getLogger("observer")
 def _start_huey_consumer():
     """Start Huey consumer in a daemon thread (no signal handler conflicts)."""
     from huey.consumer import Consumer
-    from engine.scheduler.tasks import huey
+    from engine.infrastructure.scheduler.tasks import huey
 
     class EmbeddedConsumer(Consumer):
         def _set_signal_handlers(self):
@@ -41,11 +41,11 @@ def _start_huey_consumer():
 
 def _init_manifest_registry(settings: Settings):
     """Scan sources directories and register manifest-based sources."""
-    from engine.etl.sources.manifest_registry import (
+    from engine.infrastructure.etl.sources.manifest_registry import (
         ManifestRegistry, scan_sources_dir, create_table_for_manifest,
         set_global_registry,
     )
-    from engine.storage.engine import get_sync_session_factory
+    from engine.infrastructure.persistence.engine import get_sync_session_factory
 
     registry = ManifestRegistry()
 

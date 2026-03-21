@@ -8,11 +8,11 @@ import json
 
 import pytest
 
-from engine.llm import LLMClient, LLMResponse
-from engine.etl.entities import Frame
-from engine.pipeline.episode import process_window
-from engine.pipeline.distill import daily_distill
-from engine.pipeline.routines import daily_routines
+from engine.infrastructure.llm.types import LLMClient, LLMResponse
+from engine.domain.observation.entity import Frame
+from engine.infrastructure.pipeline.stages.extract import process_window
+from engine.application.distill_playbooks import distill_playbooks as daily_distill
+from engine.application.compose_routines import compose_routines as daily_routines
 
 
 # ── Mock LLM that returns canned responses ──
@@ -41,7 +41,7 @@ class CannedLLM(LLMClient):
 
 @pytest.fixture(autouse=True)
 def _memory_dir(tmp_path):
-    import engine.storage.memory_file as mf
+    import engine.infrastructure.persistence.memory_file as mf
     old = mf.MEMORY_DIR
     mf.MEMORY_DIR = tmp_path / "memory"
     yield
@@ -272,7 +272,7 @@ class TestDistillE2E:
     @pytest.mark.asyncio
     async def test_distill_writes_memory_file(self, db, tmp_path):
         """Distill should write playbook markdown files."""
-        import engine.storage.memory_file as mf
+        import engine.infrastructure.persistence.memory_file as mf
         mf.MEMORY_DIR = tmp_path / "memory"
 
         llm_ep = CannedLLM([EPISODE_LLM_RESPONSE])
@@ -348,7 +348,7 @@ class TestRoutineE2E:
     @pytest.mark.asyncio
     async def test_routine_writes_memory_file(self, db, tmp_path):
         """Routine extraction should write markdown files."""
-        import engine.storage.memory_file as mf
+        import engine.infrastructure.persistence.memory_file as mf
         mf.MEMORY_DIR = tmp_path / "memory"
 
         llm_ep = CannedLLM([EPISODE_LLM_RESPONSE])

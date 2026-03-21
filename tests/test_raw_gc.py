@@ -2,8 +2,8 @@
 
 import pytest
 from sqlalchemy import text
-from engine.storage.models import Frame, AudioFrame, OsEvent, PipelineLog
-from engine.agents.repository import (
+from engine.infrastructure.persistence.models import Frame, AudioFrame, OsEvent, PipelineLog
+from engine.infrastructure.agent.repository import (
     get_data_stats,
     get_oldest_processed,
     purge_processed_frames,

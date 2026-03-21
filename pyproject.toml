@@ -46,7 +46,6 @@ name = "Engine layered architecture"
 type = "layers"
 layers = [
     "engine.interfaces",
-    "engine.scheduler",
     "engine.application",
     "engine.infrastructure",
     "engine.domain",

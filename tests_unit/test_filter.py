@@ -2,8 +2,8 @@
 
 from datetime import datetime, timezone, timedelta
 
-from engine.etl.entities import Frame
-from engine.etl.filter import should_keep, detect_windows
+from engine.domain.observation.entity import Frame
+from engine.domain.observation.filter import should_keep, detect_windows
 
 
 def _frame(

@@ -8,11 +8,11 @@ from typing import TYPE_CHECKING
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from engine.storage.models import Frame as FrameModel, AudioFrame, OsEvent, Episode
-from engine.etl.entities import Frame
+from engine.infrastructure.persistence.models import Frame as FrameModel, AudioFrame, OsEvent, Episode
+from engine.domain.observation.entity import Frame
 
 if TYPE_CHECKING:
-    from engine.etl.sources.manifest_registry import ManifestRegistry
+    from engine.infrastructure.etl.sources.manifest_registry import ManifestRegistry
 
 
 def load_unprocessed_frames(session: Session) -> tuple[list[Frame], list[Frame], list[Frame]]:

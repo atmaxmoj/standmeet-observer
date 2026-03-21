@@ -2,7 +2,7 @@
 
 from sqlalchemy.orm import Session
 
-from engine.llm.types import ToolDef
+from engine.infrastructure.llm.types import ToolDef
 from engine.infrastructure.agent import repository as repo
 
 

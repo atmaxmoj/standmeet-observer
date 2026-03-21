@@ -100,8 +100,8 @@ def test_oauth_with_tools():
 
 def test_oauth_opus_with_tools():
     """Test Opus model with OAuth + tools via AgentService."""
-    from engine.llm import DirectAPIClient, ToolDef
-    from engine.agents.service import AgentService
+    from engine.infrastructure.llm.types import DirectAPIClient, ToolDef
+    from engine.infrastructure.agent.service import AgentService
 
     token = os.environ.get("CLAUDE_CODE_OAUTH_TOKEN", "")
     if not token:

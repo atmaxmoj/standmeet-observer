@@ -45,7 +45,7 @@ class TryPromptRequest(BaseModel):
 
 @router.post("/engine/try-prompt")
 async def try_prompt(request: Request, body: TryPromptRequest):
-    from engine.pipeline.episode import build_context_from_dicts, extract_episodes
+    from engine.infrastructure.pipeline.stages.extract import build_context_from_dicts, extract_episodes
 
     db = request.app.state.db
     settings = request.app.state.settings
@@ -106,7 +106,7 @@ async def trigger_routines(request: Request):
 @router.post("/engine/gc")
 async def trigger_gc(request: Request):
     import asyncio
-    from engine.scheduler.tasks import daily_gc_task
+    from engine.infrastructure.scheduler.tasks import daily_gc_task
     await asyncio.to_thread(daily_gc_task)
     return {"status": "completed"}
 
@@ -115,9 +115,9 @@ async def trigger_gc(request: Request):
 async def backfill(request: Request):
     from engine.config import Settings
     from engine.domain.observation.filter import should_keep, detect_windows
-    from engine.etl.sources.manifest_registry import get_global_registry
-    from engine.scheduler.tasks import process_episode
-    from engine.storage.engine import get_sync_session_factory
+    from engine.infrastructure.etl.sources.manifest_registry import get_global_registry
+    from engine.infrastructure.scheduler.tasks import process_episode
+    from engine.infrastructure.persistence.engine import get_sync_session_factory
 
     settings = Settings()
     factory = get_sync_session_factory(settings.database_url_sync)
@@ -176,7 +176,7 @@ async def pipeline_resume(request: Request):
 
 def _backfill_set_processed(session, registry, value: int):
     from sqlalchemy import update, text
-    from engine.storage.models import Frame as FrameModel, AudioFrame, OsEvent
+    from engine.infrastructure.persistence.models import Frame as FrameModel, AudioFrame, OsEvent
     session.execute(update(FrameModel).values(processed=value))
     session.execute(update(AudioFrame).values(processed=value))
     session.execute(update(OsEvent).values(processed=value))
@@ -190,7 +190,7 @@ def _backfill_set_processed(session, registry, value: int):
 def _backfill_load_all(session, registry):
     from sqlalchemy import select, text
     from engine.domain.observation.entity import Frame
-    from engine.storage.models import Frame as FrameModel, AudioFrame, OsEvent
+    from engine.infrastructure.persistence.models import Frame as FrameModel, AudioFrame, OsEvent
 
     all_raw = []
     for r in session.execute(select(FrameModel).order_by(FrameModel.timestamp)).scalars():

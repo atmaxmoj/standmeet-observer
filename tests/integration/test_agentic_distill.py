@@ -27,7 +27,7 @@ def _setup_test_db():
     """Create a test schema in PostgreSQL with seed data. Returns (session, schema_name)."""
     from sqlalchemy import create_engine, text
     from sqlalchemy.orm import sessionmaker
-    from engine.storage.models import Base, Episode, Frame
+    from engine.infrastructure.persistence.models import Base, Episode, Frame
 
     pg_url = os.environ.get("DATABASE_URL_SYNC", "postgresql+psycopg://observer:observer@db-test:5432/observer_test")
     schema = f"inttest_{uuid.uuid4().hex[:8]}"
@@ -105,7 +105,7 @@ def _cleanup(pg_url: str, schema: str):
 def test_agentic_distill_uses_tools():
     """Full agentic distill — multi-turn tool loop."""
     from engine.config import Settings
-    from engine.pipeline.orchestrator import run_distill
+    from engine.infrastructure.pipeline.orchestrator import run_distill
 
     settings = Settings()
 
@@ -114,7 +114,7 @@ def test_agentic_distill_uses_tools():
         count = run_distill(settings, session)
         session.commit()
 
-        from engine.storage.models import PipelineLog, PlaybookEntry
+        from engine.infrastructure.persistence.models import PipelineLog, PlaybookEntry
         from sqlalchemy import select
         logs = session.execute(select(PipelineLog)).scalars().all()
         entries = session.execute(select(PlaybookEntry)).scalars().all()

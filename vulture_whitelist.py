@@ -50,6 +50,9 @@ record_snapshot  # noqa
 # Validation function — has unit tests, should be wired into MCP write tools
 validate_playbooks  # noqa
 
+# LLM adapters — used when corresponding env vars are configured
+OpenAIClient  # noqa
+
 # Domain entities — newly created, callers being migrated
 Playbook  # noqa
 VALID_TYPES  # noqa

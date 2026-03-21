@@ -13,7 +13,7 @@ router = APIRouter()
 
 def _notify_pipeline():
     try:
-        from engine.scheduler.tasks import on_new_data
+        from engine.infrastructure.scheduler.tasks import on_new_data
         on_new_data()
     except Exception:
         pass
@@ -21,8 +21,8 @@ def _notify_pipeline():
 
 @router.post("/ingest/{source_name}")
 async def ingest_source(request: Request, source_name: str):
-    from engine.etl.sources.manifest_registry import insert_record
-    from engine.storage.engine import get_sync_session_factory
+    from engine.infrastructure.etl.sources.manifest_registry import insert_record
+    from engine.infrastructure.persistence.engine import get_sync_session_factory
 
     registry = request.app.state.manifest_registry
     if not registry.has(source_name):
@@ -55,8 +55,8 @@ async def list_sources(request: Request):
 @router.get("/sources/{source_name}/data")
 async def query_source_data(request: Request, source_name: str,
                             limit: int = 50, offset: int = 0, search: str = ""):
-    from engine.etl.sources.manifest_registry import query_records
-    from engine.storage.engine import get_sync_session_factory
+    from engine.infrastructure.etl.sources.manifest_registry import query_records
+    from engine.infrastructure.persistence.engine import get_sync_session_factory
 
     registry = request.app.state.manifest_registry
     if not registry.has(source_name):
@@ -76,7 +76,7 @@ async def query_source_data(request: Request, source_name: str,
 
 @router.get("/sources/{source_name}/records/{record_id}/image")
 async def get_source_record_image(request: Request, source_name: str, record_id: int):
-    from engine.storage.engine import get_sync_session_factory
+    from engine.infrastructure.persistence.engine import get_sync_session_factory
 
     registry = request.app.state.manifest_registry
     if not registry.has(source_name):

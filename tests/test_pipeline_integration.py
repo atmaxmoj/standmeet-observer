@@ -10,9 +10,9 @@ import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
-from engine.storage.models import Base
-from engine.etl.entities import Frame
-from engine.etl.filter import should_keep, detect_windows
+from engine.infrastructure.persistence.models import Base
+from engine.domain.observation.entity import Frame
+from engine.domain.observation.filter import should_keep, detect_windows
 from tests.conftest import TEST_PG_SYNC
 
 

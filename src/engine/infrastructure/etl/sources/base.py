@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 
-from engine.etl.entities import Frame
+from engine.domain.observation.entity import Frame
 
 
 class CaptureSource(ABC):

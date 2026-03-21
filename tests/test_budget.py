@@ -2,9 +2,9 @@
 
 import pytest
 from sqlalchemy import text
-from engine.storage.models import TokenUsage, State
-from engine.pipeline.budget import check_daily_budget
-from engine.pipeline.repository import get_daily_spend, get_budget_cap
+from engine.infrastructure.persistence.models import TokenUsage, State
+from engine.infrastructure.pipeline.budget import check_daily_budget
+from engine.infrastructure.pipeline.repository import get_daily_spend, get_budget_cap
 
 
 @pytest.fixture
@@ -101,7 +101,7 @@ class TestSyncDBWithPsycopgConn:
 
     def test_accepts_sqlalchemy_session(self, sync_session):
         """SyncDB should work with a SQLAlchemy Session."""
-        from engine.storage.sync_db import SyncDB
+        from engine.infrastructure.persistence.sync_db import SyncDB
 
         db = SyncDB(sync_session)
         assert db.session is not None

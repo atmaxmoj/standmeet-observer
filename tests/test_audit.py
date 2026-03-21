@@ -2,8 +2,8 @@
 
 import json
 import pytest
-from engine.storage.models import PlaybookEntry, Episode, PlaybookHistory
-from engine.agents.repository import (
+from engine.infrastructure.persistence.models import PlaybookEntry, Episode, PlaybookHistory
+from engine.infrastructure.agent.repository import (
     check_evidence_exists,
     check_maturity_consistency,
     record_snapshot,

@@ -4,8 +4,8 @@ import pytest
 from unittest.mock import MagicMock
 from httpx import AsyncClient, ASGITransport
 
-from engine.api.routes import router
-from engine.etl.sources.manifest_registry import ManifestRegistry
+from engine.interfaces.api.routes import router
+from engine.infrastructure.etl.sources.manifest_registry import ManifestRegistry
 from fastapi import FastAPI
 
 

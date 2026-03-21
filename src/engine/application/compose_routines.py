@@ -5,7 +5,7 @@ import logging
 import os
 
 from engine.config import Settings
-from engine.storage.db import DB
+from engine.infrastructure.persistence.db import DB
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ async def compose_routines(settings: Settings, db: DB) -> int:
     from engine.infrastructure.agent.service import AgentService
     from engine.infrastructure.agent.tools.compose_mcp import create_compose_mcp_server
     from engine.domain.prompt.routine import ROUTINE_PROMPT
-    from engine.storage.engine import get_sync_session_factory
+    from engine.infrastructure.persistence.engine import get_sync_session_factory
 
     sync_url = os.environ.get("DATABASE_URL_SYNC", "")
     if not sync_url:

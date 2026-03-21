@@ -4,7 +4,7 @@ import json
 
 from sqlalchemy.orm import Session
 
-from engine.storage.models import PipelineLog
+from engine.infrastructure.persistence.models import PipelineLog
 
 
 def insert_tool_call_log(

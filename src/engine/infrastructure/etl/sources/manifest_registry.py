@@ -16,8 +16,8 @@ from pathlib import Path
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from engine.etl.entities import Frame
-from engine.etl.sources.base import CaptureSource
+from engine.domain.observation.entity import Frame
+from engine.infrastructure.etl.sources.base import CaptureSource
 
 logger = logging.getLogger(__name__)
 

@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
-from engine.pipeline.repository import (
+from engine.infrastructure.pipeline.repository import (
     get_all_playbooks_for_decay, update_confidence,
     get_all_routines_for_decay, update_routine_confidence,
 )

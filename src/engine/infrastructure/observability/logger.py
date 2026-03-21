@@ -38,7 +38,7 @@ def log_mutation(stage: str):
 
 def log_tool_call(session, stage: str, tool_name: str, tool_input: dict, tool_output):
     """Log a single tool call to pipeline_logs (sync, for Huey tasks)."""
-    from engine.observability.repository import insert_tool_call_log
+    from engine.infrastructure.observability.repository import insert_tool_call_log
     try:
         insert_tool_call_log(session, stage, tool_name, tool_input, tool_output)
     except Exception:

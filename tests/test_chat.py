@@ -6,14 +6,14 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from engine.application.chat import read_tool, handle_tool, make_read_tools
-from engine.llm import ContentBlock, MessageResponse, LLMResponse
-from engine.llm.client import LLMClient
+from engine.infrastructure.llm.types import ContentBlock, MessageResponse, LLMResponse
+from engine.infrastructure.llm.client import LLMClient
 
 
 @pytest.fixture(autouse=True)
 def _memory_dir(tmp_path):
     """Point memory files to temp dir for all tests."""
-    import engine.storage.memory_file as mf
+    import engine.infrastructure.persistence.memory_file as mf
     old = mf.MEMORY_DIR
     mf.MEMORY_DIR = tmp_path / "memory"
     yield
@@ -258,9 +258,9 @@ class MockLLMClient(LLMClient):
 def _make_app(db, llm):
     """Create a FastAPI app with mocked state + mock LLM."""
     from fastapi import FastAPI
-    from engine.api.chat import router
+    from engine.interfaces.api.chat import router
     from engine.config import Settings
-    from engine.agents.service import AgentService
+    from engine.infrastructure.agent.service import AgentService
 
     settings = Settings(anthropic_api_key="sk-test-fake", database_url="", database_url_sync="")
     app = FastAPI()
@@ -703,7 +703,7 @@ class TestProposalExecution:
     @pytest.mark.asyncio
     async def test_update_writes_memory_file(self, seeded_db, tmp_path):
         """Approving update should write a markdown memory file."""
-        import engine.storage.memory_file as mf
+        import engine.infrastructure.persistence.memory_file as mf
         mf.MEMORY_DIR = tmp_path / "memory"
 
         app = _make_app(seeded_db, MockLLMClient([]))

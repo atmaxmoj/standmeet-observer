@@ -1,8 +1,8 @@
 """Tests for playbook deduplication tools."""
 
 import pytest
-from engine.storage.models import PlaybookEntry
-from engine.agents.repository import find_similar_pairs, merge_entries
+from engine.infrastructure.persistence.models import PlaybookEntry
+from engine.infrastructure.agent.repository import find_similar_pairs, merge_entries
 
 
 @pytest.fixture

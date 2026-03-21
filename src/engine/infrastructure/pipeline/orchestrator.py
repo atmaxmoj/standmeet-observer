@@ -10,10 +10,10 @@ from sqlalchemy.orm import Session
 
 from engine.config import MODEL_FAST, Settings
 from engine.domain.prompt.episode import EPISODE_PROMPT
-from engine.storage.sync_db import SyncDB
-from engine.etl.collect import load_frames, store_episodes
-from engine.pipeline.stages.extract import build_context
-from engine.pipeline.stages.validate import validate_episodes, with_retry
+from engine.infrastructure.persistence.sync_db import SyncDB
+from engine.infrastructure.etl.collect import load_frames, store_episodes
+from engine.infrastructure.pipeline.stages.extract import build_context
+from engine.infrastructure.pipeline.stages.validate import validate_episodes, with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -31,12 +31,12 @@ def run_episode(
 
     Returns (tasks, episode_count). Caller must session.commit().
     """
-    from engine.agents.service import AgentService
+    from engine.infrastructure.agent.service import AgentService
 
     frames = load_frames(session, screen_ids, audio_ids, os_event_ids)
     if source_ids:
-        from engine.etl.sources.manifest_registry import get_global_registry
-        from engine.etl.repository import load_source_frames
+        from engine.infrastructure.etl.sources.manifest_registry import get_global_registry
+        from engine.infrastructure.etl.repository import load_source_frames
         registry = get_global_registry()
         if registry:
             frames.extend(load_source_frames(session, registry, source_ids))
@@ -76,9 +76,9 @@ def run_distill(settings: Settings, session: Session) -> int:
 
     Returns count of entries created/updated. Caller must session.commit().
     """
-    from engine.agents.service import AgentService
+    from engine.infrastructure.agent.service import AgentService
     from engine.domain.prompt.playbook import PLAYBOOK_PROMPT
-    from engine.agents.tools.distill_mcp import create_distill_mcp_server
+    from engine.infrastructure.agent.tools.distill_mcp import create_distill_mcp_server
 
     db = SyncDB(session)
     episodes = db.get_recent_episodes(days=1)
@@ -100,9 +100,9 @@ def run_routines(settings: Settings, session: Session) -> int:
 
     Returns count. Caller must session.commit().
     """
-    from engine.agents.service import AgentService
+    from engine.infrastructure.agent.service import AgentService
     from engine.domain.prompt.routine import ROUTINE_PROMPT
-    from engine.agents.tools.compose_mcp import create_compose_mcp_server
+    from engine.infrastructure.agent.tools.compose_mcp import create_compose_mcp_server
 
     db = SyncDB(session)
     episodes = db.get_recent_episodes(days=1)

@@ -6,8 +6,8 @@ import logging
 from engine.config import MODEL_FAST, Settings
 from engine.domain.observation.entity import Frame
 from engine.domain.prompt.episode import EPISODE_PROMPT
-from engine.pipeline.stages.extract import build_context, extract_episodes
-from engine.storage.db import DB
+from engine.infrastructure.pipeline.stages.extract import build_context, extract_episodes
+from engine.infrastructure.persistence.db import DB
 
 logger = logging.getLogger(__name__)
 

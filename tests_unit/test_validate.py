@@ -2,7 +2,7 @@
 
 import json
 import pytest
-from engine.pipeline.stages.validate import (
+from engine.infrastructure.pipeline.stages.validate import (
     validate_episodes,
     validate_playbooks,
     with_retry,

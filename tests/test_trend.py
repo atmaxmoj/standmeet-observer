@@ -1,8 +1,8 @@
 """Tests for playbook trend query tools."""
 
 import pytest
-from engine.storage.models import PlaybookEntry, PlaybookHistory
-from engine.agents.repository import get_playbook_history, get_stale_entries, get_similar_entries
+from engine.infrastructure.persistence.models import PlaybookEntry, PlaybookHistory
+from engine.infrastructure.agent.repository import get_playbook_history, get_stale_entries, get_similar_entries
 
 
 @pytest.fixture

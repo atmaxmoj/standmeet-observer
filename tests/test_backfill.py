@@ -22,7 +22,7 @@ from fastapi import FastAPI
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
-from engine.api.routes import router
+from engine.interfaces.api.routes import router
 from tests.conftest import TEST_PG_SYNC
 
 

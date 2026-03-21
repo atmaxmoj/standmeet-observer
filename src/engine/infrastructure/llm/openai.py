@@ -1,7 +1,7 @@
 """OpenAI-compatible LLM client — any OpenAI-compatible API."""
 
 from engine.infrastructure.llm.client import LLMClient
-from engine.llm.types import LLMResponse
+from engine.infrastructure.llm.types import LLMResponse
 
 
 class OpenAIClient(LLMClient):

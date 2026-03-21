@@ -10,13 +10,13 @@ import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
-from engine.storage.models import Base
-from engine.llm import LLMResponse
-from engine.etl.entities import Frame
-from engine.pipeline.episode import EPISODE_PROMPT, build_context
-from engine.pipeline.distill import DISTILL_PROMPT
-from engine.pipeline.routines import ROUTINE_PROMPT
-from engine.pipeline.stages.validate import validate_episodes, validate_playbooks, with_retry
+from engine.infrastructure.persistence.models import Base
+from engine.infrastructure.llm.types import LLMResponse
+from engine.domain.observation.entity import Frame
+from engine.infrastructure.pipeline.stages.extract import EPISODE_PROMPT, build_context
+from engine.domain.prompt.playbook import PLAYBOOK_PROMPT as DISTILL_PROMPT
+from engine.domain.prompt.routine import ROUTINE_PROMPT
+from engine.infrastructure.pipeline.stages.validate import validate_episodes, validate_playbooks, with_retry
 from tests.conftest import TEST_PG_SYNC
 
 # Same canned responses as test_pipeline_e2e.py
