@@ -10,7 +10,7 @@ import logging
 from engine.config import MODEL_DEEP
 from engine.storage.db import DB
 from engine.prompts.routine import ROUTINE_PROMPT  # noqa: F401
-from engine.llm.client import LLMClient
+from engine.config import Settings
 from engine.storage.memory_file import write_routine
 from engine.pipeline.stages.compose import compose_routines
 
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 async def daily_routines(
-    client: LLMClient,
+    settings: Settings,
     db: DB,
     prompt_template: str = ROUTINE_PROMPT,
 ) -> int:
@@ -32,8 +32,10 @@ async def daily_routines(
     playbooks = await db.get_all_playbooks()
     existing_routines = await db.get_all_routines()
 
+    from engine.agents.service import AgentService
+    agent = AgentService(settings)
     entries, resp = await compose_routines(
-        client, episodes, playbooks, existing_routines,
+        agent, episodes, playbooks, existing_routines,
         prompt_template=prompt_template,
     )
 

@@ -4,12 +4,18 @@ Pure function — takes episodes + existing playbooks, returns new entries.
 No DB writes, no side effects.
 """
 
+from __future__ import annotations
+
 import logging
+from typing import TYPE_CHECKING
 
 from engine.config import MODEL_DEEP
 from engine.prompts.playbook import PLAYBOOK_PROMPT
-from engine.llm import LLMClient, LLMResponse
+from engine.llm.types import LLMResponse
 from engine.pipeline.stages.extract import parse_llm_json
+
+if TYPE_CHECKING:
+    from engine.agents.service import AgentService
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +42,7 @@ def format_playbooks(playbooks: list[dict]) -> str:
 
 
 async def distill_playbook(
-    client: LLMClient,
+    client: AgentService,
     episodes: list[dict],
     existing_playbooks: list[dict],
     prompt_template: str = PLAYBOOK_PROMPT,

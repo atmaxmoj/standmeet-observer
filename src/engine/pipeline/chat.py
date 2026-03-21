@@ -365,27 +365,27 @@ def build_chat_prompt(messages: list[dict]) -> str:
     return "\n\n".join(parts)
 
 
-async def chat_stream(db, llm, messages: list[dict]) -> AsyncGenerator[str, None]:
+async def chat_stream(db, settings, messages: list[dict], *, agent=None) -> AsyncGenerator[str, None]:
     """SSE stream generator for chat.
 
-    DirectAPIClient: uses astream() with native tool_use blocks.
-    AgentSDKClient: uses run_with_mcp() — Agent SDK handles tool calling via MCP.
+    Creates AgentService from settings. Routes to MCP (OAuth) or native (API key).
+    agent override is for testing only.
     """
-    from engine.llm.adapters.agent_sdk import AgentSDKClient
+    if agent is None:
+        from engine.agents.service import AgentService
+        agent = AgentService(settings)
+    logger.info("chat: starting with %d messages, sdk=%s", len(messages), agent.uses_sdk)
 
-    logger.info("chat: starting with %d messages, llm=%s", len(messages), type(llm).__name__)
-
-    if isinstance(llm, AgentSDKClient):
-        async for s in _stream_mcp(db, llm, messages):
+    if agent.uses_sdk:
+        async for s in _stream_mcp(db, agent, messages):
             yield s
     else:
-        async for s in _stream_native(db, llm, messages):
+        async for s in _stream_native(db, agent, messages):
             yield s
 
 
-async def _stream_mcp(db, llm, messages: list[dict]) -> AsyncGenerator[str, None]:
+async def _stream_mcp(db, agent, messages: list[dict]) -> AsyncGenerator[str, None]:
     """Chat via Agent SDK + MCP tools (OAuth path)."""
-    from engine.agents.service import AgentService
     from engine.agents.tools.chat_mcp import create_chat_mcp_server
     from engine.storage.engine import get_sync_session_factory
 
@@ -404,7 +404,7 @@ async def _stream_mcp(db, llm, messages: list[dict]) -> AsyncGenerator[str, None
         yield sse("tool_call", {"name": "thinking", "label": "Thinking..."})
 
         def _run():
-            result = AgentService(llm).run_with_mcp(
+            result = agent.run_with_mcp(
                 prompt=prompt, mcp_server=mcp_server, mcp_name="chat",
                 stage="chat", session=session, model=MODEL_FAST, max_turns=10,
             )
@@ -438,10 +438,8 @@ async def _stream_mcp(db, llm, messages: list[dict]) -> AsyncGenerator[str, None
         session.close()
 
 
-async def _stream_native(db, llm, messages: list[dict]) -> AsyncGenerator[str, None]:
+async def _stream_native(db, agent, messages: list[dict]) -> AsyncGenerator[str, None]:
     """Chat via native API with tool_use blocks (DirectAPIClient path)."""
-    from engine.agents.service import AgentService
-
     tools = make_read_tools(db)
     proposals: list[dict] = []
 
@@ -455,7 +453,6 @@ async def _stream_native(db, llm, messages: list[dict]) -> AsyncGenerator[str, N
 
     tool_handlers = {t["name"]: _make_handler(t["name"]) for t in tools}
 
-    agent = AgentService(llm)
     async for event in agent.astream(
         messages=messages, model=MODEL_FAST, tools=tools,
         tool_handlers=tool_handlers, system=SYSTEM_PROMPT,

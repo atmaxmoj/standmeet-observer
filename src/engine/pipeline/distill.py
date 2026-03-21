@@ -7,10 +7,9 @@ This file keeps daily_distill (async orchestration with DB writes).
 import json
 import logging
 
-from engine.config import MODEL_DEEP
+from engine.config import MODEL_DEEP, Settings
 from engine.storage.db import DB
 from engine.prompts.playbook import PLAYBOOK_PROMPT
-from engine.llm.client import LLMClient
 from engine.storage.memory_file import write_playbook
 from engine.pipeline.stages.distill import distill_playbook
 
@@ -18,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 async def daily_distill(
-    client: LLMClient,
+    settings: Settings,
     db: DB,
     prompt_template: str = PLAYBOOK_PROMPT,
 ) -> int:
@@ -33,8 +32,10 @@ async def daily_distill(
 
     existing = await db.get_all_playbooks()
 
+    from engine.agents.service import AgentService
+    agent = AgentService(settings)
     entries, resp = await distill_playbook(
-        client, episodes, existing, prompt_template=prompt_template,
+        agent, episodes, existing, prompt_template=prompt_template,
     )
 
     cost_usd = resp.cost_usd or 0

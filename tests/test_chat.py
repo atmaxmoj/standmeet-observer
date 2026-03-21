@@ -6,7 +6,8 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from engine.pipeline.chat import read_tool, handle_tool, make_read_tools
-from engine.llm import ContentBlock, MessageResponse, LLMClient, LLMResponse
+from engine.llm import ContentBlock, MessageResponse, LLMResponse
+from engine.llm.client import LLMClient
 
 
 @pytest.fixture(autouse=True)
@@ -255,14 +256,19 @@ class MockLLMClient(LLMClient):
 
 
 def _make_app(db, llm):
-    """Create a FastAPI app with mocked state."""
+    """Create a FastAPI app with mocked state + mock LLM."""
     from fastapi import FastAPI
     from engine.api.chat import router
+    from engine.config import Settings
+    from engine.agents.service import AgentService
 
+    settings = Settings(anthropic_api_key="sk-test-fake", database_url="", database_url_sync="")
     app = FastAPI()
     app.include_router(router, prefix="/api")
     app.state.db = db
-    app.state.llm = llm
+    app.state.settings = settings
+    # Inject mock LLM for tests — AgentService will use it instead of creating real client
+    app.state._test_agent = AgentService(settings, llm_override=llm)
     return app
 
 

@@ -96,20 +96,13 @@ def _cleanup(pg_url: str, schema: str):
 def test_agentic_routines_uses_tools():
     """Full agentic routine composition — multi-turn tool loop."""
     from engine.config import Settings
-    from engine.llm import create_client
     from engine.pipeline.orchestrator import run_routines
 
     settings = Settings()
-    llm = create_client(
-        api_key=settings.anthropic_api_key,
-        auth_token=settings.claude_code_oauth_token,
-        openai_api_key=settings.openai_api_key,
-        openai_base_url=settings.openai_base_url,
-    )
 
     session, schema, pg_url = _setup_test_db()
     try:
-        count = run_routines(llm, session, agentic=True)
+        count = run_routines(settings, session)
         session.commit()
 
         from engine.storage.models import PipelineLog, Routine

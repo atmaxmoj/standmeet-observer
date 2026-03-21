@@ -10,7 +10,6 @@ import logging
 from engine.config import MODEL_FAST
 from engine.storage.db import DB
 from engine.prompts.episode import EPISODE_PROMPT  # noqa: F401
-from engine.llm.client import LLMClient
 from engine.etl.entities import Frame
 
 # Re-export stage functions for backwards compat
@@ -25,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 async def process_window(
-    client: LLMClient,
+    client,
     db: DB,
     frames: list[Frame],
     frames_base_dir: str = "",

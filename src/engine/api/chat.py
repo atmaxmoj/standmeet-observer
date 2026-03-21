@@ -70,14 +70,16 @@ async def update_proposal_status(request: Request, body: ProposalStatusUpdate):
 @router.post("/memory/chat")
 async def memory_chat(request: Request, body: ChatRequest):
     db = request.app.state.db
-    llm = request.app.state.llm
+    settings = request.app.state.settings
 
     if body.messages:
         last = body.messages[-1]
         if last.get("role") == "user":
             await db.append_chat_message("user", last["content"])
 
+    # Test agent override (set by test harness)
+    agent = getattr(request.app.state, "_test_agent", None)
     return StreamingResponse(
-        chat_stream(db, llm, list(body.messages)),
+        chat_stream(db, settings, list(body.messages), agent=agent),
         media_type="text/event-stream",
     )

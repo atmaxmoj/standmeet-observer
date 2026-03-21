@@ -1,6 +1,6 @@
 """Pipeline orchestrator — shared logic for sync and async callers.
 
-Each function takes explicit dependencies (llm, session/db, prompt).
+Each function takes explicit dependencies (settings/agent, session/db, prompt).
 No module-level state, no side effects beyond what's passed in.
 """
 
@@ -9,11 +9,10 @@ import logging
 
 from sqlalchemy.orm import Session
 
-from engine.config import MODEL_FAST, MODEL_DEEP
+from engine.config import MODEL_FAST, MODEL_DEEP, Settings
 from engine.prompts.episode import EPISODE_PROMPT
 from engine.prompts.playbook import PLAYBOOK_PROMPT
 from engine.prompts.routine import ROUTINE_PROMPT
-from engine.llm.client import LLMClient
 from engine.storage.sync_db import SyncDB
 from engine.etl.collect import load_frames, store_episodes
 from engine.pipeline.stages.extract import build_context, parse_llm_json
@@ -27,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 
 def run_episode(
-    llm: LLMClient,
+    settings: Settings,
     session: Session,
     screen_ids: list[int],
     audio_ids: list[int],
@@ -39,8 +38,9 @@ def run_episode(
 
     Returns (tasks, episode_count). Caller must session.commit().
     """
+    from engine.agents.service import AgentService
+
     frames = load_frames(session, screen_ids, audio_ids, os_event_ids)
-    # Also load from manifest sources
     if source_ids:
         from engine.etl.sources.manifest_registry import get_global_registry
         from engine.etl.repository import load_source_frames
@@ -52,6 +52,7 @@ def run_episode(
         return [], 0
 
     db = SyncDB(session)
+    agent = AgentService(settings)
     logger.info("run_episode: %d frames [%s -> %s]", len(frames), frames[0].timestamp, frames[-1].timestamp)
 
     prompt_text = prompt.format(context=build_context(frames))
@@ -60,7 +61,7 @@ def run_episode(
 
     def _call_llm(retry_prompt):
         p = retry_prompt if retry_prompt else prompt_text
-        resp = llm.complete(p, MODEL_FAST)
+        resp = agent.complete(p, MODEL_FAST)
         last_resp[0] = resp
         return resp.text
 
@@ -78,42 +79,42 @@ def run_episode(
 
 
 def run_distill(
-    llm: LLMClient,
+    settings: Settings,
     session: Session,
     prompt_template: str = PLAYBOOK_PROMPT,
-    agentic: bool = False,
 ) -> int:
     """Sync distill pipeline: read episodes → infer → store playbooks.
 
     Returns count of entries created/updated. Caller must session.commit().
     """
+    from engine.agents.service import AgentService
+
     db = SyncDB(session)
     episodes = db.get_recent_episodes(days=1)
     if not episodes:
         logger.info("run_distill: no episodes, skipping")
         return 0
 
-    if agentic:
-        return _run_distill_agentic(llm, session)
+    agent = AgentService(settings)
+    if agent.uses_sdk:
+        return _run_distill_agentic(agent, session)
+    return _run_distill_oneshot(agent, session, db, episodes, prompt_template)
 
-    return _run_distill_oneshot(llm, session, db, episodes, prompt_template)
 
-
-def _run_distill_agentic(llm: LLMClient, session: Session) -> int:
-    """Agentic distill: multi-turn tool loop to investigate episodes and write playbook entries."""
+def _run_distill_agentic(agent, session: Session) -> int:
+    """Agentic distill: multi-turn tool loop via MCP."""
     from engine.prompts.playbook_agent import PLAYBOOK_AGENT_PROMPT
     from engine.agents.tools.distill_mcp import create_distill_mcp_server
-    from engine.agents.service import AgentService
 
     mcp_server = create_distill_mcp_server(session)
-    AgentService(llm).run_with_mcp(PLAYBOOK_AGENT_PROMPT, mcp_server, "distill", "distill_agentic", session)
+    agent.run_with_mcp(PLAYBOOK_AGENT_PROMPT, mcp_server, "distill", "distill_agentic", session)
 
     count = SyncDB(session).count_recent_playbooks()
     logger.info("run_distill (agentic): %d entries", count)
     return count
 
 
-def _run_distill_oneshot(llm, session, db: SyncDB, episodes, prompt_template) -> int:
+def _run_distill_oneshot(agent, session, db: SyncDB, episodes, prompt_template) -> int:
     """One-shot distill: single prompt → JSON response."""
     existing = db.get_all_playbooks()
 
@@ -126,7 +127,7 @@ def _run_distill_oneshot(llm, session, db: SyncDB, episodes, prompt_template) ->
 
     def _call_llm(retry_prompt):
         p = retry_prompt if retry_prompt else prompt
-        resp = llm.complete(p, MODEL_DEEP)
+        resp = agent.complete(p, MODEL_DEEP)
         last_resp[0] = resp
         return resp.text
 
@@ -160,42 +161,42 @@ def _run_distill_oneshot(llm, session, db: SyncDB, episodes, prompt_template) ->
 
 
 def run_routines(
-    llm: LLMClient,
+    settings: Settings,
     session: Session,
     prompt_template: str = ROUTINE_PROMPT,
-    agentic: bool = False,
 ) -> int:
     """Sync routine pipeline: read episodes+playbooks → infer → store routines.
 
     Returns count. Caller must session.commit().
     """
+    from engine.agents.service import AgentService
+
     db = SyncDB(session)
     episodes = db.get_recent_episodes(days=1)
     if not episodes:
         logger.info("run_routines: no episodes, skipping")
         return 0
 
-    if agentic:
-        return _run_compose_agentic(llm, session)
+    agent = AgentService(settings)
+    if agent.uses_sdk:
+        return _run_compose_agentic(agent, session)
+    return _run_routines_oneshot(agent, session, db, episodes, prompt_template)
 
-    return _run_routines_oneshot(llm, session, db, episodes, prompt_template)
 
-
-def _run_compose_agentic(llm: LLMClient, session: Session) -> int:
-    """Agentic routine composition: Agent SDK + MCP tools to investigate and write routines."""
+def _run_compose_agentic(agent, session: Session) -> int:
+    """Agentic routine composition via MCP."""
     from engine.prompts.compose_agent import ROUTINE_AGENT_PROMPT
     from engine.agents.tools.compose_mcp import create_compose_mcp_server
-    from engine.agents.service import AgentService
 
     mcp_server = create_compose_mcp_server(session)
-    AgentService(llm).run_with_mcp(ROUTINE_AGENT_PROMPT, mcp_server, "compose", "compose_agentic", session)
+    agent.run_with_mcp(ROUTINE_AGENT_PROMPT, mcp_server, "compose", "compose_agentic", session)
 
     count = SyncDB(session).count_recent_routines()
     logger.info("run_routines (agentic): %d routines", count)
     return count
 
 
-def _run_routines_oneshot(llm, session, db: SyncDB, episodes, prompt_template) -> int:
+def _run_routines_oneshot(agent, session, db: SyncDB, episodes, prompt_template) -> int:
     """One-shot routine composition: single prompt → JSON response."""
     playbooks = db.get_all_playbooks()
     existing_routines = db.get_all_routines()
@@ -206,7 +207,7 @@ def _run_routines_oneshot(llm, session, db: SyncDB, episodes, prompt_template) -
         episodes=format_episodes_for_routines(episodes),
     )
 
-    resp = llm.complete(prompt, MODEL_DEEP)
+    resp = agent.complete(prompt, MODEL_DEEP)
     cost = resp.cost_usd or 0
 
     db.record_usage(MODEL_DEEP, "compose", resp.input_tokens, resp.output_tokens, cost)

@@ -1,65 +1,110 @@
-"""AgentService — agentic multi-turn tool interactions.
+"""AgentService — unified facade for all LLM + tool interactions.
 
-Single entry point for any code that needs multi-turn LLM + tools.
-Consumers: distill, compose, gc, chat.
+Each application layer creates its own instance with settings.
+AgentService internally decides whether to use Direct API or Agent SDK
+based on available credentials.
 
 Usage:
-    agent = AgentService(llm)
-    result = agent.run(prompt, tools, session)           # sync, with ToolDef
-    result = await agent.arun(messages, tools, system)   # async, with API tool dicts
-    result = agent.run_with_mcp(prompt, mcp_server, ...) # sync, Agent SDK + MCP
+    from engine.config import Settings
+    agent = AgentService(Settings())
+    response = agent.complete(prompt, model)
+    result = agent.run_with_mcp(prompt, mcp_server, ...)
 """
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
-import os
-from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from engine.llm.client import LLMClient
+from engine.agents import sdk
+from engine.config import Settings
 from engine.llm.types import LLMResponse, ToolDef
 
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
     from sqlalchemy.orm import Session
+    from engine.llm.client import LLMClient
 
 logger = logging.getLogger(__name__)
 
-
-@dataclass
-class AgentResult:
-    """Result from an agentic run."""
-    result_text: str
-    cost_usd: float
-    input_tokens: int
-    output_tokens: int
-
+# Re-export for callers
+AgentResult = sdk.AgentResult
 
 
 class AgentService:
-    """Multi-turn tool interactions on top of LLMClient."""
+    """Facade for LLM completion + agentic tool calling.
 
-    def __init__(self, llm: LLMClient):
-        self.llm = llm
+    Internally routes to Direct API (if api_key) or Agent SDK (if auth_token).
+    Callers never need to know which path is used.
+    """
 
-    # ── Sync tool loop (GC, distill one-shot with tools) ──
+    def __init__(self, settings: Settings, *, llm_override: LLMClient | None = None):
+        self._settings = settings
+        self._api_key = settings.anthropic_api_key
+        self._auth_token = settings.claude_code_oauth_token
+        self._llm = llm_override  # set for testing, otherwise lazy init
 
-    def run(
+    @property
+    def uses_sdk(self) -> bool:
+        """True if using Agent SDK (OAuth), False if Direct API."""
+        if self._llm is not None:
+            return False  # explicit LLM override = direct API path
+        return bool(self._auth_token) and not bool(self._api_key)
+
+    def _get_llm(self):
+        """Lazy-init Direct API client."""
+        if self._llm is None:
+            from engine.llm.adapters.anthropic import DirectAPIClient
+            if not self._api_key:
+                raise ValueError("No API key for DirectAPIClient")
+            self._llm = DirectAPIClient(api_key=self._api_key)
+        return self._llm
+
+    # ── Simple completion ──
+
+    def complete(self, prompt: str, model: str) -> LLMResponse:
+        """Single-turn text completion. Sync."""
+        if self.uses_sdk:
+            return sdk.complete(prompt, model, self._auth_token)
+        return self._get_llm().complete(prompt, model)
+
+    async def acomplete(self, prompt: str, model: str) -> LLMResponse:
+        """Single-turn text completion. Async."""
+        if self.uses_sdk:
+            return await sdk.acomplete(prompt, model, self._auth_token)
+        return await self._get_llm().acomplete(prompt, model)
+
+    # ── MCP agentic run ──
+
+    def run_with_mcp(
         self,
         prompt: str,
-        model: str,
-        tools: list[ToolDef],
-        max_turns: int = 5,
-    ) -> LLMResponse:
-        """Sync multi-turn tool loop. Works with any LLMClient."""
-        if hasattr(self.llm, '_sync'):
-            return self._run_native(prompt, model, tools, max_turns)
-        return self._run_text(prompt, model, tools, max_turns)
+        mcp_server: FastMCP,
+        mcp_name: str,
+        stage: str,
+        session: Session,
+        model: str = "",
+        max_turns: int = 15,
+    ) -> sdk.AgentResult:
+        """Multi-turn agentic run with MCP tools.
 
-    # ── Async streaming tool loop (chat) ──
+        Always uses Agent SDK (MCP requires it). If only api_key is available,
+        the Agent SDK will use it via environment.
+        """
+        auth_token = self._auth_token or ""
+        return sdk.run_with_mcp(
+            prompt=prompt,
+            mcp_server=mcp_server,
+            mcp_name=mcp_name,
+            stage=stage,
+            session=session,
+            auth_token=auth_token,
+            model=model,
+            max_turns=max_turns,
+        )
+
+    # ── Native API streaming tool loop (for chat with DirectAPIClient) ──
 
     async def astream(
         self,
@@ -72,32 +117,22 @@ class AgentService:
     ):
         """Async generator — yields events during multi-turn tool loop.
 
+        Only works with Direct API (native tool_use blocks).
         tool_handlers values can be sync or async callables.
-
-        For DirectAPIClient: uses native amessages_create with tool_use blocks.
-        For AgentSDKClient (OAuth): wraps tools as MCP server, uses Agent SDK.
 
         Yields dicts with "type" key:
           {"type": "tool_call", "name": ..., "input": ..., "result": ...}
-          {"type": "response", "content": [...], "stop_reason": ..., "input_tokens": ..., "output_tokens": ...}
+          {"type": "response", "content": [...], "stop_reason": ..., ...}
           {"type": "error", "message": ...}
         """
-        # Single path for all backends. AgentSDKClient.amessages_create()
-        # parses tool_use XML from text responses, so _astream_native works
-        # for both direct API and OAuth/Agent SDK.
-        async for event in self._astream_native(messages, model, tools, tool_handlers, system, max_turns):
-            yield event
-
-    async def _astream_native(self, messages, model, tools, tool_handlers, system, max_turns):
-        """Native API path — uses amessages_create with tool_use blocks."""
-        logger.info("astream: using native API path (%d tools)", len(tools))
+        llm = self._get_llm()
         total_input = 0
         total_output = 0
         resp = None
 
         for _turn in range(max_turns):
             try:
-                resp = await self.llm.amessages_create(
+                resp = await llm.amessages_create(
                     messages=messages, model=model, tools=tools, system=system,
                 )
             except Exception as e:
@@ -140,88 +175,17 @@ class AgentService:
         yield {"type": "response", "content": resp.content if resp else [], "stop_reason": "max_turns",
                "input_tokens": total_input, "output_tokens": total_output}
 
-    # ── Agent SDK + MCP (agentic distill/compose) ──
+    # ── Sync native tool loop (GC) ──
 
-    def run_with_mcp(
+    def run(
         self,
         prompt: str,
-        mcp_server: FastMCP,
-        mcp_name: str,
-        stage: str,
-        session: Session,
-        model: str = "",
-        max_turns: int = 15,
-    ) -> AgentResult:
-        """Multi-turn agentic with MCP tools via Agent SDK.
-
-        Only method that uses Agent SDK — needed for MCP tool integration.
-        """
-        from claude_agent_sdk import query as sdk_query, ClaudeAgentOptions, ResultMessage
-        from engine.config import MODEL_DEEP
-
-        if not model:
-            model = MODEL_DEEP
-
-        logger.info("%s: starting agentic run", stage)
-
-        env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
-        token = os.environ.get("CLAUDE_CODE_OAUTH_TOKEN", "")
-        if token:
-            env["CLAUDE_CODE_OAUTH_TOKEN"] = token
-            env.pop("ANTHROPIC_AUTH_TOKEN", None)
-            env.pop("ANTHROPIC_API_KEY", None)
-
-        result_text = ""
-        cost_usd = None
-        usage: dict = {}
-
-        async def _run():
-            nonlocal result_text, cost_usd, usage
-            async for msg in sdk_query(
-                prompt=prompt,
-                options=ClaudeAgentOptions(
-                    model=model,
-                    max_turns=max_turns,
-                    permission_mode="bypassPermissions",
-                    mcp_servers={
-                        mcp_name: {
-                            "type": "sdk",
-                            "name": f"{mcp_name}-tools",
-                            "instance": mcp_server._mcp_server,
-                        },
-                    },
-                    env=env,
-                ),
-            ):
-                msg_type = type(msg).__name__
-                logger.debug("%s msg: %s %s", stage, msg_type, str(msg)[:500])
-                if isinstance(msg, ResultMessage):
-                    result_text = msg.result or ""
-                    cost_usd = msg.total_cost_usd
-                    usage = msg.usage or {}
-
-        asyncio.run(_run())
-
-        input_tokens = usage.get("input_tokens", 0)
-        output_tokens = usage.get("output_tokens", 0)
-        cost = cost_usd or 0
-
-        from engine.storage.sync_db import SyncDB
-        db = SyncDB(session)
-        db.record_usage(model, stage, input_tokens, output_tokens, cost)
-        db.insert_pipeline_log(stage, prompt, result_text[:5000], model, input_tokens, output_tokens, cost)
-
-        logger.info("%s: cost=$%.4f", stage, cost)
-        return AgentResult(
-            result_text=result_text,
-            cost_usd=cost,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-        )
-
-    # ── Private: native API tool loop ──
-
-    def _run_native(self, prompt: str, model: str, tools: list[ToolDef], max_turns: int) -> LLMResponse:
+        model: str,
+        tools: list[ToolDef],
+        max_turns: int = 5,
+    ) -> LLMResponse:
+        """Sync multi-turn tool loop with ToolDef-based tools."""
+        llm = self._get_llm()
         api_tools = [{"name": t.name, "description": t.description, "input_schema": t.input_schema} for t in tools]
         tool_handlers = {t.name: t.handler for t in tools}
         messages: list[dict] = [{"role": "user", "content": prompt}]
@@ -234,7 +198,7 @@ class AgentService:
             kwargs: dict = {"model": model, "max_tokens": 16384, "messages": messages, "tools": api_tools}
             if "opus-4-6" in model or "sonnet-4-6" in model:
                 kwargs["thinking"] = {"type": "adaptive"}
-            response = self.llm._sync.messages.create(**kwargs)
+            response = llm._sync.messages.create(**kwargs)
             total_input += response.usage.input_tokens
             total_output += response.usage.output_tokens
             tool_uses = [b for b in response.content if b.type == "tool_use"]
@@ -245,40 +209,6 @@ class AgentService:
                 break
             messages.append({"role": "assistant", "content": response.content})
             messages.append({"role": "user", "content": self._exec_tools(tool_uses, tool_handlers)})
-
-        return LLMResponse(text=final_text, input_tokens=total_input, output_tokens=total_output)
-
-    def _run_text(self, prompt: str, model: str, tools: list[ToolDef], max_turns: int) -> LLMResponse:
-        """Text-based tool loop for AgentSDKClient (OAuth)."""
-        tool_handlers = {t.name: t.handler for t in tools}
-        tool_desc = "\n".join(f"- {t.name}: {t.description}" for t in tools)
-        conversation = [f"{prompt}\n\nAvailable tools:\n{tool_desc}\n\nTo call a tool: <tool_call>{{\"name\":\"...\",\"input\":{{...}}}}</tool_call>"]
-        total_input = 0
-        total_output = 0
-        final_text = ""
-
-        for turn in range(max_turns):
-            resp = self.llm.complete("\n\n".join(conversation), model)
-            total_input += resp.input_tokens
-            total_output += resp.output_tokens
-            final_text = resp.text
-            if "<tool_call>" not in resp.text:
-                break
-            import re
-            calls = re.findall(r'<tool_call>(.*?)</tool_call>', resp.text, re.DOTALL)
-            if not calls:
-                break
-            conversation.append(resp.text)
-            results = []
-            for call_str in calls:
-                try:
-                    call = json.loads(call_str)
-                    handler = tool_handlers.get(call["name"])
-                    result = handler(**call.get("input", {})) if handler else {"error": f"Unknown: {call['name']}"}
-                    results.append(f"[Tool {call['name']}: {json.dumps(result, default=str)[:2000]}]")
-                except Exception as e:
-                    results.append(f"[Tool error: {e}]")
-            conversation.append("\n".join(results))
 
         return LLMResponse(text=final_text, input_tokens=total_input, output_tokens=total_output)
 

@@ -265,7 +265,7 @@ async def try_prompt(request: Request, body: TryPromptRequest):
     from engine.pipeline.episode import build_context_from_dicts, extract_episodes
 
     db = request.app.state.db
-    llm = request.app.state.llm
+    settings = request.app.state.settings
 
     frames, _ = await db.get_frames(limit=body.frame_limit)
     audio, _ = await db.get_audio_frames(limit=body.event_limit)
@@ -279,7 +279,8 @@ async def try_prompt(request: Request, body: TryPromptRequest):
                 len(frames), len(audio), len(os_events), len(context))
 
     try:
-        episodes, resp = await extract_episodes(llm, context, prompt=body.prompt)
+        from engine.agents.service import AgentService
+        episodes, resp = await extract_episodes(AgentService(settings), context, prompt=body.prompt)
     except Exception as e:
         logger.exception("try-prompt: LLM call failed")
         return {"error": str(e), "episodes": []}
@@ -319,9 +320,8 @@ async def pipeline_logs(request: Request, limit: int = 50, offset: int = 0, sear
 async def trigger_distill(request: Request):
     from engine.pipeline.distill import daily_distill
 
-    llm = request.app.state.llm
     db = request.app.state.db
-    count = await daily_distill(llm, db)
+    count = await daily_distill(request.app.state.settings, db)
     return {"playbook_entries_updated": count}
 
 
@@ -336,9 +336,8 @@ async def list_routines(request: Request, search: str = ""):
 async def trigger_routines(request: Request):
     from engine.pipeline.routines import daily_routines
 
-    llm = request.app.state.llm
     db = request.app.state.db
-    count = await daily_routines(llm, db)
+    count = await daily_routines(request.app.state.settings, db)
     return {"routines_updated": count}
 
 

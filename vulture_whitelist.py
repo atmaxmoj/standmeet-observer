@@ -9,6 +9,8 @@ poll_interval_seconds  # noqa
 host  # noqa
 port  # noqa
 model_config  # noqa
+openai_api_key  # noqa
+openai_base_url  # noqa
 
 # SQLAlchemy / manifest dataclass fields (accessed by framework)
 version  # noqa

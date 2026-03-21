@@ -7,7 +7,7 @@ import logging
 
 from engine.config import MODEL_DEEP
 from engine.prompts.routine import ROUTINE_PROMPT
-from engine.llm import LLMClient, LLMResponse
+from engine.llm.types import LLMResponse
 from engine.pipeline.stages.extract import parse_llm_json
 
 logger = logging.getLogger(__name__)
@@ -42,7 +42,7 @@ def format_episodes_for_routines(episodes: list[dict]) -> str:
 
 
 async def compose_routines(
-    client: LLMClient,
+    client,
     episodes: list[dict],
     playbooks: list[dict],
     existing_routines: list[dict],

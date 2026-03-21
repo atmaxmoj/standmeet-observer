@@ -13,7 +13,6 @@ from fastapi import FastAPI
 
 from engine.config import Settings
 from engine.storage.db import DB
-from engine.llm import create_client
 
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "DEBUG").upper()
 
@@ -87,15 +86,7 @@ async def lifespan(app: FastAPI):
     db = DB(settings.database_url)
     await db.connect()
 
-    llm = create_client(
-        api_key=settings.anthropic_api_key,
-        auth_token=settings.claude_code_oauth_token,
-        openai_api_key=settings.openai_api_key,
-        openai_base_url=settings.openai_base_url,
-    )
-
     app.state.db = db
-    app.state.llm = llm
     app.state.settings = settings
     app.state.manifest_registry = _init_manifest_registry(settings)
 

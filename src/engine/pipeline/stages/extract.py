@@ -10,7 +10,7 @@ import logging
 from engine.config import MODEL_FAST
 from engine.etl.entities import Frame
 from engine.prompts.episode import EPISODE_PROMPT
-from engine.llm import LLMClient, LLMResponse
+from engine.llm.types import LLMResponse
 from engine.pipeline.stages.validate import strip_fence
 
 logger = logging.getLogger(__name__)
@@ -77,7 +77,7 @@ def parse_llm_json(text: str) -> list[dict]:
 
 
 async def extract_episodes(
-    client: LLMClient,
+    client,
     context: str,
     prompt: str = EPISODE_PROMPT,
     model: str = MODEL_FAST,
