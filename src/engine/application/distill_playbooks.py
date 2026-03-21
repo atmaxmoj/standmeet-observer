@@ -21,8 +21,8 @@ async def distill_playbooks(settings: Settings, db: DB) -> int:
         logger.info("no episodes today, skipping distillation")
         return 0
 
-    from engine.agents.service import AgentService
-    from engine.agents.tools.distill_mcp import create_distill_mcp_server
+    from engine.infrastructure.agent.service import AgentService
+    from engine.infrastructure.agent.tools.distill_mcp import create_distill_mcp_server
     from engine.domain.prompt.playbook import PLAYBOOK_PROMPT
     from engine.storage.engine import get_sync_session_factory
 

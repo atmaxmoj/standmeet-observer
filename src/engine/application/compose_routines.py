@@ -21,8 +21,8 @@ async def compose_routines(settings: Settings, db: DB) -> int:
         logger.info("no episodes today, skipping routine extraction")
         return 0
 
-    from engine.agents.service import AgentService
-    from engine.agents.tools.compose_mcp import create_compose_mcp_server
+    from engine.infrastructure.agent.service import AgentService
+    from engine.infrastructure.agent.tools.compose_mcp import create_compose_mcp_server
     from engine.domain.prompt.routine import ROUTINE_PROMPT
     from engine.storage.engine import get_sync_session_factory
 

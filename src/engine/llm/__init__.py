@@ -1,12 +1,10 @@
-"""LLM capability provider — re-exports public API."""
-
-from engine.llm.types import ToolDef, ContentBlock, MessageResponse, LLMResponse
-from engine.llm.client import LLMClient
-from engine.llm.adapters.anthropic import DirectAPIClient
-from engine.llm.adapters.openai import OpenAIClient
+"""Re-export from infrastructure layer."""
+from engine.infrastructure.llm.types import ToolDef, ContentBlock, MessageResponse, LLMResponse
+from engine.infrastructure.llm.client import LLMClient
+from engine.infrastructure.llm.anthropic import DirectAPIClient
+from engine.infrastructure.llm.openai import OpenAIClient
 
 __all__ = [
     "ToolDef", "ContentBlock", "MessageResponse", "LLMResponse",
-    "LLMClient",
-    "DirectAPIClient", "OpenAIClient",
+    "LLMClient", "DirectAPIClient", "OpenAIClient",
 ]

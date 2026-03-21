@@ -372,7 +372,7 @@ async def chat_stream(db, settings, messages: list[dict], *, agent=None) -> Asyn
     agent override is for testing only.
     """
     if agent is None:
-        from engine.agents.service import AgentService
+        from engine.infrastructure.agent.service import AgentService
         agent = AgentService(settings)
     logger.info("chat: starting with %d messages, sdk=%s", len(messages), agent.uses_sdk)
 
@@ -386,7 +386,7 @@ async def chat_stream(db, settings, messages: list[dict], *, agent=None) -> Asyn
 
 async def _stream_mcp(db, agent, messages: list[dict]) -> AsyncGenerator[str, None]:
     """Chat via Agent SDK + MCP tools (OAuth path)."""
-    from engine.agents.tools.chat_mcp import create_chat_mcp_server
+    from engine.infrastructure.agent.tools.chat_mcp import create_chat_mcp_server
     from engine.storage.engine import get_sync_session_factory
 
     sync_url = os.environ.get("DATABASE_URL_SYNC", "")
