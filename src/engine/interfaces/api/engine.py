@@ -106,9 +106,16 @@ async def trigger_routines(request: Request):
 @router.post("/engine/gc")
 async def trigger_gc(request: Request):
     import asyncio
-    from engine.infrastructure.scheduler.tasks import daily_gc_task
-    await asyncio.to_thread(daily_gc_task)
-    return {"status": "completed"}
+    from engine.application.gc import run_gc
+    from engine.infrastructure.persistence.engine import get_sync_session_factory
+
+    settings = request.app.state.settings
+    session = get_sync_session_factory(settings.database_url_sync)()
+    try:
+        result = await asyncio.to_thread(run_gc, settings, session)
+    finally:
+        session.close()
+    return result
 
 
 @router.post("/engine/backfill")
@@ -116,7 +123,7 @@ async def backfill(request: Request):
     from engine.config import Settings
     from engine.domain.observation.filter import should_keep, detect_windows
     from engine.infrastructure.etl.sources.manifest_registry import get_global_registry
-    from engine.infrastructure.scheduler.tasks import process_episode
+    from engine.scheduler.tasks import process_episode
     from engine.infrastructure.persistence.engine import get_sync_session_factory
 
     settings = Settings()

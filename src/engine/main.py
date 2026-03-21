@@ -26,7 +26,7 @@ logger = logging.getLogger("observer")
 def _start_huey_consumer():
     """Start Huey consumer in a daemon thread (no signal handler conflicts)."""
     from huey.consumer import Consumer
-    from engine.infrastructure.scheduler.tasks import huey
+    from engine.scheduler.tasks import huey
 
     class EmbeddedConsumer(Consumer):
         def _set_signal_handlers(self):

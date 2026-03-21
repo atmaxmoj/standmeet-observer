@@ -12,7 +12,7 @@ from pathlib import Path
 
 from huey import SqliteHuey, crontab
 
-from engine.config import Settings, MODEL_DEEP, DAILY_COST_CAP_USD
+from engine.config import Settings, DAILY_COST_CAP_USD
 from engine.domain.observation.filter import should_keep, detect_windows
 from engine.infrastructure.pipeline.budget import check_daily_budget
 from engine.infrastructure.pipeline.orchestrator import run_episode, run_distill, run_routines
@@ -217,107 +217,17 @@ def daily_routines_task():
         session.close()
 
 
-# -- Weekly garbage collection --
-
-GC_PROMPT = """You are the garbage collection agent for a behavioral playbook system.
-
-You have three jobs:
-
-## 1. CRITICAL: Sensitive data detection and purge
-Screen captures (frames) may contain passwords, API keys, tokens, secrets, or other
-sensitive information visible on screen. This is a SECURITY issue — purge aggressively.
-
-Process:
-- Call search_frames_for_sensitive to scan for common secret patterns
-- IF any sensitive frames found THEN purge them immediately regardless of age
-- This takes priority over ALL other GC tasks
-
-## 2. Playbook quality audit
-Review playbook entries for quality issues and clean up as needed.
-Tools: find_similar_pairs, check_evidence_exists, check_maturity_consistency,
-record_snapshot, merge_entries, deprecate_entry.
-
-Process:
-- Check maturity consistency issues
-- Look for similar pairs that might need merging
-- Investigate with check_evidence_exists
-- Take action: merge duplicates, deprecate invalid entries
-- Always record_snapshot before modifying an entry
-- Be conservative — when in doubt, leave entries alone
-
-## 3. Raw data management
-Manage disk/DB usage by cleaning up old processed data.
-Tools: get_data_stats, get_oldest_processed, purge_processed_frames,
-purge_processed_audio, purge_processed_os_events, purge_pipeline_logs.
-
-Process:
-- First call get_data_stats to see how much data exists
-- Then call get_oldest_processed to see how old it is
-- Based on the volume and age, decide what to purge and how aggressively
-- Only purge processed data (already extracted into episodes)
-- Keep enough recent data for debugging (at least a few days)
-- Pipeline logs can be more aggressively purged since they're debug-only
-
-Output a brief summary of what you did when finished."""
-
-
-def _build_gc_prompt() -> str:
-    """Build GC prompt with manifest source info."""
-    from engine.infrastructure.etl.sources.manifest_registry import get_global_registry
-    registry = get_global_registry()
-    extra = ""
-    if registry:
-        for m in registry.all_manifests():
-            if m.gc:
-                prompt = m.gc.get("prompt", "")
-                if prompt:
-                    retention = m.gc.get("retention_days_default", 14)
-                    try:
-                        extra += f"\n\n### {m.display_name}\n{prompt.format(retention_days=retention)}"
-                    except (KeyError, IndexError):
-                        extra += f"\n\n### {m.display_name}\n{prompt}"
-    if extra:
-        return GC_PROMPT + "\n\n## Source-specific GC guidelines" + extra
-    return GC_PROMPT
+# -- Daily garbage collection --
 
 
 @huey.periodic_task(crontab(hour="4", minute="0"))
 def daily_gc_task():
-    """Daily garbage collection: decay + agent-driven audit. Runs every day at 4am (after distill at 3am)."""
-    from engine.infrastructure.pipeline.decay import decay_confidence, decay_routines
-    from engine.infrastructure.agent.tools.dedup import make_dedup_tools
-    from engine.infrastructure.agent.tools.audit import make_audit_tools, make_manifest_purge_tools
+    """Daily garbage collection: decay + agent-driven audit."""
+    from engine.application.gc import run_gc
 
     session = _get_session()
     try:
-        # Budget check
-        if not check_daily_budget(session, DAILY_COST_CAP_USD):
-            logger.warning("daily_gc: daily budget exceeded, skipping")
-            return
-
-        # Phase 1: Deterministic decay
-        decayed_pb = decay_confidence(session)
-        decayed_rt = decay_routines(session)
-        logger.info("daily_gc: decayed %d playbook entries, %d routines", decayed_pb, decayed_rt)
-
-        # Phase 2: Agent-driven audit (only if LLM supports tools)
-        gc_tools = make_dedup_tools(session) + make_audit_tools(session) + make_manifest_purge_tools(session)
-        try:
-            from engine.infrastructure.agent.service import AgentService
-            gc_prompt = _build_gc_prompt()
-            resp = AgentService(_get_settings()).run(
-                gc_prompt, MODEL_DEEP, gc_tools, max_turns=10,
-            )
-            from engine.infrastructure.persistence.sync_db import SyncDB
-            cost = resp.cost_usd or 0
-            db = SyncDB(session)
-            db.record_usage(MODEL_DEEP, "gc", resp.input_tokens, resp.output_tokens, cost)
-            db.insert_pipeline_log("gc", gc_prompt, resp.text, MODEL_DEEP, resp.input_tokens, resp.output_tokens, cost)
-            session.commit()
-            logger.info("daily_gc: agent audit complete, cost=$%.4f", cost)
-        except NotImplementedError:
-            logger.info("daily_gc: LLM client does not support tools, skipping agent audit")
-
+        run_gc(_get_settings(), session)
     except Exception:
         logger.exception("daily_gc failed")
     finally:

@@ -3,6 +3,7 @@
 # Huey periodic tasks (registered via @huey.periodic_task decorator)
 daily_distill_task  # noqa
 daily_routines_task  # noqa
+daily_gc_task  # noqa
 
 # Pydantic Settings fields (read from environment variables)
 poll_interval_seconds  # noqa

@@ -13,7 +13,7 @@ router = APIRouter()
 
 def _notify_pipeline():
     try:
-        from engine.infrastructure.scheduler.tasks import on_new_data
+        from engine.scheduler.tasks import on_new_data
         on_new_data()
     except Exception:
         pass
