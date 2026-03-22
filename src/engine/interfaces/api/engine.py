@@ -91,15 +91,39 @@ async def pipeline_logs(request: Request, limit: int = 50, offset: int = 0, sear
 
 @router.post("/engine/distill")
 async def trigger_distill(request: Request):
-    from engine.application.distill_playbooks import distill_playbooks
-    count = await distill_playbooks(request.app.state.settings, request.app.state.db)
+    import asyncio
+    from engine.infrastructure.pipeline.orchestrator import run_distill
+    from engine.infrastructure.persistence.engine import get_sync_session_factory
+
+    settings = request.app.state.settings
+    session = get_sync_session_factory(settings.database_url_sync)()
+
+    def _run():
+        count = run_distill(settings, session)
+        session.commit()
+        session.close()
+        return count
+
+    count = await asyncio.get_event_loop().run_in_executor(None, _run)
     return {"playbook_entries_updated": count}
 
 
 @router.post("/engine/routines")
 async def trigger_routines(request: Request):
-    from engine.application.compose_routines import compose_routines
-    count = await compose_routines(request.app.state.settings, request.app.state.db)
+    import asyncio
+    from engine.infrastructure.pipeline.orchestrator import run_routines
+    from engine.infrastructure.persistence.engine import get_sync_session_factory
+
+    settings = request.app.state.settings
+    session = get_sync_session_factory(settings.database_url_sync)()
+
+    def _run():
+        count = run_routines(settings, session)
+        session.commit()
+        session.close()
+        return count
+
+    count = await asyncio.get_event_loop().run_in_executor(None, _run)
     return {"routines_updated": count}
 
 

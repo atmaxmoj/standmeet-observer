@@ -10,9 +10,12 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from engine.config import Settings
 from engine.infrastructure.persistence.db import DB
+from engine.interfaces.api.routes import router
+from engine.interfaces.api.chat import router as chat_router
 
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "DEBUG").upper()
 
@@ -103,17 +106,12 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Observer", lifespan=lifespan)
 
-from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-from engine.interfaces.api.routes import router  # noqa: E402
-from engine.interfaces.api.chat import router as chat_router  # noqa: E402
 
 app.include_router(router)
 app.include_router(chat_router)

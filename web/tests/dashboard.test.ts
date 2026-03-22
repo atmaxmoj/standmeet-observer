@@ -341,7 +341,7 @@ test.describe("Dashboard", () => {
     await panel.getByRole("button", { name: "Run Distill" }).click();
 
     // Wait for distill to complete (button re-enables) — agentic MCP is slower
-    await expect(panel.getByRole("button", { name: "Run Distill" })).toBeEnabled({ timeout: 180000 });
+    await expect(panel.getByRole("button", { name: "Run Distill" })).toBeEnabled({ timeout: 230000 });
 
     // Refresh and verify entries exist (may be same count if upserted)
     await panel.getByRole("button", { name: "Refresh" }).click();
@@ -361,7 +361,7 @@ test.describe("Dashboard", () => {
     await panel.getByRole("button", { name: "Run Compose" }).click();
 
     // Wait for compose to complete — agentic MCP is slower
-    await expect(panel.getByRole("button", { name: "Run Compose" })).toBeEnabled({ timeout: 180000 });
+    await expect(panel.getByRole("button", { name: "Run Compose" })).toBeEnabled({ timeout: 230000 });
 
     // Refresh and check routines exist
     await panel.getByRole("button", { name: "Refresh" }).click();
