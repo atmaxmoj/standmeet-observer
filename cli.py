@@ -235,6 +235,11 @@ def cmd_start():
             continue
         daemon_start_source(source_name, source_dir)
 
+    # Clear stale Huey lock DB to prevent pipeline-check deadlock after restart
+    print("==> Clearing Huey task queue...")
+    run(["docker", "compose", "run", "--rm", "--no-deps", "engine",
+         "sh", "-c", "rm -f /data/huey.db /data/huey.db-shm /data/huey.db-wal"], cwd=ROOT)
+
     print("==> Building + starting engine + web containers...")
     run(["docker", "compose", "up", "-d", "--build"], cwd=ROOT)
 
