@@ -69,7 +69,7 @@ def should_keep(frame: Frame) -> bool:
 def _filter_reason(frame: Frame) -> str | None:
     """Return filter reason string, or None if frame should be kept."""
     # Event sources: check text + observer noise
-    if frame.source in ("os_event", "audio"):
+    if frame.source in ("os_event", "audio", "oslog"):
         if not frame.text or not frame.text.strip():
             return "empty text"
         return "observer process noise" if _OBSERVER_PROCESS_RE.search(frame.text) else None
