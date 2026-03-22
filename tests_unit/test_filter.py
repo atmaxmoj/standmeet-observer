@@ -266,3 +266,9 @@ class TestDetectWindows:
         f = _frame(source="capture", app_name="Code",
                    text="def run_osascript(cmd): subprocess.run(['osascript', '-e', cmd])")
         assert should_keep(f) is True
+
+    def test_filters_chrome_showing_osascript_output(self):
+        """Chrome showing terminal output with osascript noise should also be filtered."""
+        f = _frame(source="capture", app_name="Google Chrome",
+                   text="Process 12345 osascript -e tell application Process 12346 osascript Process 12347 caffeinate -i pid 999 osascript")
+        assert should_keep(f) is False

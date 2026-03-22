@@ -40,10 +40,19 @@ _OBSERVER_TERMINAL_TOKENS = frozenset({"osascript", "caffeinate"})
 _OBSERVER_TERMINAL_THRESHOLD = 0.15  # if >15% of words are observer process tokens → noise
 
 
+_CODE_KEYWORDS = frozenset({"def", "class", "import", "from", "function", "const", "return", "if", "else", "for", "while"})
+
+
 def _is_terminal_observer_noise(text: str) -> bool:
-    """Check if Terminal screen capture text is dominated by observer process noise."""
+    """Check if screen capture text is dominated by observer process noise.
+
+    Returns False if text contains code keywords (likely viewing source code).
+    """
     words = text.lower().split()
     if len(words) < 5:
+        return False
+    # If text looks like source code, keep it
+    if any(w in _CODE_KEYWORDS for w in words):
         return False
     noise_count = sum(1 for w in words if any(t in w for t in _OBSERVER_TERMINAL_TOKENS))
     return noise_count / len(words) > _OBSERVER_TERMINAL_THRESHOLD
@@ -66,9 +75,8 @@ def _filter_reason(frame: Frame) -> str | None:
         return "observer process noise" if _OBSERVER_PROCESS_RE.search(frame.text) else None
 
     # Screen captures: check Terminal observer noise, ignored apps, text length
-    if (frame.source == "capture" and frame.app_name == "Terminal"
-            and frame.text and _is_terminal_observer_noise(frame.text)):
-        return "Terminal observer noise"
+    if frame.source == "capture" and frame.text and _is_terminal_observer_noise(frame.text):
+        return "observer process noise in screen capture"
     if frame.app_name in IGNORE_APPS:
         return f"ignored app: {frame.app_name}"
     if not frame.text or len(frame.text.strip()) < MIN_TEXT_LENGTH:
