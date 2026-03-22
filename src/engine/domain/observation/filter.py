@@ -33,26 +33,47 @@ _OBSERVER_PROCESS_RE = re.compile(r"\[anon<(osascript|node|caffeinate)\>\(\d+\):
 
 MIN_TEXT_LENGTH = 10
 
+# Screen captures of Terminal showing only observer process output.
+# Matches when the text is dominated by osascript/caffeinate/node process lines
+# with no real user commands.
+_OBSERVER_TERMINAL_TOKENS = frozenset({"osascript", "caffeinate"})
+_OBSERVER_TERMINAL_THRESHOLD = 0.15  # if >15% of words are observer process tokens → noise
+
+
+def _is_terminal_observer_noise(text: str) -> bool:
+    """Check if Terminal screen capture text is dominated by observer process noise."""
+    words = text.lower().split()
+    if len(words) < 5:
+        return False
+    noise_count = sum(1 for w in words if any(t in w for t in _OBSERVER_TERMINAL_TOKENS))
+    return noise_count / len(words) > _OBSERVER_TERMINAL_THRESHOLD
+
 
 def should_keep(frame: Frame) -> bool:
-    if frame.source in ("os_event", "audio"):
-        if not frame.text or not frame.text.strip():
-            logger.debug("filtered out %s id=%d (empty text)", frame.source, frame.id)
-            return False
-        if _OBSERVER_PROCESS_RE.search(frame.text):
-            logger.debug("filtered out oslog id=%d (observer process noise)", frame.id)
-            return False
-        return True
-    if frame.app_name in IGNORE_APPS:
-        logger.debug("filtered out frame id=%d app=%s (ignored app)", frame.id, frame.app_name)
-        return False
-    if not frame.text or len(frame.text.strip()) < MIN_TEXT_LENGTH:
-        logger.debug(
-            "filtered out frame id=%d app=%s (text too short: %d chars)",
-            frame.id, frame.app_name, len(frame.text.strip()) if frame.text else 0,
-        )
+    reason = _filter_reason(frame)
+    if reason:
+        logger.debug("filtered out %s id=%d (%s)", frame.source, frame.id, reason)
         return False
     return True
+
+
+def _filter_reason(frame: Frame) -> str | None:
+    """Return filter reason string, or None if frame should be kept."""
+    # Event sources: check text + observer noise
+    if frame.source in ("os_event", "audio"):
+        if not frame.text or not frame.text.strip():
+            return "empty text"
+        return "observer process noise" if _OBSERVER_PROCESS_RE.search(frame.text) else None
+
+    # Screen captures: check Terminal observer noise, ignored apps, text length
+    if (frame.source == "capture" and frame.app_name == "Terminal"
+            and frame.text and _is_terminal_observer_noise(frame.text)):
+        return "Terminal observer noise"
+    if frame.app_name in IGNORE_APPS:
+        return f"ignored app: {frame.app_name}"
+    if not frame.text or len(frame.text.strip()) < MIN_TEXT_LENGTH:
+        return "text too short"
+    return None
 
 
 def detect_windows(

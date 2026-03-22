@@ -242,3 +242,27 @@ class TestDetectWindows:
         assert len(windows[0]) == 2
         assert len(remainder) == 1
         assert remainder[0].id == 3
+
+    def test_filters_terminal_osascript_screen_capture(self):
+        """Screen capture of Terminal showing only osascript/caffeinate noise should be filtered."""
+        f = _frame(source="capture", app_name="Terminal",
+                   text="wangsijie 12345 osascript -e 'tell application' wangsijie 12346 osascript wangsijie 12347 caffeinate -i")
+        assert should_keep(f) is False
+
+    def test_filters_terminal_node_automation_capture(self):
+        """Screen capture of Terminal showing only node process spawning."""
+        f = _frame(source="capture", app_name="Terminal",
+                   text="node /Users/wangsijie/.observer/sources/builtin/chrome/src/chrome_source.py 3456 node 3457 osascript")
+        assert should_keep(f) is False
+
+    def test_keeps_terminal_with_real_commands(self):
+        """Terminal showing actual user commands should be kept."""
+        f = _frame(source="capture", app_name="Terminal",
+                   text="$ npm test tests/e2e/content/faq-block.spec.ts --grep IFAQ2b\nPASSED 5 tests")
+        assert should_keep(f) is True
+
+    def test_keeps_vscode_with_osascript_in_text(self):
+        """VSCode showing code that mentions osascript should be kept."""
+        f = _frame(source="capture", app_name="Code",
+                   text="def run_osascript(cmd): subprocess.run(['osascript', '-e', cmd])")
+        assert should_keep(f) is True
