@@ -163,3 +163,24 @@ class TestRespawn:
         main_mod.main()  # returns normally
 
         assert call_count == 1, "Should not respawn after clean SystemExit"
+
+    def test_respawns_after_unexpected_return(self, monkeypatch):
+        """run_source returns normally (not crash) → watchdog still restarts."""
+        import source_framework.__main__ as main_mod
+
+        call_count = 0
+
+        def fake_run_source(source_dir, engine_url=None):
+            nonlocal call_count
+            call_count += 1
+            if call_count >= 2:
+                raise SystemExit(0)
+            return  # normal return = unexpected, should restart
+
+        monkeypatch.setattr(main_mod, "run_source", fake_run_source)
+        monkeypatch.setattr(main_mod.time, "sleep", lambda _: None)
+        monkeypatch.setattr("sys.argv", ["prog", "/fake/dir"])
+
+        main_mod.main()
+
+        assert call_count == 2, f"Expected restart after normal return, got {call_count} calls"

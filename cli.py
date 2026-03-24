@@ -163,8 +163,8 @@ def daemon_start_source(name: str, source_dir: Path):
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     log = _log_file(f"source-{name}")
 
-    print(f"  Starting source/{name}...")
-    with open(log, "w") as lf:
+    print(f"  Starting source/{name} (with watchdog)...")
+    with open(log, "a") as lf:
         kwargs = dict(
             cwd=source_dir,
             stdout=lf, stderr=lf,
@@ -173,8 +173,9 @@ def daemon_start_source(name: str, source_dir: Path):
             kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
         else:
             kwargs["start_new_session"] = True
+        # Shell wrapper auto-restarts the source on crash (watchdog)
         p = subprocess.Popen(
-            ["uv", "run", "python", "-m", "source_framework", "."],
+            ["sh", "-c", 'while true; do uv run python -m source_framework . ; echo "[watchdog] source exited, restarting in 5s..." >&2; sleep 5; done'],
             **kwargs,
         )
 
