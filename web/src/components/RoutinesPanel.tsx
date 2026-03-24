@@ -65,10 +65,15 @@ export function RoutinesPanel() {
   const [composing, setComposing] = useState(false);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortKey>("confidence");
+  const [lastRun, setLastRun] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
-    try { setRoutines((await api.routines(search)).routines); } catch (e) { console.error(e); }
+    try {
+      setRoutines((await api.routines(search)).routines);
+      const { logs } = await api.logs(1, 0, "compose");
+      setLastRun(logs[0]?.created_at ?? "");
+    } catch (e) { console.error(e); }
     setLoading(false);
   }, [search]);
 
@@ -99,6 +104,7 @@ export function RoutinesPanel() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {lastRun && <span className="text-xs text-muted-foreground">Last run: {new Date(lastRun).toLocaleTimeString()}</span>}
           <Button variant="default" size="sm" onClick={runCompose} disabled={composing}>
             {composing ? "Running..." : "Run Compose"}
           </Button>

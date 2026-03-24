@@ -71,10 +71,15 @@ export function PlaybooksPanel() {
   const [distilling, setDistilling] = useState(false);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortKey>("confidence");
+  const [lastRun, setLastRun] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
-    try { setPlaybooks((await api.playbooks(search)).playbooks); } catch (e) { console.error(e); }
+    try {
+      setPlaybooks((await api.playbooks(search)).playbooks);
+      const { logs } = await api.logs(1, 0, "distill");
+      setLastRun(logs[0]?.created_at ?? "");
+    } catch (e) { console.error(e); }
     setLoading(false);
   }, [search]);
 
@@ -106,7 +111,8 @@ export function PlaybooksPanel() {
             ))}
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          {lastRun && <span className="text-xs text-muted-foreground">Last run: {new Date(lastRun).toLocaleTimeString()}</span>}
           <Button variant="default" size="sm" onClick={runDistill} disabled={distilling}>
             {distilling ? "Running..." : "Run Distill"}
           </Button>
