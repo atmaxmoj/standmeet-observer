@@ -70,6 +70,21 @@ def _pid_alive(pid: int) -> bool:
 
 def daemon_running(name: str) -> int | None:
     """Return PID if daemon is running, else None."""
+    # Check launchd first (macOS)
+    if sys.platform == "darwin" and name.startswith("source-"):
+        import re
+        source_name = name.removeprefix("source-")
+        label = _launchd_label(source_name)
+        uid = os.getuid()
+        result = subprocess.run(
+            ["launchctl", "print", f"gui/{uid}/{label}"],
+            capture_output=True, text=True,
+        )
+        if result.returncode == 0:
+            match = re.search(r"pid\s*=\s*(\d+)", result.stdout)
+            return int(match.group(1)) if match else -1
+
+    # Fallback: PID file
     pf = _pid_file(name)
     if not pf.exists():
         return None
@@ -134,6 +149,23 @@ def daemon_start(name: str, cwd: Path):
 
 
 def daemon_stop(name: str):
+    # Try launchd first (macOS)
+    if sys.platform == "darwin" and name.startswith("source-"):
+        source_name = name.removeprefix("source-")
+        label = _launchd_label(source_name)
+        plist_path = _launchd_plist_path(source_name)
+        uid = os.getuid()
+        domain = f"gui/{uid}"
+        result = subprocess.run(
+            ["launchctl", "print", f"{domain}/{label}"], capture_output=True,
+        )
+        if result.returncode == 0:
+            subprocess.run(["launchctl", "bootout", f"{domain}/{label}"], capture_output=True)
+            plist_path.unlink(missing_ok=True)
+            print(f"  {name} stopped (launchd)")
+            return
+
+    # Fallback: PID-based stop
     pid = daemon_running(name)
     if pid:
         try:
@@ -148,12 +180,82 @@ def daemon_stop(name: str):
         print(f"  {name} not running")
 
     _pid_file(name).unlink(missing_ok=True)
-    # Also kill any orphaned processes
     _kill_stale_processes(name)
 
 
+LAUNCHD_DIR = Path.home() / "Library" / "LaunchAgents"
+LAUNCHD_PREFIX = "com.observer.source"
+
+
+def _launchd_label(name: str) -> str:
+    return f"{LAUNCHD_PREFIX}.{name}"
+
+
+def _launchd_plist_path(name: str) -> Path:
+    return LAUNCHD_DIR / f"{_launchd_label(name)}.plist"
+
+
+def _generate_plist(name: str, source_dir: Path) -> Path:
+    """Generate a launchd plist for a source plugin."""
+    import plistlib
+    label = _launchd_label(name)
+    log = str(_log_file(f"source-{name}"))
+    uv_path = subprocess.run(["which", "uv"], capture_output=True, text=True).stdout.strip()
+
+    plist = {
+        "Label": label,
+        "ProgramArguments": [uv_path, "run", "python", "-m", "source_framework", "."],
+        "WorkingDirectory": str(source_dir),
+        "KeepAlive": True,
+        "RunAtLoad": True,
+        "StandardOutPath": log,
+        "StandardErrorPath": log,
+        "EnvironmentVariables": {
+            "PATH": os.environ.get("PATH", "/usr/bin:/bin:/usr/local/bin"),
+            "HOME": str(Path.home()),
+            "ENGINE_URL": os.environ.get("ENGINE_URL", "http://localhost:5001"),
+        },
+    }
+
+    LAUNCHD_DIR.mkdir(parents=True, exist_ok=True)
+    plist_path = _launchd_plist_path(name)
+    with open(plist_path, "wb") as f:
+        plistlib.dump(plist, f)
+    return plist_path
+
+
 def daemon_start_source(name: str, source_dir: Path):
-    """Start a source plugin as an independent daemon process."""
+    """Start a source plugin via launchd (macOS) or shell wrapper (other)."""
+    if sys.platform == "darwin":
+        _launchd_start_source(name, source_dir)
+    else:
+        _shell_start_source(name, source_dir)
+
+
+def _launchd_start_source(name: str, source_dir: Path):
+    """Start source via launchd — survives sleep, auto-restarts on crash."""
+    label = _launchd_label(name)
+    uid = os.getuid()
+    domain = f"gui/{uid}"
+
+    # Check if already loaded
+    result = subprocess.run(
+        ["launchctl", "print", f"{domain}/{label}"],
+        capture_output=True,
+    )
+    if result.returncode == 0:
+        print(f"  source/{name} already running (launchd)")
+        return
+
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    plist_path = _generate_plist(name, source_dir)
+
+    subprocess.run(["launchctl", "bootstrap", domain, str(plist_path)], check=True)
+    print(f"  source/{name} started (launchd: {label})")
+
+
+def _shell_start_source(name: str, source_dir: Path):
+    """Fallback: shell wrapper with watchdog for non-macOS."""
     pid = daemon_running(f"source-{name}")
     if pid:
         print(f"  source/{name} already running (pid {pid})")
@@ -165,22 +267,13 @@ def daemon_start_source(name: str, source_dir: Path):
 
     print(f"  Starting source/{name} (with watchdog)...")
     with open(log, "a") as lf:
-        kwargs = dict(
-            cwd=source_dir,
-            stdout=lf, stderr=lf,
-        )
-        if sys.platform == "win32":
-            kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
-        else:
-            kwargs["start_new_session"] = True
-        # Shell wrapper auto-restarts the source on crash (watchdog)
         p = subprocess.Popen(
-            ["sh", "-c", 'while true; do uv run python -m source_framework . ; echo "[watchdog] source exited, restarting in 5s..." >&2; sleep 5; done'],
-            **kwargs,
+            ["sh", "-c", 'while true; do uv run python -m source_framework . ; sleep 5; done'],
+            cwd=source_dir, stdout=lf, stderr=lf, start_new_session=True,
         )
 
     _pid_file(f"source-{name}").write_text(str(p.pid))
-    print(f"  source/{name} started (pid {p.pid}) → {log}")
+    print(f"  source/{name} started (pid {p.pid})")
 
 
 def _iter_source_manifests():
