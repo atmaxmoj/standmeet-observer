@@ -32,7 +32,18 @@ def main():
     signal.signal(signal.SIGINT, shutdown)
     signal.signal(signal.SIGTERM, shutdown)
 
-    run_source(args.source_dir, engine_url=args.engine_url)
+    import time
+    logger = logging.getLogger(__name__)
+
+    while True:
+        try:
+            run_source(args.source_dir, engine_url=args.engine_url)
+            logger.warning("run_source returned unexpectedly, restarting in 5s...")
+        except SystemExit:
+            break  # clean shutdown via signal
+        except Exception:
+            logger.exception("source crashed, restarting in 5s...")
+        time.sleep(5)
 
 
 if __name__ == "__main__":
