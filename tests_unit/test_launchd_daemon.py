@@ -53,11 +53,16 @@ def dummy_plist(tmp_path):
     """Create a minimal launchd plist that runs a sleep loop."""
     import plistlib
 
+    # Ensure clean state — bootout any leftover from previous run
+    _bootout(LABEL)
+    time.sleep(1)
+
     plist = {
         "Label": LABEL,
         "ProgramArguments": ["/bin/sh", "-c", "while true; do sleep 1; done"],
         "KeepAlive": True,
         "RunAtLoad": True,
+        "ThrottleInterval": 1,  # Reduce restart delay for tests
     }
 
     PLIST_DIR.mkdir(parents=True, exist_ok=True)
@@ -113,3 +118,33 @@ class TestLaunchdDaemon:
         time.sleep(1)
 
         assert not _is_loaded(LABEL), "Service should be stopped after bootout"
+
+
+class TestOrphanCleanup:
+    """Test that _kill_stale_processes finds and kills orphan source processes."""
+
+    def test_kills_orphan_source_process(self, tmp_path):
+        """Spawn a fake orphan process matching source pattern, verify cleanup kills it."""
+        from cli import _kill_stale_processes
+
+        # Create a fake "sources/builtin/testorphan" directory with a sleep process
+        fake_dir = tmp_path / "sources" / "builtin" / "testorphan"
+        fake_dir.mkdir(parents=True)
+
+        # Start a process whose cmdline contains "sources/builtin/testorphan"
+        orphan = subprocess.Popen(
+            ["sh", "-c", f"exec -a 'python sources/builtin/testorphan/fake' sleep 300"],
+            start_new_session=True,
+        )
+        time.sleep(0.5)
+
+        # Verify it's running
+        assert orphan.poll() is None, "Orphan process should be running"
+
+        # _kill_stale_processes should find and kill it
+        _kill_stale_processes("source-testorphan")
+        time.sleep(1)
+
+        # Process should be dead
+        orphan.poll()
+        assert orphan.returncode is not None, "Orphan process should have been killed"

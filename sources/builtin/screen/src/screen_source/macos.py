@@ -1,5 +1,6 @@
 """macOS backend: Quartz (CoreGraphics) for capture, Vision for OCR, AppKit for window info."""
 
+import contextlib
 import hashlib
 import io
 import logging
@@ -7,9 +8,26 @@ import logging
 import Quartz
 import Vision
 from AppKit import NSWorkspace
+from Foundation import NSAutoreleasePool
 from PIL import Image
 
 logger = logging.getLogger(__name__)
+
+
+@contextlib.contextmanager
+def autorelease_pool():
+    """Wrap code in an NSAutoreleasePool to release ObjC objects promptly.
+
+    Without this, pyobjc bridge objects (CGImage, NSData from
+    CGDataProviderCopyData, VNImageRequestHandler, etc.) accumulate in the
+    default autorelease pool which only drains at the run-loop boundary —
+    but we have no run loop, so they leak indefinitely.
+    """
+    pool = NSAutoreleasePool.alloc().init()
+    try:
+        yield
+    finally:
+        del pool
 
 
 def check_screen_recording_permission() -> bool:

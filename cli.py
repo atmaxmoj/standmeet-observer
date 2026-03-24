@@ -95,24 +95,66 @@ def daemon_running(name: str) -> int | None:
     return None
 
 
+def _launchd_preserve_pids(source_name: str) -> set[int]:
+    """Get PIDs managed by launchd for a source (to preserve during cleanup)."""
+    pids: set[int] = set()
+    if sys.platform != "darwin":
+        return pids
+    import re
+    label = _launchd_label(source_name)
+    uid = os.getuid()
+    result = subprocess.run(
+        ["launchctl", "print", f"gui/{uid}/{label}"],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        return pids
+    match = re.search(r"pid\s*=\s*(\d+)", result.stdout)
+    if not match:
+        return pids
+    ld_pid = int(match.group(1))
+    pids.add(ld_pid)
+    # Also preserve child processes of launchd-managed uv wrapper
+    child_result = subprocess.run(
+        ["pgrep", "-P", str(ld_pid)], capture_output=True, text=True,
+    )
+    if child_result.returncode == 0:
+        for line in child_result.stdout.strip().split("\n"):
+            if line.strip():
+                pids.add(int(line.strip()))
+    return pids
+
+
 def _kill_stale_processes(name: str):
     """Find and kill any orphaned processes for this daemon (not tracked by PID file)."""
     if sys.platform == "win32":
-        return  # TODO: implement for Windows
+        return
+
+    # For source plugins, search by source directory path
+    if name.startswith("source-"):
+        source_name = name.removeprefix("source-")
+        pattern = f"sources/builtin/{source_name}"
+    else:
+        pattern = f"python -m {name}"
+
     try:
         result = subprocess.run(
-            ["pgrep", "-f", f"python -m {name}"],
-            capture_output=True, text=True,
+            ["pgrep", "-f", pattern], capture_output=True, text=True,
         )
         if result.returncode != 0:
             return
-        tracked_pid = None
+
+        preserve_pids: set[int] = set()
         pf = _pid_file(name)
         if pf.exists():
-            tracked_pid = int(pf.read_text().strip())
+            preserve_pids.add(int(pf.read_text().strip()))
+        if name.startswith("source-"):
+            preserve_pids |= _launchd_preserve_pids(name.removeprefix("source-"))
         for line in result.stdout.strip().split("\n"):
+            if not line.strip():
+                continue
             pid = int(line.strip())
-            if pid != tracked_pid:
+            if pid not in preserve_pids:
                 try:
                     os.kill(pid, signal.SIGTERM)
                     print(f"  killed stale {name} process (pid {pid})")
@@ -163,7 +205,10 @@ def daemon_stop(name: str):
             subprocess.run(["launchctl", "bootout", f"{domain}/{label}"], capture_output=True)
             plist_path.unlink(missing_ok=True)
             print(f"  {name} stopped (launchd)")
-            return
+            # Fall through to also kill orphan processes
+        else:
+            # Not in launchd — fall through to PID-based stop
+            pass
 
     # Fallback: PID-based stop
     pid = daemon_running(name)
@@ -205,7 +250,7 @@ def _generate_plist(name: str, source_dir: Path) -> Path:
     plist = {
         "Label": label,
         "ProgramArguments": [uv_path, "run", "python", "-m", "source_framework", "."],
-        "WorkingDirectory": str(source_dir),
+        "WorkingDirectory": str(source_dir.resolve()),
         "KeepAlive": True,
         "RunAtLoad": True,
         "StandardOutPath": log,

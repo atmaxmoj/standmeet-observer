@@ -107,6 +107,7 @@ class ScreenSource(SourcePlugin):
         the source plugin framework.
         """
         from screen_source.backends import (
+            autorelease_pool,
             capture_display,
             compress_image,
             get_all_displays,
@@ -140,46 +141,52 @@ class ScreenSource(SourcePlugin):
 
             try:
                 cycle_start = time.monotonic()
-                displays = get_all_displays()
-                app_name, window_name = get_frontmost_app()
-                timestamp = datetime.now(timezone.utc).isoformat()
 
-                captured = 0
-                skipped = 0
+                # Wrap entire cycle in NSAutoreleasePool so CoreGraphics/Vision
+                # ObjC objects are released at end of each cycle, not leaked.
+                with autorelease_pool():
+                    displays = get_all_displays()
+                    app_name, window_name = get_frontmost_app()
+                    timestamp = datetime.now(timezone.utc).isoformat()
 
-                for display_id in displays:
-                    image = capture_display(display_id)
-                    if image is None:
-                        continue
+                    captured = 0
+                    skipped = 0
 
-                    current_hash = hash_image(image)
-                    if current_hash == last_hashes.get(display_id):
-                        skipped += 1
-                        logger.debug("display %d unchanged, skipping OCR", display_id)
-                        continue
+                    for display_id in displays:
+                        image = capture_display(display_id)
+                        if image is None:
+                            continue
 
-                    text = ocr_image(image)
+                        current_hash = hash_image(image)
+                        if current_hash == last_hashes.get(display_id):
+                            skipped += 1
+                            logger.debug("display %d unchanged, skipping OCR", display_id)
+                            del image
+                            continue
 
-                    # Compress and save frame
-                    image_path = ""
-                    try:
-                        webp_bytes = compress_image(image, max_width, webp_quality)
-                        image_path = _save_frame(frames_dir, webp_bytes, timestamp, display_id)
-                    except Exception:
-                        logger.exception("failed to compress/save frame for display %d", display_id)
+                        text = ocr_image(image)
 
-                    client.ingest({
-                        "timestamp": timestamp,
-                        "app_name": app_name,
-                        "window_name": window_name,
-                        "text": text,
-                        "display_id": display_id,
-                        "image_hash": current_hash,
-                        "image_path": image_path,
-                    })
+                        # Compress and save frame
+                        image_path = ""
+                        try:
+                            webp_bytes = compress_image(image, max_width, webp_quality)
+                            image_path = _save_frame(frames_dir, webp_bytes, timestamp, display_id)
+                        except Exception:
+                            logger.exception("failed to compress/save frame for display %d", display_id)
 
-                    last_hashes[display_id] = current_hash
-                    captured += 1
+                        client.ingest({
+                            "timestamp": timestamp,
+                            "app_name": app_name,
+                            "window_name": window_name,
+                            "text": text,
+                            "display_id": display_id,
+                            "image_hash": current_hash,
+                            "image_path": image_path,
+                        })
+
+                        last_hashes[display_id] = current_hash
+                        captured += 1
+                        del image
 
                 elapsed = time.monotonic() - cycle_start
                 logger.debug(
