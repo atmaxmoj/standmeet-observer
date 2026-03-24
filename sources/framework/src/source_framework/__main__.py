@@ -9,6 +9,7 @@ import argparse
 import logging
 import signal
 import sys
+import time
 
 from source_framework.runner import run_source
 
@@ -32,7 +33,6 @@ def main():
     signal.signal(signal.SIGINT, shutdown)
     signal.signal(signal.SIGTERM, shutdown)
 
-    import time
     logger = logging.getLogger(__name__)
 
     while True:

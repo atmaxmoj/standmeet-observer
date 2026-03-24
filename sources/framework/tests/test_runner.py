@@ -121,3 +121,45 @@ class TestLoadAndProbe:
         )
         manifest, plugin = load_and_probe(source_dir)
         assert plugin is None
+
+
+class TestRespawn:
+    def test_respawns_after_crash(self, monkeypatch):
+        """Source auto-restarts after run_source raises."""
+        import source_framework.__main__ as main_mod
+
+        call_count = 0
+
+        def fake_run_source(source_dir, engine_url=None):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise RuntimeError("simulated crash")
+            raise SystemExit(0)  # second+ call: clean exit
+
+        monkeypatch.setattr(main_mod, "run_source", fake_run_source)
+        monkeypatch.setattr(main_mod.time, "sleep", lambda _: None)
+        monkeypatch.setattr("sys.argv", ["prog", "/fake/dir"])
+
+        main_mod.main()  # returns normally after SystemExit breaks the loop
+
+        assert call_count == 2, f"Expected 2 calls (crash + restart), got {call_count}"
+
+    def test_clean_shutdown_no_respawn(self, monkeypatch):
+        """SIGTERM/SIGINT causes clean exit, no respawn."""
+        import source_framework.__main__ as main_mod
+
+        call_count = 0
+
+        def fake_run_source(source_dir, engine_url=None):
+            nonlocal call_count
+            call_count += 1
+            raise SystemExit(0)
+
+        monkeypatch.setattr(main_mod, "run_source", fake_run_source)
+        monkeypatch.setattr(main_mod.time, "sleep", lambda _: None)
+        monkeypatch.setattr("sys.argv", ["prog", "/fake/dir"])
+
+        main_mod.main()  # returns normally
+
+        assert call_count == 1, "Should not respawn after clean SystemExit"
