@@ -1,0 +1,13 @@
+image: Visual Studio 2022
+
+environment:
+  PYTHON: "C:\\Python312-x64"
+
+install:
+  - cmd: python --version
+  - cmd: pip install uv
+
+build: off
+
+test_script:
+  - cmd: cd sources\builtin\screen && uv sync --extra test && uv run pytest tests/test_windows_capture.py -v -s --tb=short
