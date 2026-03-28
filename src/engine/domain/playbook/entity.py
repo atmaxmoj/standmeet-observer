@@ -15,6 +15,7 @@ class Playbook:
     context: str = ""
     action: str = ""
     confidence: float = 0.0
+    base_confidence: float = 0.0
     maturity: str = "nascent"
     evidence: str = "[]"
     last_evidence_at: str | None = None

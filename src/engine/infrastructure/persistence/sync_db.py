@@ -89,13 +89,15 @@ class SyncDB:
             existing.context = context
             existing.action = action
             existing.confidence = confidence
+            existing.base_confidence = confidence
             existing.maturity = maturity
             existing.evidence = evidence
             existing.updated_at = func.now()
         else:
             self.session.add(PlaybookEntry(
                 name=name, context=context, action=action,
-                confidence=confidence, maturity=maturity, evidence=evidence,
+                confidence=confidence, base_confidence=confidence,
+                maturity=maturity, evidence=evidence,
             ))
         self.session.flush()
 

@@ -133,7 +133,7 @@ class TestOrphanCleanup:
 
         # Start a process whose cmdline contains "sources/builtin/testorphan"
         orphan = subprocess.Popen(
-            ["sh", "-c", f"exec -a 'python sources/builtin/testorphan/fake' sleep 300"],
+            ["sh", "-c", "exec -a 'python sources/builtin/testorphan/fake' sleep 300"],
             start_new_session=True,
         )
         time.sleep(0.5)

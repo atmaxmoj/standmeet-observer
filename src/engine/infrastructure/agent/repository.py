@@ -129,13 +129,15 @@ def write_playbook_entry(
         existing.context = context
         existing.action = action
         existing.confidence = confidence
+        existing.base_confidence = confidence
         existing.maturity = maturity
         existing.evidence = evidence
         existing.updated_at = func.now()
     else:
         session.add(PlaybookEntry(
             name=name, context=context, action=action,
-            confidence=confidence, maturity=maturity, evidence=evidence,
+            confidence=confidence, base_confidence=confidence,
+            maturity=maturity, evidence=evidence,
         ))
     session.flush()
 
@@ -206,12 +208,14 @@ def write_routine(
         existing.steps = steps
         existing.uses = uses
         existing.confidence = confidence
+        existing.base_confidence = confidence
         existing.maturity = maturity
         existing.updated_at = func.now()
     else:
         session.add(Routine(
             name=name, trigger=trigger, goal=goal,
-            steps=steps, uses=uses, confidence=confidence, maturity=maturity,
+            steps=steps, uses=uses, confidence=confidence,
+            base_confidence=confidence, maturity=maturity,
         ))
     session.flush()
 
@@ -251,8 +255,9 @@ def merge_entries(session: Session, keep_id: int, remove_id: int) -> dict:
     except (json.JSONDecodeError, TypeError):
         remove_ev = []
     merged = sorted(set(keep_ev + remove_ev))
-    new_conf = max(keep.confidence, remove.confidence)
+    new_conf = max(keep.base_confidence, remove.base_confidence)
     keep.confidence = new_conf
+    keep.base_confidence = new_conf
     keep.evidence = json.dumps(merged)
     keep.updated_at = func.now()
     session.delete(remove)
@@ -311,6 +316,7 @@ def deprecate_entry(session: Session, entry_id: int, reason: str = "") -> dict:
     record_playbook_snapshot(session, row.name, row.confidence, row.maturity or "nascent",
                              row.evidence or "[]", reason=f"deprecated: {reason}")
     row.confidence = 0.0
+    row.base_confidence = 0.0
     row.maturity = "nascent"
     row.updated_at = func.now()
     session.commit()

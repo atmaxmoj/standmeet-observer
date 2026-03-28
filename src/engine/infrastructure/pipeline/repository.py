@@ -10,7 +10,8 @@ from engine.infrastructure.persistence.models import PlaybookEntry, Routine, Tok
 def get_all_playbooks_for_decay(session: Session) -> list[dict]:
     rows = session.execute(select(PlaybookEntry)).scalars().all()
     result = [
-        {"id": r.id, "name": r.name, "confidence": r.confidence, "last_evidence_at": r.last_evidence_at}
+        {"id": r.id, "name": r.name, "confidence": r.confidence,
+         "base_confidence": r.base_confidence, "last_evidence_at": r.last_evidence_at}
         for r in rows
     ]
     return result
@@ -26,7 +27,8 @@ def update_confidence(session: Session, entry_id: int, confidence: float):
 def get_all_routines_for_decay(session: Session) -> list[dict]:
     rows = session.execute(select(Routine)).scalars().all()
     return [
-        {"id": r.id, "name": r.name, "confidence": r.confidence, "updated_at": r.updated_at}
+        {"id": r.id, "name": r.name, "confidence": r.confidence,
+         "base_confidence": r.base_confidence, "updated_at": r.updated_at}
         for r in rows
     ]
 

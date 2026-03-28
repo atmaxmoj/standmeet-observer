@@ -30,10 +30,27 @@ class DB:
         self._engine = create_async_engine(self.url, echo=False)
         async with self._engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+            await conn.run_sync(self._migrate_base_confidence)
         self._session_factory = async_sessionmaker(
             bind=self._engine, expire_on_commit=False,
         )
         logger.info("database connected and schema initialized at %s", self.url)
+
+    @staticmethod
+    def _migrate_base_confidence(conn):
+        """Add base_confidence column to existing tables and backfill."""
+        from sqlalchemy import text, inspect
+        inspector = inspect(conn)
+        for table in ("playbook_entries", "routines"):
+            columns = {c["name"] for c in inspector.get_columns(table)}
+            if "base_confidence" not in columns:
+                conn.execute(text(
+                    f"ALTER TABLE {table} ADD COLUMN base_confidence FLOAT NOT NULL DEFAULT 0.0"
+                ))
+                conn.execute(text(
+                    f"UPDATE {table} SET base_confidence = confidence"
+                ))
+                logger.info("migrated %s: added base_confidence, backfilled from confidence", table)
 
     async def close(self):
         if self._engine:
@@ -285,13 +302,15 @@ class DB:
                 existing.context = context
                 existing.action = action
                 existing.confidence = confidence
+                existing.base_confidence = confidence
                 existing.maturity = maturity
                 existing.evidence = evidence
                 existing.updated_at = func.now()
             else:
                 s.add(PlaybookEntry(
                     name=name, context=context, action=action,
-                    confidence=confidence, maturity=maturity, evidence=evidence,
+                    confidence=confidence, base_confidence=confidence,
+                    maturity=maturity, evidence=evidence,
                 ))
             await s.commit()
             logger.debug("upserted playbook name=%s confidence=%.2f maturity=%s", name, confidence, maturity)

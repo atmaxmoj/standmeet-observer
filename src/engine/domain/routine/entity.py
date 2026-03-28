@@ -13,6 +13,7 @@ class Routine:
     steps: str = "[]"
     uses: str = "[]"
     confidence: float = 0.0
+    base_confidence: float = 0.0
     maturity: str = "nascent"
     created_at: str = ""
     updated_at: str = ""

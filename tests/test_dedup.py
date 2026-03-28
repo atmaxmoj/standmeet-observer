@@ -11,7 +11,10 @@ def session(sync_session):
 
 
 def _insert(session, name, confidence=0.5, evidence="[]", context=""):
-    session.add(PlaybookEntry(name=name, context=context, confidence=confidence, evidence=evidence))
+    session.add(PlaybookEntry(
+        name=name, context=context, confidence=confidence,
+        base_confidence=confidence, evidence=evidence,
+    ))
     session.commit()
 
 

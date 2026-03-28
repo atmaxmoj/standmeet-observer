@@ -12,7 +12,10 @@ def session(sync_session):
 
 
 def _insert(session, name, confidence, last_evidence_at=None):
-    session.add(PlaybookEntry(name=name, confidence=confidence, last_evidence_at=last_evidence_at))
+    session.add(PlaybookEntry(
+        name=name, confidence=confidence, base_confidence=confidence,
+        last_evidence_at=last_evidence_at,
+    ))
     session.commit()
 
 
@@ -72,9 +75,30 @@ class TestDecayConfidence:
         expected = 1.0 * (1.0 - 30 / 90)
         assert abs(row.confidence - expected) < 0.01
 
+    def test_decay_is_idempotent(self, session):
+        """Running decay multiple times should NOT keep reducing confidence."""
+        old = (datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=45)).isoformat()
+        _insert(session, "stable-entry", 0.8, last_evidence_at=old)
+
+        # First decay
+        decay_confidence(session)
+        row = session.query(PlaybookEntry).first()
+        session.refresh(row)
+        first_decay = row.confidence
+
+        # Second decay — should produce the same value
+        decay_confidence(session)
+        session.refresh(row)
+        assert abs(row.confidence - first_decay) < 0.0001
+
+        # Third decay — still the same
+        decay_confidence(session)
+        session.refresh(row)
+        assert abs(row.confidence - first_decay) < 0.0001
+
 
 def _insert_routine(session, name, confidence, updated_at=None):
-    r = Routine(name=name, confidence=confidence)
+    r = Routine(name=name, confidence=confidence, base_confidence=confidence)
     if updated_at:
         r.updated_at = updated_at
     session.add(r)
