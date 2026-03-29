@@ -15,7 +15,7 @@ dependencies = [
     "huey>=2.5",
     "pydantic>=2.11",
     "pydantic-settings>=2.9",
-    "claude-agent-sdk==0.1.48",
+    "claude-agent-sdk>=0.1.52",
     "openai>=1.0",
 ]
 

@@ -39,6 +39,7 @@ services:
     environment:
       - SOURCES_DIR=/app/sources/builtin
       - CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_OAUTH_TOKEN:-}
+      - CLAUDE_CODE_STREAM_CLOSE_TIMEOUT=300
       - DATABASE_URL=postgresql+asyncpg://observer:observer@db-test:5432/observer_test
       - DATABASE_URL_SYNC=postgresql+psycopg://observer:observer@db-test:5432/observer_test
       - HUEY_DB_DIR=/data
