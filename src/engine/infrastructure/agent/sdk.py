@@ -75,7 +75,7 @@ async def acomplete(prompt: str, model: str, auth_token: str) -> LLMResponse:
     )
 
 
-def run_with_mcp(
+async def arun_with_mcp(
     prompt: str,
     mcp_server: FastMCP,
     mcp_name: str,
@@ -85,7 +85,10 @@ def run_with_mcp(
     model: str = "",
     max_turns: int = 40,
 ) -> AgentResult:
-    """Multi-turn agentic run with MCP tools via Agent SDK."""
+    """Multi-turn agentic run with MCP tools via Agent SDK. Async.
+
+    Must be called from an async context — avoids nested event loops.
+    """
     from claude_agent_sdk import query as sdk_query, ClaudeAgentOptions, ResultMessage
     from engine.config import MODEL_DEEP
 
@@ -98,32 +101,28 @@ def run_with_mcp(
     cost_usd = None
     usage: dict = {}
 
-    async def _run():
-        nonlocal result_text, cost_usd, usage
-        async for msg in sdk_query(
-            prompt=prompt,
-            options=ClaudeAgentOptions(
-                model=model,
-                max_turns=max_turns,
-                permission_mode="bypassPermissions",
-                mcp_servers={
-                    mcp_name: {
-                        "type": "sdk",
-                        "name": f"{mcp_name}-tools",
-                        "instance": mcp_server._mcp_server,
-                    },
+    async for msg in sdk_query(
+        prompt=prompt,
+        options=ClaudeAgentOptions(
+            model=model,
+            max_turns=max_turns,
+            permission_mode="bypassPermissions",
+            mcp_servers={
+                mcp_name: {
+                    "type": "sdk",
+                    "name": f"{mcp_name}-tools",
+                    "instance": mcp_server._mcp_server,
                 },
-                env=_build_env(auth_token),
-            ),
-        ):
-            msg_type = type(msg).__name__
-            logger.debug("%s msg: %s %s", stage, msg_type, str(msg)[:500])
-            if isinstance(msg, ResultMessage):
-                result_text = msg.result or ""
-                cost_usd = msg.total_cost_usd
-                usage = msg.usage or {}
-
-    asyncio.run(_run())
+            },
+            env=_build_env(auth_token),
+        ),
+    ):
+        msg_type = type(msg).__name__
+        logger.debug("%s msg: %s %s", stage, msg_type, str(msg)[:500])
+        if isinstance(msg, ResultMessage):
+            result_text = msg.result or ""
+            cost_usd = msg.total_cost_usd
+            usage = msg.usage or {}
 
     input_tokens = usage.get("input_tokens", 0)
     output_tokens = usage.get("output_tokens", 0)
@@ -141,3 +140,24 @@ def run_with_mcp(
         input_tokens=input_tokens,
         output_tokens=output_tokens,
     )
+
+
+def run_with_mcp(
+    prompt: str,
+    mcp_server: FastMCP,
+    mcp_name: str,
+    stage: str,
+    session: Session,
+    auth_token: str,
+    model: str = "",
+    max_turns: int = 40,
+) -> AgentResult:
+    """Multi-turn agentic run with MCP tools via Agent SDK. Sync wrapper.
+
+    Only use from sync context (no running event loop). For async callers,
+    use arun_with_mcp directly to avoid nested event loops.
+    """
+    return asyncio.run(arun_with_mcp(
+        prompt, mcp_server, mcp_name, stage, session,
+        auth_token, model, max_turns,
+    ))

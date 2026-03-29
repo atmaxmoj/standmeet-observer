@@ -1,6 +1,5 @@
 """Use case: distill episodes into playbook entries via agentic MCP."""
 
-import asyncio
 import logging
 import os
 
@@ -36,8 +35,7 @@ async def distill_playbooks(settings: Settings, db: DB) -> int:
     try:
         agent = AgentService(settings)
         mcp_server = create_distill_mcp_server(session_factory)
-        await asyncio.to_thread(
-            agent.run_with_mcp,
+        await agent.arun_with_mcp(
             PLAYBOOK_PROMPT, mcp_server, "distill", "distill_agentic", session,
         )
         session.commit()

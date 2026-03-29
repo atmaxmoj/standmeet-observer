@@ -77,6 +77,33 @@ class AgentService:
 
     # ── MCP agentic run ──
 
+    async def arun_with_mcp(
+        self,
+        prompt: str,
+        mcp_server: FastMCP,
+        mcp_name: str,
+        stage: str,
+        session: Session,
+        model: str = "",
+        max_turns: int = 40,
+    ) -> sdk.AgentResult:
+        """Multi-turn agentic run with MCP tools. Async.
+
+        Always uses Agent SDK (MCP requires it). Prefer this from async callers
+        to avoid nested event loops.
+        """
+        auth_token = self._auth_token or ""
+        return await sdk.arun_with_mcp(
+            prompt=prompt,
+            mcp_server=mcp_server,
+            mcp_name=mcp_name,
+            stage=stage,
+            session=session,
+            auth_token=auth_token,
+            model=model,
+            max_turns=max_turns,
+        )
+
     def run_with_mcp(
         self,
         prompt: str,
@@ -87,10 +114,10 @@ class AgentService:
         model: str = "",
         max_turns: int = 40,
     ) -> sdk.AgentResult:
-        """Multi-turn agentic run with MCP tools.
+        """Multi-turn agentic run with MCP tools. Sync.
 
-        Always uses Agent SDK (MCP requires it). If only api_key is available,
-        the Agent SDK will use it via environment.
+        Only use from sync context (Huey tasks). For async callers,
+        use arun_with_mcp to avoid nested event loops.
         """
         auth_token = self._auth_token or ""
         return sdk.run_with_mcp(

@@ -1,6 +1,5 @@
 """Use case: compose routines from playbooks + episodes via agentic MCP."""
 
-import asyncio
 import logging
 import os
 
@@ -36,8 +35,7 @@ async def compose_routines(settings: Settings, db: DB) -> int:
     try:
         agent = AgentService(settings)
         mcp_server = create_compose_mcp_server(session_factory)
-        await asyncio.to_thread(
-            agent.run_with_mcp,
+        await agent.arun_with_mcp(
             ROUTINE_PROMPT, mcp_server, "compose", "compose_agentic", session,
         )
         session.commit()
