@@ -31,10 +31,11 @@ async def distill_playbooks(settings: Settings, db: DB) -> int:
         logger.error("DATABASE_URL_SYNC not configured")
         return 0
 
-    session = get_sync_session_factory(sync_url)()
+    session_factory = get_sync_session_factory(sync_url)
+    session = session_factory()
     try:
         agent = AgentService(settings)
-        mcp_server = create_distill_mcp_server(session)
+        mcp_server = create_distill_mcp_server(session_factory)
         await asyncio.to_thread(
             agent.run_with_mcp,
             PLAYBOOK_PROMPT, mcp_server, "distill", "distill_agentic", session,

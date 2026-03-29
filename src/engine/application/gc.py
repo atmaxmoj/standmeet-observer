@@ -2,9 +2,9 @@
 
 import logging
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
-from engine.config import Settings, MODEL_DEEP, DAILY_COST_CAP_USD
+from engine.config import Settings, DAILY_COST_CAP_USD
 from engine.infrastructure.pipeline.budget import check_daily_budget
 from engine.infrastructure.pipeline.decay import decay_confidence, decay_routines
 
@@ -25,30 +25,24 @@ def run_gc(settings: Settings, session: Session) -> dict:
     decayed_rt = decay_routines(session)
     logger.info("gc: decayed %d playbook entries, %d routines", decayed_pb, decayed_rt)
 
-    # Phase 2: Agent-driven audit
-    from engine.infrastructure.agent.tools.dedup import make_dedup_tools
-    from engine.infrastructure.agent.tools.audit import make_audit_tools, make_manifest_purge_tools
+    # Phase 2: Agent-driven audit via MCP
+    from engine.infrastructure.agent.tools.gc_mcp import create_gc_mcp_server
     from engine.infrastructure.agent.service import AgentService
 
-    gc_tools = make_dedup_tools(session) + make_audit_tools(session) + make_manifest_purge_tools(session)
     gc_prompt = _build_gc_prompt()
+    factory = sessionmaker(bind=session.get_bind())
+    mcp_server = create_gc_mcp_server(factory)
 
     try:
         agent = AgentService(settings)
-        resp = agent.run(gc_prompt, MODEL_DEEP, gc_tools, max_turns=10)
-
-        from engine.infrastructure.persistence.sync_db import SyncDB
-        cost = resp.cost_usd or 0
-        db = SyncDB(session)
-        db.record_usage(MODEL_DEEP, "gc", resp.input_tokens, resp.output_tokens, cost)
-        db.insert_pipeline_log("gc", gc_prompt, resp.text, MODEL_DEEP, resp.input_tokens, resp.output_tokens, cost)
+        agent.run_with_mcp(gc_prompt, mcp_server, "gc", "gc", session, max_turns=10)
         session.commit()
-        logger.info("gc: agent audit complete, cost=$%.4f", cost)
-        return {"decayed_pb": decayed_pb, "decayed_rt": decayed_rt, "audit_cost": cost}
-    except NotImplementedError:
-        logger.info("gc: LLM client does not support tools, skipping agent audit")
-        session.commit()
-        return {"decayed_pb": decayed_pb, "decayed_rt": decayed_rt, "audit_cost": 0}
+        logger.info("gc: agent audit complete")
+        return {"decayed_pb": decayed_pb, "decayed_rt": decayed_rt}
+    except Exception:
+        logger.exception("gc: agent audit failed")
+        session.commit()  # commit decay results even if audit fails
+        return {"decayed_pb": decayed_pb, "decayed_rt": decayed_rt, "audit_error": True}
 
 
 GC_PROMPT = """\

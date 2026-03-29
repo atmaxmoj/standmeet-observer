@@ -31,10 +31,11 @@ async def compose_routines(settings: Settings, db: DB) -> int:
         logger.error("DATABASE_URL_SYNC not configured")
         return 0
 
-    session = get_sync_session_factory(sync_url)()
+    session_factory = get_sync_session_factory(sync_url)
+    session = session_factory()
     try:
         agent = AgentService(settings)
-        mcp_server = create_compose_mcp_server(session)
+        mcp_server = create_compose_mcp_server(session_factory)
         await asyncio.to_thread(
             agent.run_with_mcp,
             ROUTINE_PROMPT, mcp_server, "compose", "compose_agentic", session,

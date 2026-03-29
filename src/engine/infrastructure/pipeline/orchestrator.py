@@ -6,7 +6,7 @@ No module-level state, no side effects beyond what's passed in.
 
 import logging
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from engine.config import MODEL_FAST, Settings
 from engine.domain.prompt.episode import EPISODE_PROMPT
@@ -87,7 +87,8 @@ def run_distill(settings: Settings, session: Session) -> int:
         return 0
 
     agent = AgentService(settings)
-    mcp_server = create_distill_mcp_server(session)
+    factory = sessionmaker(bind=session.get_bind())
+    mcp_server = create_distill_mcp_server(factory)
     agent.run_with_mcp(PLAYBOOK_PROMPT, mcp_server, "distill", "distill_agentic", session)
 
     count = db.count_recent_playbooks()
@@ -111,7 +112,8 @@ def run_routines(settings: Settings, session: Session) -> int:
         return 0
 
     agent = AgentService(settings)
-    mcp_server = create_compose_mcp_server(session)
+    factory = sessionmaker(bind=session.get_bind())
+    mcp_server = create_compose_mcp_server(factory)
     agent.run_with_mcp(ROUTINE_PROMPT, mcp_server, "compose", "compose_agentic", session)
 
     count = db.count_recent_routines()
