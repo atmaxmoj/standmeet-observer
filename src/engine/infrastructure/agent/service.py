@@ -22,7 +22,6 @@ from engine.config import Settings
 from engine.infrastructure.llm.types import LLMResponse, ToolDef
 
 if TYPE_CHECKING:
-    from mcp.server.fastmcp import FastMCP
     from sqlalchemy.orm import Session
     from engine.infrastructure.llm.client import LLMClient
 
@@ -80,7 +79,7 @@ class AgentService:
     async def arun_with_mcp(
         self,
         prompt: str,
-        mcp_server: FastMCP,
+        mcp_server_config,
         mcp_name: str,
         stage: str,
         session: Session,
@@ -89,13 +88,12 @@ class AgentService:
     ) -> sdk.AgentResult:
         """Multi-turn agentic run with MCP tools. Async.
 
-        Always uses Agent SDK (MCP requires it). Prefer this from async callers
-        to avoid nested event loops.
+        Prefer this from async callers to avoid nested event loops.
         """
         auth_token = self._auth_token or ""
         return await sdk.arun_with_mcp(
             prompt=prompt,
-            mcp_server=mcp_server,
+            mcp_server_config=mcp_server_config,
             mcp_name=mcp_name,
             stage=stage,
             session=session,
@@ -107,7 +105,7 @@ class AgentService:
     def run_with_mcp(
         self,
         prompt: str,
-        mcp_server: FastMCP,
+        mcp_server_config,
         mcp_name: str,
         stage: str,
         session: Session,
@@ -122,7 +120,7 @@ class AgentService:
         auth_token = self._auth_token or ""
         return sdk.run_with_mcp(
             prompt=prompt,
-            mcp_server=mcp_server,
+            mcp_server_config=mcp_server_config,
             mcp_name=mcp_name,
             stage=stage,
             session=session,

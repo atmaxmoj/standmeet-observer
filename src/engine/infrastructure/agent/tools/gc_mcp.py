@@ -1,237 +1,247 @@
-"""In-process MCP server for agentic GC (garbage collection).
+"""SDK MCP tools for agentic GC (garbage collection).
 
-Combines dedup, audit, and purge tools. Each tool call creates its own
-DB session to avoid concurrency issues.
+Combines dedup, audit, and purge tools. Uses Agent SDK's native
+@tool + create_sdk_mcp_server.
 """
 
 import json
 
 from sqlalchemy.orm import sessionmaker
-from mcp.server.fastmcp import FastMCP
 
+from claude_agent_sdk import tool, create_sdk_mcp_server, McpSdkServerConfig
 from engine.infrastructure.observability.logger import log_tool_call
 from engine.infrastructure.agent import repository as repo
 
 STAGE = "gc"
 
 
-def create_gc_mcp_server(session_factory: sessionmaker) -> FastMCP:
-    """Create an in-process MCP server with all GC tools."""
-    mcp = FastMCP("gc-tools")
-    _register_dedup_tools(mcp, session_factory)
-    _register_audit_tools(mcp, session_factory)
-    _register_purge_tools(mcp, session_factory)
-    _register_security_tools(mcp, session_factory)
-    _register_manifest_purge_tools(mcp, session_factory)
-    return mcp
+def create_gc_mcp_server(session_factory: sessionmaker) -> McpSdkServerConfig:
+    """Create an SDK MCP server with all GC tools."""
+    tools = (
+        _dedup_tools(session_factory)
+        + _audit_tools(session_factory)
+        + _purge_tools(session_factory)
+        + _security_tools(session_factory)
+        + _manifest_purge_tools(session_factory)
+    )
+    return create_sdk_mcp_server(name="gc-tools", tools=tools)
 
 
-def _register_dedup_tools(mcp: FastMCP, session_factory: sessionmaker):
-    @mcp.tool()
-    def find_similar_pairs(threshold: float = 0.8) -> str:
-        """Find pairs of playbook entries with high name similarity (Jaccard)."""
-        session = session_factory()
+def _dedup_tools(sf: sessionmaker) -> list:
+    @tool("find_similar_pairs", "Find pairs of playbook entries with high name similarity.", {
+        "threshold": float,
+    })
+    async def find_similar_pairs(args):
+        session = sf()
         try:
-            result = repo.find_similar_pairs(session, threshold)
-            log_tool_call(session, STAGE, "find_similar_pairs", {"threshold": threshold}, result)
-            return json.dumps(result, default=str)
+            result = repo.find_similar_pairs(session, args.get("threshold", 0.8))
+            log_tool_call(session, STAGE, "find_similar_pairs", args, result)
+            return {"content": [{"type": "text", "text": json.dumps(result, default=str)}]}
         finally:
             session.close()
 
-    @mcp.tool()
-    def merge_entries(keep_id: int, remove_id: int) -> str:
-        """Merge two playbook entries. Keeps keep_id, combines evidence, deletes the other."""
-        session = session_factory()
+    @tool("merge_entries", "Merge two playbook entries. Keeps keep_id, deletes the other.", {
+        "keep_id": int, "remove_id": int,
+    })
+    async def merge_entries(args):
+        session = sf()
         try:
-            result = repo.merge_entries(session, keep_id, remove_id)
-            log_tool_call(session, STAGE, "merge_entries", {"keep_id": keep_id, "remove_id": remove_id}, result)
-            return json.dumps(result, default=str)
+            result = repo.merge_entries(session, args["keep_id"], args["remove_id"])
+            log_tool_call(session, STAGE, "merge_entries", args, result)
+            return {"content": [{"type": "text", "text": json.dumps(result, default=str)}]}
         finally:
             session.close()
 
+    return [find_similar_pairs, merge_entries]
 
 
-def _register_audit_tools(mcp: FastMCP, session_factory: sessionmaker):
-    @mcp.tool()
-    def check_evidence_exists(entry_name: str) -> str:
-        """Check if evidence episode IDs for a playbook entry still exist."""
-        session = session_factory()
+def _audit_tools(sf: sessionmaker) -> list:
+    @tool("check_evidence_exists", "Check if evidence episode IDs for a playbook entry still exist.", {
+        "entry_name": str,
+    })
+    async def check_evidence_exists(args):
+        session = sf()
         try:
-            result = repo.check_evidence_exists(session, entry_name)
-            log_tool_call(session, STAGE, "check_evidence_exists", {"entry_name": entry_name}, result)
-            return json.dumps(result, default=str)
+            result = repo.check_evidence_exists(session, args["entry_name"])
+            log_tool_call(session, STAGE, "check_evidence_exists", args, result)
+            return {"content": [{"type": "text", "text": json.dumps(result, default=str)}]}
         finally:
             session.close()
 
-    @mcp.tool()
-    def check_maturity_consistency() -> str:
-        """Find entries where maturity level doesn't match evidence count."""
-        session = session_factory()
+    @tool("check_maturity_consistency", "Find entries where maturity doesn't match evidence count.", {})
+    async def check_maturity_consistency(args):
+        session = sf()
         try:
             result = repo.check_maturity_consistency(session)
-            log_tool_call(session, STAGE, "check_maturity_consistency", {}, result)
-            return json.dumps(result, default=str)
+            log_tool_call(session, STAGE, "check_maturity_consistency", args, result)
+            return {"content": [{"type": "text", "text": json.dumps(result, default=str)}]}
         finally:
             session.close()
 
-    @mcp.tool()
-    def record_snapshot(name: str, reason: str = "") -> str:
-        """Record current state of a playbook entry into history before changes."""
-        session = session_factory()
+    @tool("record_snapshot", "Record current state of a playbook entry into history.", {
+        "name": str, "reason": str,
+    })
+    async def record_snapshot(args):
+        session = sf()
         try:
-            result = repo.record_snapshot(session, name, reason)
-            log_tool_call(session, STAGE, "record_snapshot", {"name": name}, result)
-            return json.dumps(result, default=str)
+            result = repo.record_snapshot(session, args["name"], args.get("reason", ""))
+            log_tool_call(session, STAGE, "record_snapshot", args, result)
+            return {"content": [{"type": "text", "text": json.dumps(result, default=str)}]}
         finally:
             session.close()
 
-    @mcp.tool()
-    def deprecate_entry(entry_id: int, reason: str = "") -> str:
-        """Soft-deprecate a playbook entry (confidence=0, maturity=nascent)."""
-        session = session_factory()
+    @tool("deprecate_entry", "Soft-deprecate a playbook entry (confidence=0).", {
+        "entry_id": int, "reason": str,
+    })
+    async def deprecate_entry(args):
+        session = sf()
         try:
-            result = repo.deprecate_entry(session, entry_id, reason)
-            log_tool_call(session, STAGE, "deprecate_entry", {"entry_id": entry_id}, result)
-            return json.dumps(result, default=str)
+            result = repo.deprecate_entry(session, args["entry_id"], args.get("reason", ""))
+            log_tool_call(session, STAGE, "deprecate_entry", args, result)
+            return {"content": [{"type": "text", "text": json.dumps(result, default=str)}]}
         finally:
             session.close()
 
+    return [check_evidence_exists, check_maturity_consistency, record_snapshot, deprecate_entry]
 
 
-def _register_purge_tools(mcp: FastMCP, session_factory: sessionmaker):
-    _register_stats_tools(mcp, session_factory)
-    _register_delete_tools(mcp, session_factory)
-
-
-def _register_stats_tools(mcp: FastMCP, session_factory: sessionmaker):
-    @mcp.tool()
-    def get_data_stats() -> str:
-        """Get row counts for all raw data tables."""
-        session = session_factory()
+def _purge_tools(sf: sessionmaker) -> list:
+    @tool("get_data_stats", "Get row counts for all raw data tables.", {})
+    async def get_data_stats(args):
+        session = sf()
         try:
             result = repo.get_data_stats(session)
-            log_tool_call(session, STAGE, "get_data_stats", {}, result)
-            return json.dumps(result, default=str)
+            log_tool_call(session, STAGE, "get_data_stats", args, result)
+            return {"content": [{"type": "text", "text": json.dumps(result, default=str)}]}
         finally:
             session.close()
 
-    @mcp.tool()
-    def get_oldest_processed() -> str:
-        """Get oldest processed record timestamp in each table."""
-        session = session_factory()
+    @tool("get_oldest_processed", "Get oldest processed record timestamp in each table.", {})
+    async def get_oldest_processed(args):
+        session = sf()
         try:
             result = repo.get_oldest_processed(session)
-            log_tool_call(session, STAGE, "get_oldest_processed", {}, result)
-            return json.dumps(result, default=str)
+            log_tool_call(session, STAGE, "get_oldest_processed", args, result)
+            return {"content": [{"type": "text", "text": json.dumps(result, default=str)}]}
         finally:
             session.close()
 
-
-def _register_delete_tools(mcp: FastMCP, session_factory: sessionmaker):
-    @mcp.tool()
-    def purge_processed_frames(older_than_days: int) -> str:
-        """Delete processed screen frames older than N days + image files."""
-        session = session_factory()
+    @tool("purge_processed_frames", "Delete processed screen frames older than N days.", {
+        "older_than_days": int,
+    })
+    async def purge_processed_frames(args):
+        session = sf()
         try:
-            result = repo.purge_processed_frames(session, older_than_days)
-            log_tool_call(session, STAGE, "purge_processed_frames", {"older_than_days": older_than_days}, result)
-            return json.dumps(result, default=str)
+            result = repo.purge_processed_frames(session, args["older_than_days"])
+            log_tool_call(session, STAGE, "purge_processed_frames", args, result)
+            return {"content": [{"type": "text", "text": json.dumps(result, default=str)}]}
         finally:
             session.close()
 
-    @mcp.tool()
-    def purge_processed_audio(older_than_days: int) -> str:
-        """Delete processed audio frames older than N days + chunk files."""
-        session = session_factory()
+    @tool("purge_processed_audio", "Delete processed audio frames older than N days.", {
+        "older_than_days": int,
+    })
+    async def purge_processed_audio(args):
+        session = sf()
         try:
-            result = repo.purge_processed_audio(session, older_than_days)
-            log_tool_call(session, STAGE, "purge_processed_audio", {"older_than_days": older_than_days}, result)
-            return json.dumps(result, default=str)
+            result = repo.purge_processed_audio(session, args["older_than_days"])
+            log_tool_call(session, STAGE, "purge_processed_audio", args, result)
+            return {"content": [{"type": "text", "text": json.dumps(result, default=str)}]}
         finally:
             session.close()
 
-    @mcp.tool()
-    def purge_processed_os_events(older_than_days: int) -> str:
-        """Delete processed OS events older than N days."""
-        session = session_factory()
+    @tool("purge_processed_os_events", "Delete processed OS events older than N days.", {
+        "older_than_days": int,
+    })
+    async def purge_processed_os_events(args):
+        session = sf()
         try:
-            result = repo.purge_processed_os_events(session, older_than_days)
-            log_tool_call(session, STAGE, "purge_processed_os_events", {"older_than_days": older_than_days}, result)
-            return json.dumps(result, default=str)
+            result = repo.purge_processed_os_events(session, args["older_than_days"])
+            log_tool_call(session, STAGE, "purge_processed_os_events", args, result)
+            return {"content": [{"type": "text", "text": json.dumps(result, default=str)}]}
         finally:
             session.close()
 
-    @mcp.tool()
-    def purge_pipeline_logs(older_than_days: int) -> str:
-        """Delete pipeline logs older than N days."""
-        session = session_factory()
+    @tool("purge_pipeline_logs", "Delete pipeline logs older than N days.", {
+        "older_than_days": int,
+    })
+    async def purge_pipeline_logs(args):
+        session = sf()
         try:
-            result = repo.purge_pipeline_logs(session, older_than_days)
-            log_tool_call(session, STAGE, "purge_pipeline_logs", {"older_than_days": older_than_days}, result)
-            return json.dumps(result, default=str)
+            result = repo.purge_pipeline_logs(session, args["older_than_days"])
+            log_tool_call(session, STAGE, "purge_pipeline_logs", args, result)
+            return {"content": [{"type": "text", "text": json.dumps(result, default=str)}]}
         finally:
             session.close()
 
+    return [get_data_stats, get_oldest_processed, purge_processed_frames,
+            purge_processed_audio, purge_processed_os_events, purge_pipeline_logs]
 
 
-def _register_security_tools(mcp: FastMCP, session_factory: sessionmaker):
-    @mcp.tool()
-    def search_frames_for_sensitive(limit: int = 100) -> str:
-        """SECURITY: Scan frame text for passwords, API keys, tokens, secrets."""
-        session = session_factory()
+def _security_tools(sf: sessionmaker) -> list:
+    @tool("search_frames_for_sensitive", "SECURITY: Scan frame text for passwords, API keys, tokens.", {
+        "limit": int,
+    })
+    async def search_frames_for_sensitive(args):
+        session = sf()
         try:
-            result = repo.search_frames_for_sensitive(session, limit)
-            log_tool_call(session, STAGE, "search_frames_for_sensitive", {"limit": limit}, result)
-            return json.dumps(result, default=str)
+            result = repo.search_frames_for_sensitive(session, args.get("limit", 100))
+            log_tool_call(session, STAGE, "search_frames_for_sensitive", args, result)
+            return {"content": [{"type": "text", "text": json.dumps(result, default=str)}]}
         finally:
             session.close()
 
-    @mcp.tool()
-    def purge_sensitive_frames(frame_ids: list[int]) -> str:
-        """SECURITY: Delete frames containing sensitive data by ID."""
-        session = session_factory()
+    @tool("purge_sensitive_frames", "SECURITY: Delete frames containing sensitive data by ID.", {
+        "frame_ids": str,
+    })
+    async def purge_sensitive_frames(args):
+        session = sf()
         try:
-            result = repo.purge_sensitive_frames(session, frame_ids)
-            log_tool_call(session, STAGE, "purge_sensitive_frames", {"frame_ids": frame_ids}, result)
-            return json.dumps(result, default=str)
+            ids = json.loads(args["frame_ids"]) if isinstance(args["frame_ids"], str) else args["frame_ids"]
+            result = repo.purge_sensitive_frames(session, ids)
+            log_tool_call(session, STAGE, "purge_sensitive_frames", args, result)
+            return {"content": [{"type": "text", "text": json.dumps(result, default=str)}]}
         finally:
             session.close()
 
+    return [search_frames_for_sensitive, purge_sensitive_frames]
 
 
-def _register_manifest_purge_tools(mcp: FastMCP, session_factory: sessionmaker):
-    """Register purge tools for manifest-based sources."""
+def _manifest_purge_tools(sf: sessionmaker) -> list:
+    """Generate purge tools for manifest-based sources."""
     from engine.infrastructure.etl.sources.manifest_registry import get_global_registry
 
     registry = get_global_registry()
     if not registry:
-        return
+        return []
 
+    tools = []
     for manifest in registry.all_manifests():
         if not manifest.db_table:
             continue
-        source_name = manifest.name
-        table = manifest.db_table
+        sn = manifest.name
+        tbl = manifest.db_table
         display = manifest.display_name
 
-        def make_purge_fn(sn, tbl):
-            def purge(older_than_days: int) -> str:
-                from sqlalchemy import text
-                from engine.infrastructure.persistence.session import ago
-                session = session_factory()
-                try:
-                    cutoff = ago(days=older_than_days)
-                    result = session.execute(text(
-                        f"DELETE FROM {tbl} WHERE processed = 1 AND created_at < :cutoff"
-                    ), {"cutoff": cutoff})
-                    session.commit()
-                    out = {"source": sn, "deleted": result.rowcount}
-                    log_tool_call(session, STAGE, f"purge_{sn}", {"older_than_days": older_than_days}, out)
-                    return json.dumps(out, default=str)
-                finally:
-                    session.close()
-            return purge
+        @tool(f"purge_{sn}", f"Delete processed {display} data older than N days.", {
+            "older_than_days": int,
+        })
+        async def purge_source(args, _sn=sn, _tbl=tbl):
+            from sqlalchemy import text
+            from engine.infrastructure.persistence.session import ago
+            session = sf()
+            try:
+                cutoff = ago(days=args["older_than_days"])
+                result = session.execute(text(
+                    f"DELETE FROM {_tbl} WHERE processed = 1 AND created_at < :cutoff"
+                ), {"cutoff": cutoff})
+                session.commit()
+                out = {"source": _sn, "deleted": result.rowcount}
+                log_tool_call(session, STAGE, f"purge_{_sn}", args, out)
+                return {"content": [{"type": "text", "text": json.dumps(out, default=str)}]}
+            finally:
+                session.close()
 
-        mcp.tool(name=f"purge_{source_name}", description=f"Delete processed {display} data older than N days.")(
-            make_purge_fn(source_name, table)
-        )
+        tools.append(purge_source)
+
+    return tools

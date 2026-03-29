@@ -15,7 +15,6 @@ from typing import TYPE_CHECKING
 from engine.infrastructure.llm.types import LLMResponse
 
 if TYPE_CHECKING:
-    from mcp.server.fastmcp import FastMCP
     from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -77,7 +76,7 @@ async def acomplete(prompt: str, model: str, auth_token: str) -> LLMResponse:
 
 async def arun_with_mcp(
     prompt: str,
-    mcp_server: FastMCP,
+    mcp_server_config,
     mcp_name: str,
     stage: str,
     session: Session,
@@ -87,7 +86,8 @@ async def arun_with_mcp(
 ) -> AgentResult:
     """Multi-turn agentic run with MCP tools via Agent SDK. Async.
 
-    Must be called from an async context — avoids nested event loops.
+    Args:
+        mcp_server_config: McpSdkServerConfig from create_sdk_mcp_server().
     """
     from claude_agent_sdk import query as sdk_query, ClaudeAgentOptions, ResultMessage
     from engine.config import MODEL_DEEP
@@ -107,13 +107,7 @@ async def arun_with_mcp(
             model=model,
             max_turns=max_turns,
             permission_mode="bypassPermissions",
-            mcp_servers={
-                mcp_name: {
-                    "type": "sdk",
-                    "name": f"{mcp_name}-tools",
-                    "instance": mcp_server._mcp_server,
-                },
-            },
+            mcp_servers={mcp_name: mcp_server_config},
             env=_build_env(auth_token),
         ),
     ):
@@ -144,7 +138,7 @@ async def arun_with_mcp(
 
 def run_with_mcp(
     prompt: str,
-    mcp_server: FastMCP,
+    mcp_server_config,
     mcp_name: str,
     stage: str,
     session: Session,
@@ -158,6 +152,6 @@ def run_with_mcp(
     use arun_with_mcp directly to avoid nested event loops.
     """
     return asyncio.run(arun_with_mcp(
-        prompt, mcp_server, mcp_name, stage, session,
+        prompt, mcp_server_config, mcp_name, stage, session,
         auth_token, model, max_turns,
     ))
