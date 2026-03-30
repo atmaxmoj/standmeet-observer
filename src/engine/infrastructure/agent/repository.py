@@ -67,6 +67,18 @@ def get_episode_frames(session: Session, episode_id: int, limit: int = 10) -> li
     return [{"id": r[0], "timestamp": r[1], "app_name": r[2], "window_name": r[3], "text": r[4]} for r in rows]
 
 
+# ── Episode queries (by app) ──
+
+
+def get_episodes_by_app(session: Session, app_name: str, limit: int = 10) -> list[dict]:
+    rows = session.execute(
+        select(Episode.id, Episode.summary, Episode.app_names, Episode.started_at, Episode.ended_at)
+        .where(Episode.app_names.contains(app_name))
+        .order_by(Episode.id.desc()).limit(limit)
+    ).all()
+    return [{"id": r[0], "summary": r[1], "app_names": r[2], "started_at": r[3], "ended_at": r[4]} for r in rows]
+
+
 # ── Raw capture queries ──
 
 
@@ -80,6 +92,27 @@ def get_recent_frames(session: Session, hours: int = 24, limit: int = 50) -> lis
     ).all()
     return [{"id": r[0], "timestamp": r[1], "app_name": r[2], "window_name": r[3],
              "text": r[4], "display_id": r[5]} for r in rows]
+
+
+def get_frames_by_app(session: Session, app_name: str, limit: int = 50) -> list[dict]:
+    rows = session.execute(
+        select(FrameModel.id, FrameModel.timestamp, FrameModel.app_name,
+               FrameModel.window_name, func.substr(FrameModel.text, 1, 300).label("text"))
+        .where(FrameModel.app_name.contains(app_name))
+        .order_by(FrameModel.id.desc()).limit(limit)
+    ).all()
+    return [{"id": r[0], "timestamp": r[1], "app_name": r[2], "window_name": r[3], "text": r[4]} for r in rows]
+
+
+def get_recent_audio(session: Session, hours: int = 24, limit: int = 50) -> list[dict]:
+    rows = session.execute(
+        select(AudioFrame.id, AudioFrame.timestamp, AudioFrame.text,
+               AudioFrame.language, AudioFrame.duration_seconds)
+        .where(AudioFrame.created_at >= ago(hours=hours))
+        .order_by(AudioFrame.id.desc()).limit(limit)
+    ).all()
+    return [{"id": r[0], "timestamp": r[1], "text": r[2], "language": r[3],
+             "duration_seconds": r[4]} for r in rows]
 
 
 def get_recent_os_events(session: Session, hours: int = 24, limit: int = 50) -> list[dict]:
@@ -218,6 +251,45 @@ def write_routine(
             base_confidence=confidence, maturity=maturity,
         ))
     session.flush()
+
+
+# ── Trend queries ──
+
+
+def get_stale_entries(session: Session, days: int = 14) -> list[dict]:
+    """Find playbook entries with no recent evidence."""
+    cutoff = ago(days=days)
+    rows = session.execute(
+        select(PlaybookEntry.id, PlaybookEntry.name, PlaybookEntry.confidence,
+               PlaybookEntry.maturity, PlaybookEntry.last_evidence_at)
+        .where(
+            (PlaybookEntry.last_evidence_at.is_(None)) |
+            (PlaybookEntry.last_evidence_at < cutoff)
+        )
+        .order_by(PlaybookEntry.confidence.desc())
+    ).all()
+    return [{"id": r[0], "name": r[1], "confidence": r[2], "maturity": r[3],
+             "last_evidence_at": r[4]} for r in rows]
+
+
+def get_similar_entries(session: Session, name: str, threshold: float = 0.2) -> list[dict]:
+    """Find playbook entries with similar names (word overlap)."""
+    target_words = set(name.split("-"))
+    rows = session.execute(
+        select(PlaybookEntry.id, PlaybookEntry.name, PlaybookEntry.confidence, PlaybookEntry.maturity)
+        .order_by(PlaybookEntry.confidence.desc())
+    ).all()
+    results = []
+    for r in rows:
+        if r[1] == name:
+            continue
+        entry_words = set(r[1].split("-"))
+        union = target_words | entry_words
+        sim = len(target_words & entry_words) / len(union) if union else 0
+        if sim >= threshold:
+            results.append({"id": r[0], "name": r[1], "confidence": r[2],
+                            "maturity": r[3], "similarity": round(sim, 2)})
+    return results
 
 
 # ── Dedup ──

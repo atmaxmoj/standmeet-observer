@@ -7,21 +7,41 @@ and verifies a new child appears.
 import os
 import signal
 import subprocess
+import sys
 import time
 from pathlib import Path
 
 import pytest
 
 
+def _get_children(pid: int) -> list[int]:
+    """Get direct child PIDs by reading /proc/*/stat (no pgrep needed)."""
+    children = []
+    proc = Path("/proc")
+    for entry in proc.iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            stat = (entry / "stat").read_text()
+            # Format: pid (comm) state ppid ...
+            parts = stat.split(") ", 1)[-1].split()
+            ppid = int(parts[1])
+            if ppid == pid:
+                children.append(int(entry.name))
+        except (OSError, ValueError, IndexError):
+            continue
+    return children
+
+
 def _find_child_pid(wrapper_pid: int) -> int | None:
-    """Find the child PID of the shell wrapper."""
+    """Find the deepest descendant PID of the shell wrapper."""
     try:
-        result = subprocess.run(
-            ["pgrep", "-P", str(wrapper_pid)],
-            capture_output=True, text=True,
-        )
-        pids = [int(p.strip()) for p in result.stdout.strip().split("\n") if p.strip()]
-        return pids[0] if pids else None
+        pid = wrapper_pid
+        while True:
+            children = _get_children(pid)
+            if not children:
+                return pid if pid != wrapper_pid else None
+            pid = children[0]
     except Exception:
         return None
 
@@ -34,49 +54,24 @@ def _pid_alive(pid: int) -> bool:
         return False
 
 
-@pytest.fixture
-def dummy_source(tmp_path):
-    """Create a minimal source that runs forever (sleep loop)."""
-    src_dir = tmp_path / "src" / "dummy_source"
-    src_dir.mkdir(parents=True)
-    (src_dir / "__init__.py").write_text("""
-from source_framework.plugin import SourcePlugin, ProbeResult
-import time
-
-class DummySource(SourcePlugin):
-    def probe(self):
-        return ProbeResult(available=True, source="dummy", description="test")
-
-    def collect(self):
-        return []
-
-    def start(self, client, config):
-        while True:
-            time.sleep(1)
-""")
-    (tmp_path / "manifest.json").write_text("""{
-        "name": "dummy",
-        "version": "0.1.0",
-        "entrypoint": "dummy_source:DummySource",
-        "db": {"table": "dummy_data", "columns": {}},
-        "platform": ["darwin", "linux", "win32"]
-    }""")
-    return tmp_path
-
-
 class TestWatchdogIntegration:
-    def test_watchdog_restarts_killed_child(self, dummy_source):
-        """Kill the source child process → watchdog shell restarts it."""
-        log = dummy_source / "test.log"
+    def test_watchdog_restarts_killed_child(self, tmp_path):
+        """Kill the child process → watchdog shell restarts it."""
+        # Use a simple python sleep loop as the child process
+        # (avoids dependency on source_framework being importable from sh)
+        child_script = tmp_path / "child.py"
+        child_script.write_text("import time\nwhile True: time.sleep(1)\n")
+        log = tmp_path / "test.log"
+
+        python = sys.executable
 
         with open(log, "w") as lf:
             wrapper = subprocess.Popen(
                 [
                     "sh", "-c",
-                    'while true; do uv run python -m source_framework . ; '
+                    f'while true; do {python} {child_script} ; '
                     'echo "[watchdog] restarting..." >&2; sleep 1; done',
                 ],
-                cwd=dummy_source,
                 stdout=lf, stderr=lf,
                 start_new_session=True,
             )
@@ -84,7 +79,7 @@ class TestWatchdogIntegration:
         try:
             # Wait for child to start
             child_pid = None
-            for _ in range(20):
+            for _ in range(30):
                 time.sleep(0.5)
                 child_pid = _find_child_pid(wrapper.pid)
                 if child_pid:
@@ -100,7 +95,7 @@ class TestWatchdogIntegration:
 
             # Wait for watchdog to restart
             new_child = None
-            for _ in range(20):
+            for _ in range(30):
                 time.sleep(0.5)
                 new_child = _find_child_pid(wrapper.pid)
                 if new_child and new_child != child_pid:
@@ -111,7 +106,6 @@ class TestWatchdogIntegration:
             assert _pid_alive(new_child), "New child should be alive"
 
         finally:
-            # Clean up: kill wrapper (which kills child too)
             try:
                 os.killpg(os.getpgid(wrapper.pid), signal.SIGTERM)
             except OSError:

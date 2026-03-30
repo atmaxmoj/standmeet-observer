@@ -14,10 +14,35 @@ from engine.infrastructure.persistence.models import Base
 from engine.infrastructure.llm.types import LLMResponse
 from engine.domain.observation.entity import Frame
 from engine.infrastructure.pipeline.stages.extract import EPISODE_PROMPT, build_context
-from engine.domain.prompt.playbook import PLAYBOOK_PROMPT as DISTILL_PROMPT
-from engine.domain.prompt.routine import ROUTINE_PROMPT
 from engine.infrastructure.pipeline.stages.validate import validate_episodes, validate_playbooks, with_retry
 from tests.conftest import TEST_PG_SYNC
+
+# Test prompt templates with context placeholders (for mock LLM testing).
+# Production uses agentic MCP prompts where Claude fetches data via tools.
+DISTILL_PROMPT = """\
+Extract playbook entries from these episodes.
+
+Existing entries:
+{playbooks}
+
+Episodes:
+{episodes}
+
+Return JSON array of entries."""
+
+ROUTINE_PROMPT = """\
+Compose routines from playbook entries and episodes.
+
+Playbook entries:
+{playbooks}
+
+Existing routines:
+{routines}
+
+Episodes:
+{episodes}
+
+Return JSON array of routines."""
 
 # Same canned responses as test_pipeline_e2e.py
 EPISODE_LLM_RESPONSE = json.dumps([

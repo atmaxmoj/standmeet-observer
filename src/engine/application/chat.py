@@ -405,7 +405,7 @@ async def _stream_mcp(db, agent, messages: list[dict]) -> AsyncGenerator[str, No
 
         def _run():
             result = agent.run_with_mcp(
-                prompt=prompt, mcp_server=mcp_server, mcp_name="chat",
+                prompt=prompt, mcp_server_config=mcp_server, mcp_name="chat",
                 stage="chat", session=session, model=MODEL_FAST, max_turns=10,
             )
             tool_queue.put(None)

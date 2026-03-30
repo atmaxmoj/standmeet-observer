@@ -99,52 +99,44 @@ def test_oauth_with_tools():
 
 
 def test_oauth_opus_with_tools():
-    """Test Opus model with OAuth + tools via AgentService."""
-    from engine.infrastructure.llm.types import DirectAPIClient, ToolDef
+    """Test Opus model with OAuth + MCP tools via AgentService."""
+    import asyncio
+    from claude_agent_sdk import tool, create_sdk_mcp_server
     from engine.infrastructure.agent.service import AgentService
+    from engine.config import Settings
 
     token = os.environ.get("CLAUDE_CODE_OAUTH_TOKEN", "")
     if not token:
         print("  SKIP  no CLAUDE_CODE_OAUTH_TOKEN")
         return
 
-    client = DirectAPIClient(auth_token=token)
-    agent = AgentService(client)
+    settings = Settings(claude_code_oauth_token=token)
+    agent = AgentService(settings)
 
     tool_called = {}
 
-    def get_weather(city: str) -> dict:
-        tool_called["city"] = city
-        return {"city": city, "temp": "20°C", "condition": "sunny"}
+    @tool("get_weather", "Get current weather for a city.", {"city": str})
+    async def get_weather(args):
+        tool_called["city"] = args["city"]
+        return json.dumps({"city": args["city"], "temp": "20°C", "condition": "sunny"})
 
-    tools = [
-        ToolDef(
-            name="get_weather",
-            description="Get current weather.",
-            input_schema={
-                "type": "object",
-                "properties": {"city": {"type": "string"}},
-                "required": ["city"],
-            },
-            handler=get_weather,
-        ),
-    ]
+    mcp_server = create_sdk_mcp_server(name="test-tools", tools=[get_weather])
 
     try:
-        resp = agent.complete_with_tools(
-            "What's the weather in Tokyo? Use the get_weather tool.",
-            "claude-opus-4-6",
-            tools,
-            max_turns=3,
+        result = asyncio.get_event_loop().run_until_complete(
+            agent.arun_with_mcp(
+                "What's the weather in Tokyo? Use the get_weather tool.",
+                mcp_server, "test", "test_tools", None,
+                model="claude-sonnet-4-6",
+                max_turns=3,
+            )
         )
         save_result("opus_tools", {
-            "text": resp.text[:500],
-            "input_tokens": resp.input_tokens,
-            "output_tokens": resp.output_tokens,
+            "text": str(result)[:500],
             "tool_called": tool_called,
         })
-        print(f"  Opus response: {resp.text[:100]}")
         print(f"  Tool called: {tool_called}")
+        assert tool_called.get("city"), "Tool was not called"
     except Exception as e:
         save_result("opus_tools_error", {"error": str(e), "type": type(e).__name__})
         raise

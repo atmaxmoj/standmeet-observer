@@ -460,7 +460,7 @@ class TestChatEndpoint:
         ])
         app = _make_app(seeded_db, llm)
 
-        with patch("engine.api.chat._web_search", new_callable=AsyncMock, return_value=mock_results):
+        with patch("engine.application.chat.web_search", new_callable=AsyncMock, return_value=mock_results):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 resp = await client.post("/api/memory/chat", json={"messages": [
                     {"role": "user", "content": "Search for python asyncio"},

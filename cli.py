@@ -433,6 +433,7 @@ def _test_unit(compose_test, results_dir):
     results = []
     print("==> [1/3] Source framework unit tests (Docker)...")
     sources_log = results_dir / "sources.log"
+    _compose(compose_test, "build", "pytest-sources")
     with open(sources_log, "w") as log:
         r = subprocess.run(
             ["docker", "compose", "-p", "observer-test", "-f", compose_test, "run", "--rm", "pytest-sources"],
@@ -444,6 +445,7 @@ def _test_unit(compose_test, results_dir):
 
     print("\n==> [1/3] Engine unit tests (Docker, no DB)...")
     unit_log = results_dir / "unit.log"
+    _compose(compose_test, "build", "pytest-unit")
     with open(unit_log, "w") as log:
         r = subprocess.run(
             ["docker", "compose", "-p", "observer-test", "-f", compose_test, "run", "--rm", "pytest-unit"],
@@ -455,6 +457,7 @@ def _test_unit(compose_test, results_dir):
 
     print("\n==> [1/3] Web unit tests (Docker, vitest)...")
     vitest_log = results_dir / "vitest.log"
+    _compose(compose_test, "build", "vitest")
     with open(vitest_log, "w") as log:
         r = subprocess.run(
             ["docker", "compose", "-p", "observer-test", "-f", compose_test, "run", "--rm", "vitest"],
@@ -474,6 +477,7 @@ def _test_integration(compose_test, results_dir):
     print("\n==> [2/3] Engine DB tests (Docker + PostgreSQL)...")
     _compose(compose_test, "up", "-d", "--build", "--wait", "db-test")
     engine_log = results_dir / "engine.log"
+    _compose(compose_test, "build", "pytest")
     with open(engine_log, "w") as log:
         r = subprocess.run(
             ["docker", "compose", "-p", "observer-test", "-f", compose_test, "run", "--rm", "pytest"],
@@ -553,6 +557,10 @@ def cmd_test():
     compose_test = str(ROOT / "docker-compose.test.yml")
     results_dir = ROOT / "tests" / "results"
     results_dir.mkdir(parents=True, exist_ok=True)
+
+    # Clean stale test containers/volumes to avoid "already exists" errors
+    print("==> Cleaning stale test containers...")
+    _compose(compose_test, "down", "-v", "--remove-orphans")
 
     print("==> Running code checks...")
     env_with_pythonpath = {**os.environ, "PYTHONPATH": str(ROOT / "src")}

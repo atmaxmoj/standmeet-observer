@@ -549,6 +549,32 @@ class DB:
                 for r in rows
             ]
 
+    async def upsert_routine(
+        self, name: str, trigger: str, goal: str,
+        steps: str, uses: str, confidence: float, maturity: str = "nascent",
+    ):
+        async with self._session() as s:
+            existing = (await s.execute(
+                select(Routine).where(Routine.name == name)
+            )).scalar_one_or_none()
+            if existing:
+                existing.trigger = trigger
+                existing.goal = goal
+                existing.steps = steps
+                existing.uses = uses
+                existing.confidence = confidence
+                existing.base_confidence = confidence
+                existing.maturity = maturity
+                existing.updated_at = func.now()
+            else:
+                s.add(Routine(
+                    name=name, trigger=trigger, goal=goal,
+                    steps=steps, uses=uses, confidence=confidence,
+                    base_confidence=confidence, maturity=maturity,
+                ))
+            await s.commit()
+            logger.debug("upserted routine name=%s confidence=%.2f", name, confidence)
+
     # -- chat messages --
 
     async def append_chat_message(self, role: str, content: str, proposals: str = "[]"):

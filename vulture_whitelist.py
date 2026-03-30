@@ -23,7 +23,7 @@ context_description
 config
 _owns_session
 
-# Storage methods called indirectly via API routes or manifest registry
+# Storage methods called indirectly via API routes, manifest registry, or tests
 insert_frame
 insert_audio_frame
 insert_os_event
@@ -31,6 +31,7 @@ get_last_os_event_data
 get_last_frame_hash
 get_frame_image_path
 get_episodes_by_timerange
+upsert_routine
 
 # Engine utilities
 _utcnow
