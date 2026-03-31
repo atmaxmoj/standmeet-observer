@@ -13,6 +13,7 @@ from collections.abc import AsyncGenerator
 from typing import Any
 
 from engine.config import MODEL_FAST, TOKEN_COSTS
+from engine.infrastructure.agent.sdk import AgentResult
 from engine.infrastructure.observability.logger import log_mutation
 from engine.domain.prompt.chat import SYSTEM_PROMPT, TOOL_LABELS
 from engine.infrastructure.persistence.memory_file import write_playbook, delete_playbook
@@ -427,9 +428,16 @@ async def _stream_mcp(db, agent, messages: list[dict]) -> AsyncGenerator[str, No
         result = await future
         reply = clean_reply(result.result_text)
         if not reply:
-            logger.warning("chat(mcp): empty reply from Agent SDK, not saving")
-            yield sse("error", {"message": "No response from AI. Please try again."})
-            return
+            logger.warning("chat(mcp): empty result_text (%d out tokens), retrying without tools",
+                           result.output_tokens)
+            retry = await asyncio.to_thread(agent.complete, prompt, MODEL_FAST)
+            reply = clean_reply(retry.text)
+            result = AgentResult(
+                result_text=reply,
+                cost_usd=result.cost_usd + (retry.cost_usd or 0),
+                input_tokens=result.input_tokens + retry.input_tokens,
+                output_tokens=result.output_tokens + retry.output_tokens,
+            )
         await db.append_chat_message("assistant", reply, json.dumps([], default=str))
         await record_usage(db, result.input_tokens, result.output_tokens)
         logger.info("chat(mcp): done, %d in, %d out", result.input_tokens, result.output_tokens)
@@ -473,9 +481,12 @@ async def _stream_native(db, agent, messages: list[dict]) -> AsyncGenerator[str,
             total_output = event["output_tokens"]
 
             if not reply:
-                logger.warning("chat: empty reply from LLM, not saving")
-                yield sse("error", {"message": "No response from AI. Please try again."})
-                return
+                logger.warning("chat: empty reply (%d out tokens), retrying without tools", total_output)
+                prompt = build_chat_prompt(messages)
+                retry = await agent.acomplete(prompt, MODEL_FAST)
+                reply = clean_reply(retry.text)
+                total_input += retry.input_tokens
+                total_output += retry.output_tokens
             await db.append_chat_message("assistant", reply, json.dumps(proposals, default=str))
             await record_usage(db, total_input, total_output)
             logger.info("chat: done, %d in, %d out, %d proposals", total_input, total_output, len(proposals))
