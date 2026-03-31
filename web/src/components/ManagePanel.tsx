@@ -208,9 +208,14 @@ function useChat() {
 
   useLoadHistory(setMessages, scrollRef);
 
-  const scrollToBottom = () => {
-    setTimeout(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" }), 50);
-  };
+  const scrollToBottom = useCallback(() => {
+    requestAnimationFrame(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" }));
+  }, [scrollRef]);
+
+  // Auto-scroll when messages change or loading state changes
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages.length, loading, scrollToBottom]);
 
   const stop = useCallback(() => { abortRef.current?.abort(); }, []);
 
@@ -248,7 +253,7 @@ function useChat() {
     setLoading(false);
     setToolLabel("");
     scrollToBottom();
-  }, [messages]);
+  }, [messages, scrollToBottom]);
 
   const persistStatus = useCallback(async (msgIdx: number, propIdx: number, status: ProposalStatus) => {
     const dbId = messages[msgIdx]?.dbId;

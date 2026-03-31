@@ -116,14 +116,30 @@ function Header() {
   );
 }
 
+function getHashPanel(): string {
+  const hash = window.location.hash.slice(1);
+  return hash || "episodes";
+}
+
 export default function App() {
-  const [active, setActive] = useState("episodes");
+  const [active, setActive] = useState(getHashPanel);
   const [sources, setSources] = useState<SourceManifest[]>([]);
 
   const sourceManifestMap = useMemo(
     () => new Map(sources.map(s => [`source:${s.name}`, s])),
     [sources],
   );
+
+  // Sync hash ↔ active panel
+  useEffect(() => {
+    window.location.hash = active;
+  }, [active]);
+
+  useEffect(() => {
+    const onHashChange = () => setActive(getHashPanel());
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
 
   useEffect(() => {
     api.sources().then(data => setSources(data.sources)).catch(() => {});
@@ -146,9 +162,10 @@ export default function App() {
 
   const renderPanel = () => {
     const manifest = sourceManifestMap.get(active);
-    if (manifest) return <SourceDataPanel manifest={manifest} />;
+    if (manifest) return <div className="flex-1 overflow-y-auto"><SourceDataPanel manifest={manifest} /></div>;
+    if (active === "chat") return <ManagePanel />;
     const StaticPanel = staticPanels[active];
-    if (StaticPanel) return <StaticPanel />;
+    if (StaticPanel) return <div className="flex-1 overflow-y-auto"><StaticPanel /></div>;
     return <p className="p-6 text-muted-foreground">Select a panel</p>;
   };
 
@@ -174,7 +191,7 @@ export default function App() {
             </div>
           ))}
         </aside>
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 flex flex-col overflow-hidden">
           {renderPanel()}
         </main>
       </div>
