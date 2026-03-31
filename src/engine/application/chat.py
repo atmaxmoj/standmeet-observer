@@ -426,6 +426,10 @@ async def _stream_mcp(db, agent, messages: list[dict]) -> AsyncGenerator[str, No
 
         result = await future
         reply = clean_reply(result.result_text)
+        if not reply:
+            logger.warning("chat(mcp): empty reply from Agent SDK, not saving")
+            yield sse("error", {"message": "No response from AI. Please try again."})
+            return
         await db.append_chat_message("assistant", reply, json.dumps([], default=str))
         await record_usage(db, result.input_tokens, result.output_tokens)
         logger.info("chat(mcp): done, %d in, %d out", result.input_tokens, result.output_tokens)
@@ -468,6 +472,10 @@ async def _stream_native(db, agent, messages: list[dict]) -> AsyncGenerator[str,
             total_input = event["input_tokens"]
             total_output = event["output_tokens"]
 
+            if not reply:
+                logger.warning("chat: empty reply from LLM, not saving")
+                yield sse("error", {"message": "No response from AI. Please try again."})
+                return
             await db.append_chat_message("assistant", reply, json.dumps(proposals, default=str))
             await record_usage(db, total_input, total_output)
             logger.info("chat: done, %d in, %d out, %d proposals", total_input, total_output, len(proposals))

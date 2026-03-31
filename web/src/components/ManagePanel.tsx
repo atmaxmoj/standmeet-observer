@@ -162,7 +162,7 @@ function useLoadHistory(setMessages: React.Dispatch<React.SetStateAction<UIMessa
   useEffect(() => {
     api.chatHistory().then(({ messages: history }) => {
       if (history.length > 0) {
-        setMessages(history.map((m) => {
+        setMessages(history.filter((m) => m.content.trim() !== "").map((m) => {
           const props = typeof m.proposals === "string" ? JSON.parse(m.proposals || "[]") : (m.proposals || []);
           return {
             role: m.role as "user" | "assistant", content: m.content, dbId: m.id,
