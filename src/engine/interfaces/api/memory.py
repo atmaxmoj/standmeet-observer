@@ -32,6 +32,18 @@ async def list_routines(request: Request, search: str = ""):
     return {"routines": await db.get_all_routines(search)}
 
 
+@router.get("/memory/insights/")
+async def list_insights(request: Request, limit: int = 50, offset: int = 0):
+    db = request.app.state.db
+    return {"insights": await db.get_insights(limit, offset), "total": await db.count_insights()}
+
+
+@router.get("/memory/da-goals/")
+async def list_da_goals(request: Request):
+    db = request.app.state.db
+    return {"goals": await db.get_da_goals()}
+
+
 class BatchDelete(BaseModel):
     table: str
     ids: list[int]

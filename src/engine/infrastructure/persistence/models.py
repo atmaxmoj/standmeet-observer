@@ -179,6 +179,35 @@ class Routine(Base):
     updated_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=func.now())
 
 
+class Insight(Base):
+    __tablename__ = "insights"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    category: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    evidence: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
+    data: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    run_id: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=func.now())
+
+    __table_args__ = (
+        Index("idx_insights_created_at", "created_at"),
+        Index("idx_insights_run_id", "run_id"),
+    )
+
+
+class DaGoal(Base):
+    __tablename__ = "da_goals"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    goal: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="active", server_default="active")
+    progress_notes: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=func.now())
+    updated_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=func.now())
+
+
 class ChatMessage(Base):
     __tablename__ = "chat_messages"
 

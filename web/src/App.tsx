@@ -7,12 +7,14 @@ import { UsagePanel } from "@/components/UsagePanel";
 import { LogsPanel } from "@/components/LogsPanel";
 import { ManagePanel } from "@/components/ManagePanel";
 import { SourceDataPanel } from "@/components/SourceDataPanel";
+import { InsightsPanel } from "@/components/InsightsPanel";
 import { api, type SourceManifest } from "@/lib/api";
 
 const staticPanels: Record<string, ComponentType> = {
   episodes: EpisodesPanel,
   playbooks: PlaybooksPanel,
   routines: RoutinesPanel,
+  insights: InsightsPanel,
   usage: UsagePanel,
   logs: LogsPanel,
   chat: ManagePanel,
@@ -22,6 +24,7 @@ const memorySidebarItems = [
   { key: "episodes", label: "Episodes" },
   { key: "playbooks", label: "Playbooks" },
   { key: "routines", label: "Routines" },
+  { key: "insights", label: "Insights" },
 ];
 
 const systemSidebarItems = [

@@ -70,6 +70,26 @@ export interface Routine {
   updated_at: string;
 }
 
+export interface Insight {
+  id: number;
+  title: string;
+  body: string;
+  category: string;
+  evidence: string;
+  data: string;
+  run_id: string;
+  created_at: string;
+}
+
+export interface DaGoal {
+  id: number;
+  goal: string;
+  status: string;
+  progress_notes: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface UsageSummary {
   days: number;
   total_cost_usd: number;
@@ -157,6 +177,10 @@ export const api = {
   distill: () => post<{ playbook_entries_updated: number }>("/engine/distill"),
   compose: () => post<{ routines_updated: number }>("/engine/routines"),
   gc: () => post<{ status: string }>("/engine/gc"),
+  insights: (limit = 50, offset = 0) =>
+    get<{ insights: Insight[]; total: number }>(`/memory/insights/?${qs({ limit, offset })}`),
+  daGoals: () => get<{ goals: DaGoal[] }>("/memory/da-goals/"),
+  triggerDa: () => post<{ insights_created: number }>("/engine/da"),
   sources: () => get<{ sources: SourceManifest[] }>("/engine/sources"),
   sourceData: (name: string, limit = 50, offset = 0, search = "") =>
     get<{ records: SourceRecord[]; total: number }>(

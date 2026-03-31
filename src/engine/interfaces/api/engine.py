@@ -103,6 +103,13 @@ async def trigger_routines(request: Request):
     return {"routines_updated": count}
 
 
+@router.post("/engine/da")
+async def trigger_da(request: Request):
+    from engine.application.da import run_da
+    count = await run_da(request.app.state.settings, request.app.state.db)
+    return {"insights_created": count}
+
+
 @router.post("/engine/gc")
 async def trigger_gc(request: Request):
     import asyncio

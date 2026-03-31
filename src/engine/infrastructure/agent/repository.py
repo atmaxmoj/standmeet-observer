@@ -14,6 +14,7 @@ from engine.infrastructure.persistence.session import ago
 from engine.infrastructure.persistence.models import (
     Frame as FrameModel, AudioFrame, OsEvent, Episode,
     PlaybookEntry, PlaybookHistory, Routine, PipelineLog,
+    Insight, DaGoal,
 )
 
 logger = logging.getLogger(__name__)
@@ -579,6 +580,65 @@ def purge_sensitive_frames(session: Session, frame_ids: list[int]) -> dict:
     session.commit()
     logger.info("Purged %d sensitive frames", len(frame_ids))
     return {"deleted": len(frame_ids)}
+
+
+# ── DA (insights + goals) ──
+
+
+def get_previous_insights(session: Session, limit: int = 20) -> list[dict]:
+    rows = session.execute(
+        select(Insight).order_by(Insight.created_at.desc()).limit(limit)
+    ).scalars().all()
+    return [{"id": r.id, "title": r.title, "body": r.body, "category": r.category,
+             "evidence": r.evidence, "data": r.data,
+             "run_id": r.run_id, "created_at": r.created_at} for r in rows]
+
+
+def get_da_goals(session: Session) -> list[dict]:
+    rows = session.execute(
+        select(DaGoal).order_by(DaGoal.created_at.desc())
+    ).scalars().all()
+    return [{"id": r.id, "goal": r.goal, "status": r.status,
+             "progress_notes": r.progress_notes,
+             "created_at": r.created_at, "updated_at": r.updated_at} for r in rows]
+
+
+def write_insight(session: Session, title: str, body: str, category: str,
+                  evidence: str, run_id: str, data: str = "") -> dict:
+    row = Insight(title=title, body=body, category=category,
+                  evidence=evidence, data=data, run_id=run_id)
+    session.add(row)
+    session.flush()
+    logger.info("DA insight: %s (id=%d)", title, row.id)
+    return {"id": row.id, "title": title}
+
+
+def write_da_goal(session: Session, goal: str) -> dict:
+    row = DaGoal(goal=goal)
+    session.add(row)
+    session.flush()
+    logger.info("DA goal created: %s (id=%d)", goal[:60], row.id)
+    return {"id": row.id, "goal": goal}
+
+
+def update_da_goal(session: Session, goal_id: int, status: str,
+                   progress_note: str = "") -> dict:
+    row = session.get(DaGoal, goal_id)
+    if not row:
+        return {"error": f"Goal id={goal_id} not found"}
+    if status:
+        row.status = status
+    if progress_note:
+        try:
+            notes = json.loads(row.progress_notes) if row.progress_notes else []
+        except (json.JSONDecodeError, TypeError):
+            notes = []
+        notes.append(progress_note)
+        row.progress_notes = json.dumps(notes)
+    row.updated_at = func.now()
+    session.flush()
+    logger.info("DA goal updated: id=%d status=%s", goal_id, status)
+    return {"id": goal_id, "status": row.status}
 
 
 # ── Helpers ──

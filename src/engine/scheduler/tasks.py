@@ -232,3 +232,25 @@ def daily_gc_task():
         logger.exception("daily_gc failed")
     finally:
         session.close()
+
+
+# -- Daily DA (Personal Data Analyst) --
+
+
+@huey.periodic_task(crontab(hour="5", minute="0"))
+def daily_da_task():
+    """Daily DA insights generation. Runs at 5am after GC."""
+    from engine.infrastructure.pipeline.orchestrator import run_da
+
+    session = _get_session()
+    try:
+        if not check_daily_budget(session, DAILY_COST_CAP_USD):
+            logger.warning("daily DA: budget exceeded, skipping")
+            return
+        count = run_da(_get_settings(), session)
+        session.commit()
+        logger.info("daily DA: %d insights", count)
+    except Exception:
+        logger.exception("daily DA FAILED")
+    finally:
+        session.close()

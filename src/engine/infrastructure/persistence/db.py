@@ -12,6 +12,7 @@ from engine.infrastructure.persistence.session import ago
 from engine.infrastructure.persistence.models import (
     Base, Frame, AudioFrame, OsEvent, Episode, PlaybookEntry,
     TokenUsage, State, PipelineLog, PlaybookHistory, Routine, ChatMessage,
+    Insight, DaGoal,
 )
 
 logger = logging.getLogger(__name__)
@@ -606,6 +607,39 @@ class DB:
         async with self._session() as s:
             await s.execute(delete(ChatMessage))
             await s.commit()
+
+    # -- DA (insights + goals) --
+
+    async def get_insights(self, limit: int = 50, offset: int = 0) -> list[dict]:
+        async with self._session() as s:
+            rows = (await s.execute(
+                select(Insight).order_by(Insight.created_at.desc()).limit(limit).offset(offset)
+            )).scalars().all()
+            return [
+                {"id": r.id, "title": r.title, "body": r.body, "category": r.category,
+                 "evidence": r.evidence, "data": r.data,
+                 "run_id": r.run_id, "created_at": r.created_at}
+                for r in rows
+            ]
+
+    async def count_insights(self, run_id: str = "") -> int:
+        async with self._session() as s:
+            q = select(func.count()).select_from(Insight)
+            if run_id:
+                q = q.where(Insight.run_id == run_id)
+            return (await s.execute(q)).scalar() or 0
+
+    async def get_da_goals(self) -> list[dict]:
+        async with self._session() as s:
+            rows = (await s.execute(
+                select(DaGoal).order_by(DaGoal.created_at.desc())
+            )).scalars().all()
+            return [
+                {"id": r.id, "goal": r.goal, "status": r.status,
+                 "progress_notes": r.progress_notes,
+                 "created_at": r.created_at, "updated_at": r.updated_at}
+                for r in rows
+            ]
 
     # -- helpers --
 

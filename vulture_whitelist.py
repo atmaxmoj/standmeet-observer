@@ -4,6 +4,7 @@
 daily_distill_task
 daily_routines_task
 daily_gc_task
+daily_da_task
 
 # Pydantic Settings fields (read from environment variables)
 poll_interval_seconds

@@ -119,3 +119,31 @@ def run_routines(settings: Settings, session: Session) -> int:
     count = db.count_recent_routines()
     logger.info("run_routines: %d routines", count)
     return count
+
+
+def run_da(settings: Settings, session: Session) -> int:
+    """Sync DA pipeline via agentic MCP.
+
+    Returns insight count. Caller must session.commit().
+    """
+    import uuid
+
+    from engine.infrastructure.agent.service import AgentService
+    from engine.domain.prompt.da import DA_PROMPT
+    from engine.infrastructure.agent.tools.da_mcp import create_da_mcp_server
+
+    run_id = uuid.uuid4().hex[:12]
+    prompt = DA_PROMPT.format(run_id=run_id)
+
+    agent = AgentService(settings)
+    factory = sessionmaker(bind=session.get_bind())
+    mcp_server = create_da_mcp_server(factory)
+    agent.run_with_mcp(prompt, mcp_server, "da", "da_agentic", session)
+
+    from engine.infrastructure.persistence.models import Insight
+    from sqlalchemy import select, func
+    count = session.execute(
+        select(func.count()).select_from(Insight).where(Insight.run_id == run_id)
+    ).scalar() or 0
+    logger.info("run_da: %d insights (run_id=%s)", count, run_id)
+    return count
