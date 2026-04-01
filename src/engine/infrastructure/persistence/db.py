@@ -32,6 +32,7 @@ class DB:
         async with self._engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
             await conn.run_sync(self._migrate_base_confidence)
+            await conn.run_sync(self._migrate_insights_data)
         self._session_factory = async_sessionmaker(
             bind=self._engine, expire_on_commit=False,
         )
@@ -52,6 +53,19 @@ class DB:
                     f"UPDATE {table} SET base_confidence = confidence"
                 ))
                 logger.info("migrated %s: added base_confidence, backfilled from confidence", table)
+
+    @staticmethod
+    def _migrate_insights_data(conn):
+        """Add data column to insights table if missing."""
+        from sqlalchemy import text, inspect
+        inspector = inspect(conn)
+        if "insights" in inspector.get_table_names():
+            columns = {c["name"] for c in inspector.get_columns("insights")}
+            if "data" not in columns:
+                conn.execute(text(
+                    "ALTER TABLE insights ADD COLUMN data TEXT NOT NULL DEFAULT ''"
+                ))
+                logger.info("migrated insights: added data column")
 
     async def close(self):
         if self._engine:
@@ -242,6 +256,29 @@ class DB:
                 existing.value = str(value)
             else:
                 s.add(State(key=key, value=str(value)))
+            await s.commit()
+
+    async def get_state_str(self, key: str, default: str = "") -> str:
+        async with self._session() as s:
+            row = (await s.execute(
+                select(State.value).where(State.key == key)
+            )).scalar_one_or_none()
+            return row if row is not None else default
+
+    async def set_state_str(self, key: str, value: str):
+        async with self._session() as s:
+            existing = (await s.execute(
+                select(State).where(State.key == key)
+            )).scalar_one_or_none()
+            if existing:
+                existing.value = value
+            else:
+                s.add(State(key=key, value=value))
+            await s.commit()
+
+    async def delete_state(self, key: str):
+        async with self._session() as s:
+            await s.execute(delete(State).where(State.key == key))
             await s.commit()
 
     # -- episodes --
@@ -451,10 +488,14 @@ class DB:
             await s.refresh(log)
             return log.id
 
-    async def get_pipeline_logs(self, limit: int = 50, offset: int = 0, search: str = "") -> tuple[list[dict], int]:
+    async def get_pipeline_logs(self, limit: int = 50, offset: int = 0, search: str = "", stage: str = "") -> tuple[list[dict], int]:
         async with self._session() as s:
             q = select(PipelineLog)
             cq = select(func.count()).select_from(PipelineLog)
+            if stage:
+                stage_filt = PipelineLog.stage.contains(stage)
+                q = q.where(stage_filt)
+                cq = cq.where(stage_filt)
             if search:
                 filt = (
                     PipelineLog.stage.contains(search) | PipelineLog.model.contains(search)

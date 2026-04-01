@@ -28,11 +28,12 @@ For avoidance/displacement routines, describe the ACTUAL loop pattern so the hum
 
 ## Process
 
-1. Call `get_all_playbook_entries` to see known atomic behaviors
-2. Call `get_all_routines` to see existing routines
-3. Call `search_episodes` to find evidence of multi-step sequences
-4. For patterns, call `get_episode_detail` to inspect full episode
-5. When confirmed, call `write_routine` to save it
+1. Call `get_da_insights` to see the DA's recent analysis — use these as leads for what sequences to look for
+2. Call `get_all_playbook_entries` to see known atomic behaviors
+3. Call `get_all_routines` to see existing routines
+4. Call `search_episodes` to find evidence of multi-step sequences
+5. For patterns, call `get_episode_detail` to inspect full episode
+6. When confirmed, call `write_routine` to save it
 
 ## Quality rules
 

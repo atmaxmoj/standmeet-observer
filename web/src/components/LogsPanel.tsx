@@ -34,8 +34,9 @@ function LogCard({ log, expanded, onToggle }: { log: PipelineLog; expanded: bool
       <CardHeader className="pb-2">
         <CardTitle className="text-sm font-normal flex items-center gap-2">
           <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-            log.stage === "distill" ? "bg-purple-500/15 text-purple-400" :
+            log.stage === "distill" || log.stage === "distill_agentic" ? "bg-purple-500/15 text-purple-400" :
             log.stage === "compose" || log.stage === "compose_agentic" ? "bg-amber-500/15 text-amber-400" :
+            log.stage === "da_agentic" ? "bg-emerald-500/15 text-emerald-400" :
             log.stage === "gc" ? "bg-pink-500/15 text-pink-400" :
             "bg-blue-500/15 text-blue-400"
           }`}>
@@ -56,6 +57,16 @@ function LogCard({ log, expanded, onToggle }: { log: PipelineLog; expanded: bool
   );
 }
 
+const STAGE_FILTERS = [
+  { key: "", label: "All" },
+  { key: "episode", label: "Episodes" },
+  { key: "distill", label: "Playbooks" },
+  { key: "compose", label: "Routines" },
+  { key: "da", label: "Insights" },
+  { key: "gc", label: "GC" },
+  { key: "chat", label: "Chat" },
+];
+
 export function LogsPanel() {
   const [logs, setLogs] = useState<PipelineLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -63,13 +74,14 @@ export function LogsPanel() {
   const [total, setTotal] = useState(0);
   const [expanded, setExpanded] = useState<number | null>(null);
   const [search, setSearch] = useState("");
+  const [stageFilter, setStageFilter] = useState("");
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
   const load = useCallback(async (p: number) => {
     setLoading(true);
     try {
-      const data = await api.logs(PAGE_SIZE, (p - 1) * PAGE_SIZE, search);
+      const data = await api.logs(PAGE_SIZE, (p - 1) * PAGE_SIZE, search, stageFilter);
       setLogs(data.logs);
       setTotal(data.total ?? 0);
       setPage(p);
@@ -77,7 +89,7 @@ export function LogsPanel() {
       console.error(e);
     }
     setLoading(false);
-  }, [search]);
+  }, [search, stageFilter]);
 
   useEffect(() => { load(1); }, [load]);
 
@@ -85,7 +97,17 @@ export function LogsPanel() {
     <div data-testid="logs-panel">
       <div className="p-6 space-y-4">
         <div className="flex items-center justify-between">
-          <SearchInput onSearch={setSearch} />
+          <div className="flex items-center gap-3">
+            <SearchInput onSearch={setSearch} />
+            <div className="flex gap-1">
+              {STAGE_FILTERS.map((f) => (
+                <button key={f.key} onClick={() => setStageFilter(f.key)}
+                  className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${
+                    stageFilter === f.key ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground"
+                  }`}>{f.label}</button>
+              ))}
+            </div>
+          </div>
           <Button variant="outline" size="sm" onClick={() => load(page)}>Refresh</Button>
         </div>
 

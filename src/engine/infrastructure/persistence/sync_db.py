@@ -156,6 +156,12 @@ class SyncDB:
         ).scalar_one_or_none()
         return float(row) if row else default
 
+    def get_state_int(self, key: str, default: int = 0) -> int:
+        row = self.session.execute(
+            select(State.value).where(State.key == key)
+        ).scalar_one_or_none()
+        return int(row) if row else default
+
     # ── Helpers ──
 
     @staticmethod

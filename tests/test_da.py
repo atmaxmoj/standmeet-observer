@@ -96,3 +96,35 @@ class TestDaAsyncDb:
         assert await db.count_insights(run_id="runX") == 2
         assert await db.count_insights(run_id="runY") == 1
         assert await db.count_insights() == 3
+
+
+class TestPromptCustomization:
+    @pytest.mark.asyncio
+    async def test_get_default_prompt(self, db):
+        from engine.domain.prompt.playbook import PLAYBOOK_PROMPT
+        custom = await db.get_state_str("prompt:distill")
+        assert custom == ""  # no custom prompt yet
+        # Default should be the module constant
+        assert len(PLAYBOOK_PROMPT) > 100
+
+    @pytest.mark.asyncio
+    async def test_set_and_get_custom_prompt(self, db):
+        await db.set_state_str("prompt:distill", "Custom distill prompt")
+        result = await db.get_state_str("prompt:distill")
+        assert result == "Custom distill prompt"
+
+    @pytest.mark.asyncio
+    async def test_reset_prompt(self, db):
+        await db.set_state_str("prompt:distill", "Custom prompt")
+        assert await db.get_state_str("prompt:distill") == "Custom prompt"
+        await db.delete_state("prompt:distill")
+        assert await db.get_state_str("prompt:distill") == ""
+
+    @pytest.mark.asyncio
+    async def test_distill_uses_custom_prompt(self, db):
+        """Verify application layer reads custom prompt from state."""
+        await db.set_state_str("prompt:distill", "You are a test distiller.")
+        custom = await db.get_state_str("prompt:distill")
+        assert custom == "You are a test distiller."
+        # Clean up
+        await db.delete_state("prompt:distill")

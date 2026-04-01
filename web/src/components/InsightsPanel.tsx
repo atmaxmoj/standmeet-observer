@@ -6,6 +6,7 @@ import { api, type Insight, type DaGoal } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { PromptEditor } from "@/components/PromptEditor";
 
 const categoryVariant: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
   trend: "default", anomaly: "destructive", correlation: "secondary",
@@ -38,7 +39,7 @@ function InsightChart({ data }: { data: string }) {
           <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
           <XAxis dataKey={parsed.x_key} tick={{ fontSize: 10 }} />
           <YAxis tick={{ fontSize: 10 }} />
-          <Tooltip contentStyle={{ fontSize: 12 }} />
+          <Tooltip contentStyle={{ fontSize: 12, backgroundColor: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", color: "hsl(var(--popover-foreground))", borderRadius: 6 }} />
           {DataElement}
         </Chart>
       </ResponsiveContainer>
@@ -115,13 +116,20 @@ export function InsightsPanel() {
     setRunning(false);
   };
 
+  const lastRun = insights.length > 0 ? insights[0].created_at : null;
+
   return (
     <div className="p-6 space-y-6" data-testid="insights-panel">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold tracking-wider">INSIGHTS</h2>
-        <Button variant="outline" size="sm" onClick={triggerDa} disabled={running} data-testid="run-da">
-          {running ? "Analyzing..." : "Run DA"}
-        </Button>
+        <div className="flex items-center gap-3">
+          {lastRun && <span className="text-xs text-muted-foreground">Last run: {new Date(lastRun).toLocaleTimeString()}</span>}
+          <PromptEditor promptKey="da" label="DA" />
+          <Button variant="default" size="sm" onClick={triggerDa} disabled={running} data-testid="run-da">
+            {running ? "Analyzing..." : "Run DA"}
+          </Button>
+          <Button variant="outline" size="sm" onClick={load}>Refresh</Button>
+        </div>
       </div>
 
       {goals.filter(g => g.status === "active").length > 0 && (

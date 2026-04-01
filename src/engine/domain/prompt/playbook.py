@@ -22,10 +22,11 @@ RIGHT: "When a file operation fails due to missing path: create the path structu
 
 ## Process
 
-1. Call `get_all_playbook_entries` to see existing rules
-2. Call `search_episodes` with relevant keywords to find evidence
-3. For interesting patterns, call `get_episode_frames` to verify against raw data
-4. When you've confirmed a pattern, call `write_playbook_entry` to save it
+1. Call `get_da_insights` to see the DA's recent analysis — use these as leads for what patterns to look for
+2. Call `get_all_playbook_entries` to see existing rules
+3. Call `search_episodes` with relevant keywords to find evidence
+4. For interesting patterns, call `get_episode_frames` to verify against raw data
+5. When you've confirmed a pattern, call `write_playbook_entry` to save it
 
 ## Quality rules
 

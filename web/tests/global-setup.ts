@@ -36,7 +36,7 @@ async function waitForHealthy(timeoutMs = 30000) {
     try {
       const res = await fetch(`${API}/engine/status`);
       if (res.ok) return;
-    } catch {}
+    } catch { /* engine not ready yet */ }
     await sleep(1000);
   }
   throw new Error(`Timed out waiting for engine at ${API}`);

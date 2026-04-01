@@ -180,19 +180,39 @@ function useLoadHistory(setMessages: React.Dispatch<React.SetStateAction<UIMessa
 
 function GcButton({ onComplete }: { onComplete: (msg: string) => void }) {
   const [running, setRunning] = useState(false);
+  const [disabled, setDisabled] = useState(false);
+
+  useEffect(() => {
+    api.gcStatus().then((s) => setDisabled(s.disabled)).catch(() => {});
+  }, []);
+
   const run = async () => {
     if (!confirm("Run garbage collection? (decay + audit + sensitive data scan)")) return;
     setRunning(true);
     try { await api.gc(); onComplete("GC completed. Check Logs panel for the report."); } catch (e) { console.error(e); }
     setRunning(false);
   };
+
+  const toggle = async () => {
+    try {
+      const res = disabled ? await api.gcEnable() : await api.gcDisable();
+      setDisabled(res.disabled);
+    } catch { /* empty */ }
+  };
+
   return (
     <div className="flex items-center gap-1.5">
-      <Button variant="outline" size="sm" onClick={run} disabled={running}>
+      <Button variant="outline" size="sm" onClick={run} disabled={running || disabled}>
         {running ? "Running..." : "Run GC"}
       </Button>
+      <button onClick={toggle}
+        className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${
+          disabled ? "bg-destructive/15 text-destructive" : "bg-muted text-muted-foreground hover:text-foreground"
+        }`}>
+        {disabled ? "Auto GC Off" : "Auto GC On"}
+      </button>
       <span className="inline-flex items-center justify-center w-4 h-4 rounded-full border text-[10px] text-muted-foreground cursor-help"
-        title="Garbage Collection: decays stale confidence, audits playbook quality, scans for sensitive data (passwords, API keys), purges old frames.">
+        title="Garbage Collection: decays stale confidence, audits playbook quality, scans for sensitive data. Toggle to disable automatic daily GC.">
         ?
       </span>
     </div>

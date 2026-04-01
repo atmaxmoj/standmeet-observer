@@ -30,13 +30,16 @@ async def compose_routines(settings: Settings, db: DB) -> int:
         logger.error("DATABASE_URL_SYNC not configured")
         return 0
 
+    custom_prompt = await db.get_state_str("prompt:compose")
+    prompt = custom_prompt or ROUTINE_PROMPT
+
     session_factory = get_sync_session_factory(sync_url)
     session = session_factory()
     try:
         agent = AgentService(settings)
         mcp_server = create_compose_mcp_server(session_factory)
         await agent.arun_with_mcp(
-            ROUTINE_PROMPT, mcp_server, "compose", "compose_agentic", session,
+            prompt, mcp_server, "compose", "compose_agentic", session,
         )
         session.commit()
     finally:

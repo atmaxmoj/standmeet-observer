@@ -84,9 +84,58 @@ async def engine_usage(request: Request, days: int = 7):
 
 
 @router.get("/engine/logs")
-async def pipeline_logs(request: Request, limit: int = 50, offset: int = 0, search: str = ""):
-    logs, total = await request.app.state.db.get_pipeline_logs(limit=limit, offset=offset, search=search)
+async def pipeline_logs(request: Request, limit: int = 50, offset: int = 0, search: str = "", stage: str = ""):
+    logs, total = await request.app.state.db.get_pipeline_logs(limit=limit, offset=offset, search=search, stage=stage)
     return {"logs": logs, "total": total}
+
+
+# -- Prompt customization --
+
+PROMPT_DEFAULTS = {
+    "distill": "engine.domain.prompt.playbook:PLAYBOOK_PROMPT",
+    "compose": "engine.domain.prompt.routine:ROUTINE_PROMPT",
+    "da": "engine.domain.prompt.da:DA_PROMPT",
+}
+
+
+def _load_default_prompt(key: str) -> str:
+    ref = PROMPT_DEFAULTS[key]
+    module_path, attr = ref.rsplit(":", 1)
+    import importlib
+    mod = importlib.import_module(module_path)
+    return getattr(mod, attr)
+
+
+@router.get("/engine/prompts/{key}")
+async def get_prompt(request: Request, key: str):
+    if key not in PROMPT_DEFAULTS:
+        return {"error": f"Unknown prompt: {key}"}
+    db = request.app.state.db
+    custom = await db.get_state_str(f"prompt:{key}")
+    default = _load_default_prompt(key)
+    return {"key": key, "prompt": custom or default, "is_custom": bool(custom), "default": default}
+
+
+class PromptUpdate(BaseModel):
+    prompt: str
+
+
+@router.put("/engine/prompts/{key}")
+async def set_prompt(request: Request, key: str, body: PromptUpdate):
+    if key not in PROMPT_DEFAULTS:
+        return {"error": f"Unknown prompt: {key}"}
+    db = request.app.state.db
+    await db.set_state_str(f"prompt:{key}", body.prompt)
+    return {"key": key, "saved": True}
+
+
+@router.delete("/engine/prompts/{key}")
+async def reset_prompt(request: Request, key: str):
+    if key not in PROMPT_DEFAULTS:
+        return {"error": f"Unknown prompt: {key}"}
+    db = request.app.state.db
+    await db.delete_state(f"prompt:{key}")
+    return {"key": key, "reset": True}
 
 
 @router.post("/engine/distill")
@@ -123,6 +172,24 @@ async def trigger_gc(request: Request):
     finally:
         session.close()
     return result
+
+
+@router.get("/engine/gc/status")
+async def gc_status(request: Request):
+    disabled = await request.app.state.db.get_state("gc_disabled", 0)
+    return {"disabled": bool(disabled)}
+
+
+@router.post("/engine/gc/disable")
+async def gc_disable(request: Request):
+    await request.app.state.db.set_state("gc_disabled", 1)
+    return {"disabled": True}
+
+
+@router.post("/engine/gc/enable")
+async def gc_enable(request: Request):
+    await request.app.state.db.set_state("gc_disabled", 0)
+    return {"disabled": False}
 
 
 @router.post("/engine/backfill")

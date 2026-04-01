@@ -16,7 +16,11 @@ STAGE = "compose_agentic"
 
 def create_compose_mcp_server(session_factory: sessionmaker) -> McpSdkServerConfig:
     """Create an SDK MCP server with routine composition tools."""
+    tools = _read_tools(session_factory) + _write_tools(session_factory)
+    return create_sdk_mcp_server(name="compose-tools", tools=tools)
 
+
+def _read_tools(session_factory: sessionmaker) -> list:
     @tool("search_episodes", "Search episodes by keyword in summary.", {
         "query": str, "limit": int,
     })
@@ -62,6 +66,23 @@ def create_compose_mcp_server(session_factory: sessionmaker) -> McpSdkServerConf
         finally:
             session.close()
 
+    @tool("get_da_insights", "Get recent DA insights to reference during composition.", {
+        "limit": int,
+    })
+    async def get_da_insights(args):
+        session = session_factory()
+        try:
+            result = repo.get_previous_insights(session, args.get("limit", 10))
+            log_tool_call(session, STAGE, "get_da_insights", args, result)
+            return {"content": [{"type": "text", "text": json.dumps(result, default=str)}]}
+        finally:
+            session.close()
+
+    return [search_episodes, get_episode_detail, get_all_playbook_entries,
+            get_all_routines, get_da_insights]
+
+
+def _write_tools(session_factory: sessionmaker) -> list:
     @tool("write_routine", "Create or update a routine.", {
         "name": str, "trigger": str, "goal": str,
         "steps": str, "uses": str, "confidence": float, "maturity": str,
@@ -80,8 +101,4 @@ def create_compose_mcp_server(session_factory: sessionmaker) -> McpSdkServerConf
         finally:
             session.close()
 
-    return create_sdk_mcp_server(
-        name="compose-tools",
-        tools=[search_episodes, get_episode_detail, get_all_playbook_entries,
-               get_all_routines, write_routine],
-    )
+    return [write_routine]

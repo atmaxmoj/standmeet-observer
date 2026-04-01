@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SearchInput } from "@/components/SearchInput";
+import { PromptEditor } from "@/components/PromptEditor";
 
 const maturityVariant: Record<string, "default" | "secondary" | "outline"> = {
   nascent: "outline", developing: "secondary", mature: "default",
@@ -105,6 +106,7 @@ export function RoutinesPanel() {
         </div>
         <div className="flex items-center gap-2">
           {lastRun && <span className="text-xs text-muted-foreground">Last run: {new Date(lastRun).toLocaleTimeString()}</span>}
+          <PromptEditor promptKey="compose" label="Compose" />
           <Button variant="default" size="sm" onClick={runCompose} disabled={composing}>
             {composing ? "Running..." : "Run Compose"}
           </Button>

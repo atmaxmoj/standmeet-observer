@@ -30,13 +30,16 @@ async def distill_playbooks(settings: Settings, db: DB) -> int:
         logger.error("DATABASE_URL_SYNC not configured")
         return 0
 
+    custom_prompt = await db.get_state_str("prompt:distill")
+    prompt = custom_prompt or PLAYBOOK_PROMPT
+
     session_factory = get_sync_session_factory(sync_url)
     session = session_factory()
     try:
         agent = AgentService(settings)
         mcp_server = create_distill_mcp_server(session_factory)
         await agent.arun_with_mcp(
-            PLAYBOOK_PROMPT, mcp_server, "distill", "distill_agentic", session,
+            prompt, mcp_server, "distill", "distill_agentic", session,
         )
         session.commit()
     finally:

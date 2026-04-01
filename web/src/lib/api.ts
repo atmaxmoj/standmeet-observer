@@ -170,17 +170,26 @@ export const api = {
   usage: (days = 30) => get<UsageSummary>(`/engine/usage?days=${days}`),
   budget: () => get<{ daily_spend_usd: number; daily_cap_usd: number; under_budget: boolean }>("/engine/budget"),
   setBudget: (cap: number) => put<{ daily_cap_usd: number }>("/engine/budget", { daily_cap_usd: cap }),
-  logs: (limit = 20, offset = 0, search = "") =>
-    get<{ logs: PipelineLog[]; total: number }>(`/engine/logs?${qs({ limit, offset, search })}`),
+  logs: (limit = 20, offset = 0, search = "", stage = "") =>
+    get<{ logs: PipelineLog[]; total: number }>(`/engine/logs?${qs({ limit, offset, search, stage })}`),
   routines: (search = "") =>
     get<{ routines: Routine[] }>(`/memory/routines/?${qs({ search })}`),
   distill: () => post<{ playbook_entries_updated: number }>("/engine/distill"),
   compose: () => post<{ routines_updated: number }>("/engine/routines"),
   gc: () => post<{ status: string }>("/engine/gc"),
+  gcStatus: () => get<{ disabled: boolean }>("/engine/gc/status"),
+  gcDisable: () => post<{ disabled: boolean }>("/engine/gc/disable"),
+  gcEnable: () => post<{ disabled: boolean }>("/engine/gc/enable"),
   insights: (limit = 50, offset = 0) =>
     get<{ insights: Insight[]; total: number }>(`/memory/insights/?${qs({ limit, offset })}`),
   daGoals: () => get<{ goals: DaGoal[] }>("/memory/da-goals/"),
   triggerDa: () => post<{ insights_created: number }>("/engine/da"),
+  getPrompt: (key: string) =>
+    get<{ key: string; prompt: string; is_custom: boolean; default: string }>(`/engine/prompts/${key}`),
+  setPrompt: (key: string, prompt: string) =>
+    put<{ key: string; saved: boolean }>(`/engine/prompts/${key}`, { prompt }),
+  resetPrompt: (key: string) =>
+    del_<{ key: string; reset: boolean }>(`/engine/prompts/${key}`),
   sources: () => get<{ sources: SourceManifest[] }>("/engine/sources"),
   sourceData: (name: string, limit = 50, offset = 0, search = "") =>
     get<{ records: SourceRecord[]; total: number }>(

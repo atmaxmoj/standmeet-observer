@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { SelectionBar } from "@/components/SelectionBar";
 import { SearchInput } from "@/components/SearchInput";
+import { PromptEditor } from "@/components/PromptEditor";
 
 function parseAction(raw: string): string {
   try {
@@ -113,6 +114,7 @@ export function PlaybooksPanel() {
         </div>
         <div className="flex items-center gap-2">
           {lastRun && <span className="text-xs text-muted-foreground">Last run: {new Date(lastRun).toLocaleTimeString()}</span>}
+          <PromptEditor promptKey="distill" label="Distill" />
           <Button variant="default" size="sm" onClick={runDistill} disabled={distilling}>
             {distilling ? "Running..." : "Run Distill"}
           </Button>

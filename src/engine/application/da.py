@@ -27,8 +27,10 @@ async def run_da(settings: Settings, db: DB) -> int:
         logger.error("DATABASE_URL_SYNC not configured")
         return 0
 
+    custom_prompt = await db.get_state_str("prompt:da")
+    base_prompt = custom_prompt or DA_PROMPT
     run_id = uuid.uuid4().hex[:12]
-    prompt = DA_PROMPT.format(run_id=run_id)
+    prompt = base_prompt.replace("{run_id}", run_id)
 
     session_factory = get_sync_session_factory(sync_url)
     session = session_factory()

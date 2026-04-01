@@ -133,7 +133,7 @@ def run_da(settings: Settings, session: Session) -> int:
     from engine.infrastructure.agent.tools.da_mcp import create_da_mcp_server
 
     run_id = uuid.uuid4().hex[:12]
-    prompt = DA_PROMPT.format(run_id=run_id)
+    prompt = DA_PROMPT.replace("{run_id}", run_id)
 
     agent = AgentService(settings)
     factory = sessionmaker(bind=session.get_bind())

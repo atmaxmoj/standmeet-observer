@@ -81,8 +81,20 @@ def _read_tools(session_factory: sessionmaker) -> list:
         finally:
             session.close()
 
+    @tool("get_da_insights", "Get recent DA insights to reference during distillation.", {
+        "limit": int,
+    })
+    async def get_da_insights(args):
+        session = session_factory()
+        try:
+            result = repo.get_previous_insights(session, args.get("limit", 10))
+            log_tool_call(session, STAGE, "get_da_insights", args, result)
+            return {"content": [{"type": "text", "text": json.dumps(result, default=str)}]}
+        finally:
+            session.close()
+
     return [search_episodes, get_episode_detail, get_episode_frames,
-            get_playbook_history, get_all_playbook_entries]
+            get_playbook_history, get_all_playbook_entries, get_da_insights]
 
 
 def _write_tools(session_factory: sessionmaker) -> list:

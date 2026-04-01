@@ -177,12 +177,34 @@ def process_episode(
         session.close()
 
 
-# -- Daily playbook distillation --
+# -- Daily DA (Personal Data Analyst) — runs FIRST so distill/compose can reference insights --
 
 
 @huey.periodic_task(crontab(hour="3", minute="0"))
+def daily_da_task():
+    """Daily DA insights generation. Runs at 3am before distill/compose."""
+    from engine.infrastructure.pipeline.orchestrator import run_da
+
+    session = _get_session()
+    try:
+        if not check_daily_budget(session, DAILY_COST_CAP_USD):
+            logger.warning("daily DA: budget exceeded, skipping")
+            return
+        count = run_da(_get_settings(), session)
+        session.commit()
+        logger.info("daily DA: %d insights", count)
+    except Exception:
+        logger.exception("daily DA FAILED")
+    finally:
+        session.close()
+
+
+# -- Daily playbook distillation (runs after DA) --
+
+
+@huey.periodic_task(crontab(hour="3", minute="30"))
 def daily_distill_task():
-    """Daily playbook distillation with Opus. Runs every day at 3am."""
+    """Daily playbook distillation with Opus. Runs at 3:30am after DA."""
     session = _get_session()
     try:
         if not check_daily_budget(session, DAILY_COST_CAP_USD):
@@ -200,9 +222,9 @@ def daily_distill_task():
 # -- Daily routine extraction (runs after distill) --
 
 
-@huey.periodic_task(crontab(hour="3", minute="30"))
+@huey.periodic_task(crontab(hour="4", minute="0"))
 def daily_routines_task():
-    """Daily routine extraction with Opus. Runs at 3:30am."""
+    """Daily routine extraction with Opus. Runs at 4am."""
     session = _get_session()
     try:
         if not check_daily_budget(session, DAILY_COST_CAP_USD):
@@ -220,37 +242,20 @@ def daily_routines_task():
 # -- Daily garbage collection --
 
 
-@huey.periodic_task(crontab(hour="4", minute="0"))
+@huey.periodic_task(crontab(hour="4", minute="30"))
 def daily_gc_task():
-    """Daily garbage collection: decay + agent-driven audit."""
+    """Daily garbage collection: decay + agent-driven audit. Runs at 4:30am."""
     from engine.application.gc import run_gc
 
     session = _get_session()
     try:
+        from engine.infrastructure.persistence.sync_db import SyncDB
+        db = SyncDB(session)
+        if db.get_state_int("gc_disabled"):
+            logger.info("daily GC: disabled by user, skipping")
+            return
         run_gc(_get_settings(), session)
     except Exception:
         logger.exception("daily_gc failed")
-    finally:
-        session.close()
-
-
-# -- Daily DA (Personal Data Analyst) --
-
-
-@huey.periodic_task(crontab(hour="5", minute="0"))
-def daily_da_task():
-    """Daily DA insights generation. Runs at 5am after GC."""
-    from engine.infrastructure.pipeline.orchestrator import run_da
-
-    session = _get_session()
-    try:
-        if not check_daily_budget(session, DAILY_COST_CAP_USD):
-            logger.warning("daily DA: budget exceeded, skipping")
-            return
-        count = run_da(_get_settings(), session)
-        session.commit()
-        logger.info("daily DA: %d insights", count)
-    except Exception:
-        logger.exception("daily DA FAILED")
     finally:
         session.close()
