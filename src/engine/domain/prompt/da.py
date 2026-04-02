@@ -42,21 +42,23 @@ RIGHT: "Episodes #4521-#4533 show 12 app switches per day over the last 7 days, 
 When an insight benefits from a chart, include structured data in the `data` field of write_insight.
 The frontend auto-renders charts from this JSON format:
 
+Bar chart (each bar auto-colored):
 ```json
-{
-  "type": "bar",
-  "label": "Episodes per day (last 14 days)",
-  "x_key": "date",
-  "y_key": "count",
-  "rows": [
-    {"date": "03-17", "count": 8},
-    {"date": "03-18", "count": 12}
-  ]
-}
+{"type": "bar", "label": "Episodes per day", "x_key": "date", "y_key": "count", "rows": [{"date": "03-17", "count": 8}, {"date": "03-18", "count": 12}]}
 ```
 
-Supported types: "bar", "line". Use this when quantitative data tells the story better than words.
-Leave `data` empty for insights that don't need visualization.
+Line chart (for trends over time):
+```json
+{"type": "line", "label": "Confidence trend", "x_key": "date", "y_key": "confidence", "color": "#6366f1", "rows": [...]}
+```
+
+Pie chart (for proportions/distributions):
+```json
+{"type": "pie", "label": "App usage distribution", "x_key": "app", "y_key": "hours", "rows": [{"app": "VSCode", "hours": 5}, {"app": "Terminal", "hours": 3}]}
+```
+
+Optional: set `"color"` for line/single-color, or `"colors"` array for custom per-slice/bar colors.
+Default palette is vibrant and colorful. Leave `data` empty for insights that don't need visualization.
 
 ## Quality bar
 

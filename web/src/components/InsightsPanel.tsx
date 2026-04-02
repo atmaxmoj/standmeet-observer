@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from "recharts";
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  LineChart, Line, PieChart, Pie, Cell, Legend,
+} from "recharts";
 import { api, type Insight, type DaGoal } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,35 +16,74 @@ const categoryVariant: Record<string, "default" | "secondary" | "outline" | "des
   growth: "default", decay: "outline", meta: "outline",
 };
 
+const PALETTE = [
+  "#6366f1", "#f59e0b", "#10b981", "#ef4444", "#8b5cf6",
+  "#06b6d4", "#f97316", "#84cc16", "#ec4899", "#14b8a6",
+];
+
 interface ChartData {
-  type: "bar" | "line";
+  type: "bar" | "line" | "pie";
   label?: string;
   x_key: string;
   y_key: string;
+  color?: string;
+  colors?: string[];
   rows: Record<string, unknown>[];
 }
+
+const tooltipStyle = {
+  fontSize: 12,
+  backgroundColor: "hsl(var(--popover))",
+  border: "1px solid hsl(var(--border))",
+  color: "hsl(var(--popover-foreground))",
+  borderRadius: 6,
+};
 
 function InsightChart({ data }: { data: string }) {
   let parsed: ChartData;
   try { parsed = JSON.parse(data); } catch { return null; }
   if (!parsed?.rows?.length || !parsed.x_key || !parsed.y_key) return null;
 
-  const Chart = parsed.type === "line" ? LineChart : BarChart;
-  const DataElement = parsed.type === "line"
-    ? <Line type="monotone" dataKey={parsed.y_key} stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
-    : <Bar dataKey={parsed.y_key} fill="hsl(var(--primary))" radius={[2, 2, 0, 0]} />;
+  const colors = parsed.colors ?? PALETTE;
+  const mainColor = parsed.color ?? PALETTE[0];
 
   return (
     <div className="mt-3">
       {parsed.label && <p className="text-[10px] text-muted-foreground mb-1">{parsed.label}</p>}
-      <ResponsiveContainer width="100%" height={160}>
-        <Chart data={parsed.rows} margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
-          <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-          <XAxis dataKey={parsed.x_key} tick={{ fontSize: 10 }} />
-          <YAxis tick={{ fontSize: 10 }} />
-          <Tooltip contentStyle={{ fontSize: 12, backgroundColor: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", color: "hsl(var(--popover-foreground))", borderRadius: 6 }} />
-          {DataElement}
-        </Chart>
+      <ResponsiveContainer width="100%" height={parsed.type === "pie" ? 200 : 160}>
+        {parsed.type === "pie" ? (
+          <PieChart>
+            <Pie data={parsed.rows} dataKey={parsed.y_key} nameKey={parsed.x_key}
+              cx="50%" cy="50%" outerRadius={70} label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
+              labelLine={false} fontSize={10}>
+              {parsed.rows.map((_, i) => (
+                <Cell key={i} fill={colors[i % colors.length]} />
+              ))}
+            </Pie>
+            <Tooltip contentStyle={tooltipStyle} />
+            <Legend wrapperStyle={{ fontSize: 10 }} />
+          </PieChart>
+        ) : parsed.type === "line" ? (
+          <LineChart data={parsed.rows} margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
+            <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+            <XAxis dataKey={parsed.x_key} tick={{ fontSize: 10 }} />
+            <YAxis tick={{ fontSize: 10 }} />
+            <Tooltip contentStyle={tooltipStyle} />
+            <Line type="monotone" dataKey={parsed.y_key} stroke={mainColor} strokeWidth={2} dot={false} />
+          </LineChart>
+        ) : (
+          <BarChart data={parsed.rows} margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
+            <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+            <XAxis dataKey={parsed.x_key} tick={{ fontSize: 10 }} />
+            <YAxis tick={{ fontSize: 10 }} />
+            <Tooltip contentStyle={tooltipStyle} />
+            <Bar dataKey={parsed.y_key} radius={[2, 2, 0, 0]}>
+              {parsed.rows.map((_, i) => (
+                <Cell key={i} fill={colors[i % colors.length]} />
+              ))}
+            </Bar>
+          </BarChart>
+        )}
       </ResponsiveContainer>
     </div>
   );

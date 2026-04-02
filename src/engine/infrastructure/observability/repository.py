@@ -20,4 +20,4 @@ def insert_tool_call_log(
         prompt=json.dumps({"tool": tool_name, "input": tool_input}, default=str),
         response=json.dumps(tool_output, default=str)[:10000],
     ))
-    session.flush()
+    session.commit()
