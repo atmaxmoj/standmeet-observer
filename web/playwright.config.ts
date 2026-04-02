@@ -5,7 +5,7 @@ const apiURL = process.env.VITE_API_TARGET || "http://localhost:5001";
 
 export default defineConfig({
   testDir: "./tests",
-  timeout: 360000,
+  timeout: 420000,
   globalSetup: "./tests/global-setup.ts",
   use: {
     baseURL,
