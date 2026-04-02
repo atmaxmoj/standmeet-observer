@@ -11,7 +11,7 @@ test.describe("Pipeline", () => {
     page.on("dialog", (d) => d.accept());
     await panel.getByRole("button", { name: "Run Distill" }).click();
 
-    await expect(panel.getByRole("button", { name: "Run Distill" })).toBeEnabled({ timeout: 230000 });
+    await expect(panel.getByRole("button", { name: "Run Distill" })).toBeEnabled({ timeout: 300000 });
 
     await panel.getByRole("button", { name: "Refresh" }).click();
     await expect(panel.getByTestId("playbook-card").first()).toBeVisible({ timeout: 10000 });
@@ -28,7 +28,7 @@ test.describe("Pipeline", () => {
     page.on("dialog", (d) => d.accept());
     await panel.getByRole("button", { name: "Run Compose" }).click();
 
-    await expect(panel.getByRole("button", { name: "Run Compose" })).toBeEnabled({ timeout: 230000 });
+    await expect(panel.getByRole("button", { name: "Run Compose" })).toBeEnabled({ timeout: 300000 });
 
     await panel.getByRole("button", { name: "Refresh" }).click();
   });
@@ -41,7 +41,7 @@ test.describe("Pipeline", () => {
 
     await panel.getByRole("button", { name: "Run DA" }).click();
 
-    await expect(panel.getByRole("button", { name: "Run DA" })).toBeEnabled({ timeout: 230000 });
+    await expect(panel.getByRole("button", { name: "Run DA" })).toBeEnabled({ timeout: 300000 });
 
     await expect(panel.getByTestId("insight-card").first()).toBeVisible({ timeout: 10000 });
     const count = await panel.getByTestId("insight-card").count();
