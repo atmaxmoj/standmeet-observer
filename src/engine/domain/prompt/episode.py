@@ -17,6 +17,15 @@ A new task starts when the user's GOAL changes, not when they switch apps. \
 Shell commands and browser URLs provide crucial context about what the user is \
 actually doing beyond what's visible on screen.
 
+IGNORE these — they are NOT user activity, do NOT create episodes for them:
+- System maintenance: cache clearing, accessibility service crashes (AXVisualSupportAgent), \
+system sleep/wake cycles, login screen idle, macOS background processes
+- CI/build processes: headless Chrome, dart/dartvm/dartaotruntime runtime processes, \
+automated test runners executing without user interaction
+- System noise: Spotlight indexing, Dock animations, NotificationCenter popups
+
+Only extract episodes where the user is ACTIVELY doing something intentional.
+
 For each task, observe these dimensions:
 
 1. **What they did** — tools, sequence, outcome (correlate screen activity with \

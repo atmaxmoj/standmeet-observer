@@ -23,6 +23,18 @@ IGNORE_APPS = frozenset(
         "Control Center",
         "WindowManager",
         "ScreenSaverEngine",
+        # CI/build processes — not user activity
+        "chrome-headless-shell",
+        "dartvm",
+        "dart",
+        "dartaotruntime",
+        # macOS system services
+        "AXVisualSupportAgent",
+        "SteamClean",
+        "com.apple.Safari.CacheDeleteExtension",
+        "com.apple.TV.CacheDeleteExtension",
+        "com.apple.Music.CacheDeleteExtension",
+        "com.apple.Mail.CacheDeleteExtension",
     }
 )
 
