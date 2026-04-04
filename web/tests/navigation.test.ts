@@ -32,6 +32,7 @@ test.describe("Navigation", () => {
       { key: "playbooks", panel: "playbooks-panel" },
       { key: "routines", panel: "routines-panel" },
       { key: "insights", panel: "insights-panel" },
+      { key: "tasks", panel: "tasks-panel" },
       { key: "chat", panel: "chat-panel" },
       { key: "usage", panel: "usage-panel" },
       { key: "logs", panel: "logs-panel" },
