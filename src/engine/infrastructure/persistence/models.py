@@ -208,6 +208,25 @@ class DaGoal(Base):
     updated_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=func.now())
 
 
+class ScmTask(Base):
+    __tablename__ = "scm_tasks"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    project: Mapped[str] = mapped_column(Text, nullable=False)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="open", server_default="open")
+    evidence: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
+    notes: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
+    run_id: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=func.now())
+    updated_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=func.now())
+
+    __table_args__ = (
+        Index("idx_scm_tasks_project", "project"),
+        Index("idx_scm_tasks_status", "status"),
+    )
+
+
 class ChatMessage(Base):
     __tablename__ = "chat_messages"
 

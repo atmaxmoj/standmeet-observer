@@ -12,7 +12,7 @@ from engine.infrastructure.persistence.session import ago
 from engine.infrastructure.persistence.models import (
     Base, Frame, AudioFrame, OsEvent, Episode, PlaybookEntry,
     TokenUsage, State, PipelineLog, PlaybookHistory, Routine, ChatMessage,
-    Insight, DaGoal,
+    Insight, DaGoal, ScmTask,
 )
 
 logger = logging.getLogger(__name__)
@@ -681,6 +681,28 @@ class DB:
                  "created_at": r.created_at, "updated_at": r.updated_at}
                 for r in rows
             ]
+
+    # -- Scrum Master (tasks) --
+
+    async def get_scm_tasks(self, status: str = "") -> list[dict]:
+        async with self._session() as s:
+            q = select(ScmTask).order_by(ScmTask.created_at.desc())
+            if status:
+                q = q.where(ScmTask.status == status)
+            rows = (await s.execute(q)).scalars().all()
+            return [
+                {"id": r.id, "project": r.project, "title": r.title, "status": r.status,
+                 "evidence": r.evidence, "notes": r.notes,
+                 "run_id": r.run_id, "created_at": r.created_at, "updated_at": r.updated_at}
+                for r in rows
+            ]
+
+    async def count_scm_tasks(self, status: str = "") -> int:
+        async with self._session() as s:
+            q = select(func.count()).select_from(ScmTask)
+            if status:
+                q = q.where(ScmTask.status == status)
+            return (await s.execute(q)).scalar() or 0
 
     # -- helpers --
 

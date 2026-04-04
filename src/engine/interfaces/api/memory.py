@@ -44,6 +44,12 @@ async def list_da_goals(request: Request):
     return {"goals": await db.get_da_goals()}
 
 
+@router.get("/memory/scm-tasks/")
+async def list_scm_tasks(request: Request, status: str = ""):
+    db = request.app.state.db
+    return {"tasks": await db.get_scm_tasks(status), "total": await db.count_scm_tasks()}
+
+
 class BatchDelete(BaseModel):
     table: str
     ids: list[int]

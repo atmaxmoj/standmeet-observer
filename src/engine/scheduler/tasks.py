@@ -199,7 +199,29 @@ def daily_da_task():
         session.close()
 
 
-# -- Daily playbook distillation (runs after DA) --
+# -- Daily Scrum Master (runs after DA) --
+
+
+@huey.periodic_task(crontab(hour="3", minute="10"))
+def daily_scm_task():
+    """Daily Scrum Master task tracking. Runs at 3:10am after DA."""
+    from engine.infrastructure.pipeline.orchestrator import run_scm
+
+    session = _get_session()
+    try:
+        if not check_daily_budget(session, DAILY_COST_CAP_USD):
+            logger.warning("daily SCM: budget exceeded, skipping")
+            return
+        count = run_scm(_get_settings(), session)
+        session.commit()
+        logger.info("daily SCM: %d tasks", count)
+    except Exception:
+        logger.exception("daily SCM FAILED")
+    finally:
+        session.close()
+
+
+# -- Daily playbook distillation (runs after DA + SCM) --
 
 
 @huey.periodic_task(crontab(hour="3", minute="30"))

@@ -14,7 +14,7 @@ from engine.infrastructure.persistence.session import ago
 from engine.infrastructure.persistence.models import (
     Frame as FrameModel, AudioFrame, OsEvent, Episode,
     PlaybookEntry, PlaybookHistory, Routine, PipelineLog,
-    Insight, DaGoal,
+    Insight, DaGoal, ScmTask,
 )
 
 logger = logging.getLogger(__name__)
@@ -639,6 +639,50 @@ def update_da_goal(session: Session, goal_id: int, status: str,
     session.flush()
     logger.info("DA goal updated: id=%d status=%s", goal_id, status)
     return {"id": goal_id, "status": row.status}
+
+
+# ── Scrum Master (tasks) ──
+
+
+def get_scm_tasks(session: Session, status: str = "") -> list[dict]:
+    q = select(ScmTask).order_by(ScmTask.created_at.desc())
+    if status:
+        q = q.where(ScmTask.status == status)
+    rows = session.execute(q).scalars().all()
+    return [{"id": r.id, "project": r.project, "title": r.title, "status": r.status,
+             "evidence": r.evidence, "notes": r.notes,
+             "run_id": r.run_id, "created_at": r.created_at, "updated_at": r.updated_at}
+            for r in rows]
+
+
+def write_scm_task(session: Session, project: str, title: str, status: str,
+                   evidence: str, run_id: str) -> dict:
+    row = ScmTask(project=project, title=title, status=status,
+                  evidence=evidence, run_id=run_id)
+    session.add(row)
+    session.flush()
+    logger.info("SCM task: %s / %s (id=%d)", project, title, row.id)
+    return {"id": row.id, "project": project, "title": title}
+
+
+def update_scm_task(session: Session, task_id: int, status: str,
+                    note: str = "") -> dict:
+    row = session.get(ScmTask, task_id)
+    if not row:
+        return {"error": f"Task id={task_id} not found"}
+    if status:
+        row.status = status
+    if note:
+        try:
+            notes = json.loads(row.notes) if row.notes else []
+        except (json.JSONDecodeError, TypeError):
+            notes = []
+        notes.append(note)
+        row.notes = json.dumps(notes)
+    row.updated_at = func.now()
+    session.flush()
+    logger.info("SCM task updated: id=%d status=%s", task_id, status)
+    return {"id": task_id, "status": row.status}
 
 
 # ── Helpers ──

@@ -90,6 +90,18 @@ export interface DaGoal {
   updated_at: string;
 }
 
+export interface ScmTask {
+  id: number;
+  project: string;
+  title: string;
+  status: string;
+  evidence: string;
+  notes: string;
+  run_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface UsageSummary {
   days: number;
   total_cost_usd: number;
@@ -184,6 +196,9 @@ export const api = {
     get<{ insights: Insight[]; total: number }>(`/memory/insights/?${qs({ limit, offset })}`),
   daGoals: () => get<{ goals: DaGoal[] }>("/memory/da-goals/"),
   triggerDa: () => post<{ insights_created: number }>("/engine/da"),
+  scmTasks: (status = "") =>
+    get<{ tasks: ScmTask[]; total: number }>(`/memory/scm-tasks/?${qs({ status })}`),
+  triggerScm: () => post<{ tasks_count: number }>("/engine/scm"),
   getPrompt: (key: string) =>
     get<{ key: string; prompt: string; is_custom: boolean; default: string }>(`/engine/prompts/${key}`),
   setPrompt: (key: string, prompt: string) =>

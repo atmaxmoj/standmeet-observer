@@ -95,6 +95,7 @@ PROMPT_DEFAULTS = {
     "distill": "engine.domain.prompt.playbook:PLAYBOOK_PROMPT",
     "compose": "engine.domain.prompt.routine:ROUTINE_PROMPT",
     "da": "engine.domain.prompt.da:DA_PROMPT",
+    "scm": "engine.domain.prompt.scm:SCM_PROMPT",
 }
 
 
@@ -150,6 +151,13 @@ async def trigger_routines(request: Request):
     from engine.application.compose_routines import compose_routines
     count = await compose_routines(request.app.state.settings, request.app.state.db)
     return {"routines_updated": count}
+
+
+@router.post("/engine/scm")
+async def trigger_scm(request: Request):
+    from engine.application.scrum_master import run_scm
+    count = await run_scm(request.app.state.settings, request.app.state.db)
+    return {"tasks_count": count}
 
 
 @router.post("/engine/da")
