@@ -1,4 +1,11 @@
-"""Zsh shell history source plugin — migrated from capture/collectors/shell_macos.py."""
+"""Zsh shell history source plugin.
+
+macOS zsh session management (/etc/zshrc_Apple_Terminal):
+- Active session commands stay in memory, NOT written to disk
+- .historynew is always empty during active sessions
+- On session close: commands flush to .historynew → append to .history + ~/.zsh_history → .historynew deleted
+- Therefore we watch .history files (updated on tab close) and ~/.zsh_history (shared across all sessions)
+"""
 
 import logging
 import os
@@ -13,7 +20,9 @@ logger = logging.getLogger(__name__)
 
 
 def _signal_zsh_flush():
-    """Send SIGUSR1 to running zsh processes to trigger history write."""
+    """Send SIGUSR1 to running zsh processes to trigger history write.
+    Note: this does NOT work on macOS default zsh (no SIGUSR1 handler).
+    Kept for compatibility with custom zsh configs that support it."""
     try:
         result = subprocess.run(
             ["pgrep", "-x", "zsh"], capture_output=True, text=True, timeout=2,
@@ -97,7 +106,7 @@ class ZshSource(SourcePlugin):
     """Captures new commands from zsh history files.
 
     Two modes:
-    - Session mode: ~/.zsh_sessions/ → watch *.historynew files
+    - Session mode (macOS): ~/.zsh_sessions/*.history + ~/.zsh_history
     - Standard mode: watch ~/.zsh_history directly
     """
 
@@ -117,11 +126,13 @@ class ZshSource(SourcePlugin):
         standard = self._home / ".zsh_history"
 
         if has_sessions:
-            active_sessions = list(sessions_dir.glob("*.historynew"))
-            for sf in active_sessions:
-                paths.append(str(sf))
+            # macOS session mode: watch .history files (NOT .historynew)
+            for sf in sessions_dir.glob("*.history"):
+                if sf.stat().st_size > 0:
+                    paths.append(str(sf))
+            # Also watch shared history (gets appended on every session close)
             if standard.exists():
-                warnings.append("~/.zsh_history exists but skipped (session mode)")
+                paths.append(str(standard))
         else:
             if standard.exists():
                 paths.append(str(standard))
@@ -129,7 +140,7 @@ class ZshSource(SourcePlugin):
                     warnings.append("~/.zsh_history is empty")
 
         if not paths:
-            desc = "no active session files found" if has_sessions else "no history file found"
+            desc = "no history files with data found" if has_sessions else "no history file found"
             return ProbeResult(
                 available=False,
                 source="zsh",
@@ -170,24 +181,28 @@ class ZshSource(SourcePlugin):
             self._refresh_session_trackers()
 
         records = []
+        seen_commands = set()
         timestamp = datetime.now(timezone.utc).isoformat()
         for tracker in self._trackers:
             for cmd in tracker.collect_new():
-                records.append({
-                    "timestamp": timestamp,
-                    "command": cmd,
-                })
+                # Dedup: same command may appear in both session .history and ~/.zsh_history
+                if cmd not in seen_commands:
+                    seen_commands.add(cmd)
+                    records.append({
+                        "timestamp": timestamp,
+                        "command": cmd,
+                    })
         return records
 
     def _refresh_session_trackers(self):
-        """Check for new .historynew files that appeared since last probe."""
+        """Check for new .history files that appeared since last probe."""
         sessions_dir = self._home / ".zsh_sessions"
         if not sessions_dir.is_dir():
             return
         tracked_paths = {t.path for t in self._trackers}
-        for sf in sessions_dir.glob("*.historynew"):
-            if sf not in tracked_paths:
+        for sf in sessions_dir.glob("*.history"):
+            if sf not in tracked_paths and sf.stat().st_size > 0:
                 self._trackers.append(
                     _HistoryFileTracker(sf, parser=_parse_zsh_line)
                 )
-                logger.info("zsh: new session file discovered: %s", sf)
+                logger.info("zsh: new history file discovered: %s", sf)
