@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd";
 import { api, type ScmTask } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -6,29 +7,36 @@ import { Badge } from "@/components/ui/badge";
 import { PromptEditor } from "@/components/PromptEditor";
 
 const COLUMNS = [
-  { key: "open", label: "Open", color: "bg-blue-500/15 text-blue-400" },
-  { key: "in_progress", label: "In Progress", color: "bg-amber-500/15 text-amber-400" },
-  { key: "blocked", label: "Blocked", color: "bg-red-500/15 text-red-400" },
-  { key: "done", label: "Done", color: "bg-green-500/15 text-green-400" },
+  { key: "open", label: "Open", color: "bg-blue-500/15 text-blue-400", border: "border-blue-500/20" },
+  { key: "in_progress", label: "In Progress", color: "bg-amber-500/15 text-amber-400", border: "border-amber-500/20" },
+  { key: "blocked", label: "Blocked", color: "bg-red-500/15 text-red-400", border: "border-red-500/20" },
+  { key: "done", label: "Done", color: "bg-green-500/15 text-green-400", border: "border-green-500/20" },
 ];
 
-function TaskCard({ task }: { task: ScmTask }) {
+function TaskCard({ task, index }: { task: ScmTask; index: number }) {
   let notes: string[] = [];
   try { notes = JSON.parse(task.notes || "[]"); } catch { /* empty */ }
   return (
-    <Card className="mb-2" data-testid="scm-task-card">
-      <CardHeader className="p-3 pb-1">
-        <div className="flex items-center gap-1.5 mb-1">
-          <Badge variant="outline" className="text-[9px] px-1 py-0">{task.project}</Badge>
+    <Draggable draggableId={String(task.id)} index={index}>
+      {(provided, snapshot) => (
+        <div ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps}>
+          <Card className={`mb-2 transition-shadow ${snapshot.isDragging ? "shadow-lg ring-1 ring-primary" : ""}`}
+            data-testid="scm-task-card">
+            <CardHeader className="p-3 pb-1">
+              <div className="flex items-center gap-1.5 mb-1">
+                <Badge variant="outline" className="text-[9px] px-1 py-0">{task.project}</Badge>
+              </div>
+              <p className="text-xs font-medium leading-snug">{task.title}</p>
+            </CardHeader>
+            {notes.length > 0 && (
+              <CardContent className="p-3 pt-0">
+                <p className="text-[10px] text-muted-foreground">{notes[notes.length - 1]}</p>
+              </CardContent>
+            )}
+          </Card>
         </div>
-        <p className="text-xs font-medium leading-snug">{task.title}</p>
-      </CardHeader>
-      {notes.length > 0 && (
-        <CardContent className="p-3 pt-0">
-          <p className="text-[10px] text-muted-foreground">{notes[notes.length - 1]}</p>
-        </CardContent>
       )}
-    </Card>
+    </Draggable>
   );
 }
 
@@ -41,9 +49,17 @@ function Column({ col, tasks }: { col: typeof COLUMNS[number]; tasks: ScmTask[] 
         </span>
         <span className="text-[10px] text-muted-foreground">{tasks.length}</span>
       </div>
-      <div className="flex-1 space-y-0">
-        {tasks.map((t) => <TaskCard key={t.id} task={t} />)}
-      </div>
+      <Droppable droppableId={col.key}>
+        {(provided, snapshot) => (
+          <div ref={provided.innerRef} {...provided.droppableProps}
+            className={`flex-1 min-h-[200px] rounded-lg p-2 transition-colors ${
+              snapshot.isDraggingOver ? `${col.border} border-2 bg-accent/30` : "border border-transparent"
+            }`}>
+            {tasks.map((t, i) => <TaskCard key={t.id} task={t} index={i} />)}
+            {provided.placeholder}
+          </div>
+        )}
+      </Droppable>
     </div>
   );
 }
@@ -73,6 +89,22 @@ export function TasksPanel() {
     setRunning(false);
   };
 
+  const onDragEnd = async (result: DropResult) => {
+    if (!result.destination) return;
+    const { draggableId, destination } = result;
+    const newStatus = destination.droppableId;
+    const taskId = Number(draggableId);
+
+    // Optimistic update
+    setTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, status: newStatus } : t));
+
+    try {
+      await api.updateScmTask(taskId, newStatus);
+    } catch {
+      await load(); // revert on failure
+    }
+  };
+
   const byStatus = (status: string) => tasks.filter((t) => t.status === status);
 
   return (
@@ -97,11 +129,13 @@ export function TasksPanel() {
       )}
 
       {!loading && tasks.length > 0 && (
-        <div className="grid grid-cols-4 gap-4">
-          {COLUMNS.map((col) => (
-            <Column key={col.key} col={col} tasks={byStatus(col.key)} />
-          ))}
-        </div>
+        <DragDropContext onDragEnd={onDragEnd}>
+          <div className="grid grid-cols-4 gap-4">
+            {COLUMNS.map((col) => (
+              <Column key={col.key} col={col} tasks={byStatus(col.key)} />
+            ))}
+          </div>
+        </DragDropContext>
       )}
     </div>
   );

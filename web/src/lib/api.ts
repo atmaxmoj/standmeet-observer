@@ -199,6 +199,8 @@ export const api = {
   scmTasks: (status = "") =>
     get<{ tasks: ScmTask[]; total: number }>(`/memory/scm-tasks/?${qs({ status })}`),
   triggerScm: () => post<{ tasks_count: number }>("/engine/scm"),
+  updateScmTask: (taskId: number, status: string) =>
+    put<{ id: number; status: string }>(`/memory/scm-tasks/${taskId}`, { status }),
   getPrompt: (key: string) =>
     get<{ key: string; prompt: string; is_custom: boolean; default: string }>(`/engine/prompts/${key}`),
   setPrompt: (key: string, prompt: string) =>

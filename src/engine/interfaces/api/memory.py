@@ -50,6 +50,24 @@ async def list_scm_tasks(request: Request, status: str = ""):
     return {"tasks": await db.get_scm_tasks(status), "total": await db.count_scm_tasks()}
 
 
+class ScmTaskUpdate(BaseModel):
+    status: str
+
+
+@router.put("/memory/scm-tasks/{task_id}")
+async def update_scm_task(request: Request, task_id: int, body: ScmTaskUpdate):
+    from engine.infrastructure.persistence.engine import get_sync_session_factory
+    sync_url = request.app.state.settings.database_url_sync
+    session = get_sync_session_factory(sync_url)()
+    try:
+        from engine.infrastructure.agent.repository import update_scm_task as _update
+        result = _update(session, task_id, body.status)
+        session.commit()
+        return result
+    finally:
+        session.close()
+
+
 class BatchDelete(BaseModel):
     table: str
     ids: list[int]
