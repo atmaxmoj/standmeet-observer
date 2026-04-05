@@ -180,9 +180,9 @@ def process_episode(
 # -- Daily DA (Personal Data Analyst) — runs FIRST so distill/compose can reference insights --
 
 
-@huey.periodic_task(crontab(hour="3", minute="0"))
+@huey.periodic_task(crontab(hour="1", minute="0"))
 def daily_da_task():
-    """Daily DA insights generation. Runs at 3am before distill/compose."""
+    """Daily DA insights generation. Runs at 1:00am."""
     from engine.infrastructure.pipeline.orchestrator import run_da
 
     session = _get_session()
@@ -202,9 +202,9 @@ def daily_da_task():
 # -- Daily Scrum Master (runs after DA) --
 
 
-@huey.periodic_task(crontab(hour="3", minute="10"))
+@huey.periodic_task(crontab(hour="1", minute="30"))
 def daily_scm_task():
-    """Daily Scrum Master task tracking. Runs at 3:10am after DA."""
+    """Daily Scrum Master task tracking. Runs at 1:30am."""
     from engine.infrastructure.pipeline.orchestrator import run_scm
 
     session = _get_session()
@@ -224,9 +224,9 @@ def daily_scm_task():
 # -- Daily playbook distillation (runs after DA + SCM) --
 
 
-@huey.periodic_task(crontab(hour="3", minute="30"))
+@huey.periodic_task(crontab(hour="2", minute="0"))
 def daily_distill_task():
-    """Daily playbook distillation with Opus. Runs at 3:30am after DA."""
+    """Daily playbook distillation with Opus. Runs at 2:00am."""
     session = _get_session()
     try:
         if not check_daily_budget(session, DAILY_COST_CAP_USD):
@@ -244,9 +244,9 @@ def daily_distill_task():
 # -- Daily routine extraction (runs after distill) --
 
 
-@huey.periodic_task(crontab(hour="4", minute="0"))
+@huey.periodic_task(crontab(hour="2", minute="30"))
 def daily_routines_task():
-    """Daily routine extraction with Opus. Runs at 4am."""
+    """Daily routine extraction with Opus. Runs at 2:30am."""
     session = _get_session()
     try:
         if not check_daily_budget(session, DAILY_COST_CAP_USD):
@@ -264,9 +264,9 @@ def daily_routines_task():
 # -- Daily garbage collection --
 
 
-@huey.periodic_task(crontab(hour="4", minute="30"))
+@huey.periodic_task(crontab(hour="3", minute="0"))
 def daily_gc_task():
-    """Daily garbage collection: decay + agent-driven audit. Runs at 4:30am."""
+    """Daily garbage collection: decay + agent-driven audit. Runs at 3:00am."""
     from engine.application.gc import run_gc
 
     session = _get_session()
