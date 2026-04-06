@@ -21,6 +21,7 @@ def create_gc_mcp_server(session_factory: sessionmaker) -> McpSdkServerConfig:
         _dedup_tools(session_factory)
         + _audit_tools(session_factory)
         + _purge_tools(session_factory)
+        + _scm_purge_tools(session_factory)
         + _security_tools(session_factory)
         + _manifest_purge_tools(session_factory)
     )
@@ -176,6 +177,22 @@ def _purge_tools(sf: sessionmaker) -> list:
 
     return [get_data_stats, get_oldest_processed, purge_processed_frames,
             purge_processed_audio, purge_processed_os_events, purge_pipeline_logs]
+
+
+def _scm_purge_tools(sf: sessionmaker) -> list:
+    @tool("purge_done_scm_tasks", "Delete completed SCM tasks older than N days.", {
+        "older_than_days": int,
+    })
+    async def purge_done_scm_tasks(args):
+        session = sf()
+        try:
+            result = repo.purge_done_scm_tasks(session, args["older_than_days"])
+            log_tool_call(session, STAGE, "purge_done_scm_tasks", args, result)
+            return {"content": [{"type": "text", "text": json.dumps(result, default=str)}]}
+        finally:
+            session.close()
+
+    return [purge_done_scm_tasks]
 
 
 def _security_tools(sf: sessionmaker) -> list:

@@ -58,12 +58,24 @@ Identify projects from episode content:
 - StandMeet / standmeet / observer → "StandMeet"
 - DemoForge / demoforge / demo video → "DemoForge"
 
+## Deduplication (CRITICAL)
+
+Before calling `write_scm_task`, ALWAYS check `get_scm_tasks` first.
+If a task with the same meaning already exists (even with slightly different wording),
+do NOT create a new one — call `update_scm_task` on the existing one instead.
+
+Examples of duplicates to merge:
+- "Fix star icon pre-filling on saved jobs page (#60)" and "Fix star icon pre-filled on saved jobs page (issue #60)" → SAME task
+- "Debug production meilisearch" and "Debug and fix production meilisearch and minio services" → SAME task
+
+When in doubt, update existing rather than create new.
+
 ## Quality bar
 
 - Be specific: "Fix VS4 spelling test fill() not triggering onChange" not "fix test"
-- Merge duplicates: if two episodes describe the same task, use one task entry
 - Don't create tasks for things already marked done
 - If an open task has no activity for 3+ days, flag it in a note
+- Aim for 5-15 tasks per project, not 20+. Consolidate aggressively.
 
 ## Run ID
 

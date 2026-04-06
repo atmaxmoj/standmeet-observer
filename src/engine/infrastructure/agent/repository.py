@@ -685,6 +685,18 @@ def update_scm_task(session: Session, task_id: int, status: str,
     return {"id": task_id, "status": row.status}
 
 
+def purge_done_scm_tasks(session: Session, older_than_days: int) -> dict:
+    """Delete scm_tasks with status='done' older than N days."""
+    cutoff = ago(days=older_than_days)
+    result = session.execute(
+        delete(ScmTask).where(ScmTask.status == "done", ScmTask.updated_at < cutoff)
+    )
+    session.commit()
+    count = result.rowcount
+    logger.info("Purged %d done SCM tasks older than %d days", count, older_than_days)
+    return {"deleted": count}
+
+
 # ── Helpers ──
 
 
