@@ -202,9 +202,9 @@ def daily_da_task():
 # -- Daily Scrum Master (runs after DA) --
 
 
-@huey.periodic_task(crontab(hour="1", minute="30"))
-def daily_scm_task():
-    """Daily Scrum Master task tracking. Runs at 1:30am."""
+@huey.periodic_task(crontab(minute="30"))
+def hourly_scm_task():
+    """Scrum Master task tracking. Runs every hour at :30."""
     from engine.infrastructure.pipeline.orchestrator import run_scm
 
     session = _get_session()
