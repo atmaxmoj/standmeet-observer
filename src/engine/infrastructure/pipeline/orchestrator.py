@@ -166,7 +166,7 @@ def run_scm(settings: Settings, session: Session) -> int:
     agent = AgentService(settings)
     factory = sessionmaker(bind=session.get_bind())
     mcp_server = create_scm_mcp_server(factory)
-    agent.run_with_mcp(prompt, mcp_server, "scm", "scm_agentic", session)
+    agent.run_with_mcp(prompt, mcp_server, "scm", "scm_agentic", session, max_turns=20)
 
     from engine.infrastructure.persistence.models import ScmTask
     from sqlalchemy import select, func

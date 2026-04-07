@@ -38,7 +38,7 @@ async def run_scm(settings: Settings, db: DB) -> int:
         agent = AgentService(settings)
         mcp_server = create_scm_mcp_server(session_factory)
         await agent.arun_with_mcp(
-            prompt, mcp_server, "scm", "scm_agentic", session,
+            prompt, mcp_server, "scm", "scm_agentic", session, max_turns=20,
         )
         session.commit()
     finally:

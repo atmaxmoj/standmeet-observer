@@ -30,25 +30,28 @@ should immediately know: "what are the open items right now?"
 - **blocked**: Attempted but hit a wall (repeated failures, abandoned)
 - **done**: Completed (deployed, test passing, feature shipped)
 
-## Verifying real state — DO NOT guess from episode verbs
+## Verifying real state (optional, only when /host is available)
 
-You have access to the user's home directory at `/host` (read-only).
-Their code is in `/host/Develop/projects/`.
+The user's home directory MAY be mounted read-only at `/host`. First check
+with `ls /host 2>/dev/null` — if not present, skip all bash verification.
 
-Before marking any task as in_progress, VERIFY using Bash:
-- `cd /host/Develop/projects/<project> && git log --oneline -10` — recent commits
-- `cd /host/Develop/projects/<project> && git status` — uncommitted changes
-- `gh issue view <number>` — issue state if mentioned
-- `curl -sI <prod-url>` — production health if it's a deploy task
-- `find /host/Develop/projects/<project> -name '<file>'` — locate files
+If /host is available:
+1. Look for the projects directory: try `ls /host/Develop/projects 2>/dev/null`
+   or `ls /host/projects 2>/dev/null` or `ls /host/code 2>/dev/null`
+2. Once you find it, remember the path for this run
+3. For each task that needs verification, run targeted git commands:
+   - `cd <project_path> && git log --oneline -5`
+   - `cd <project_path> && git log --since='2 days' --oneline`
+
+HARD LIMITS to avoid timeout:
+- Maximum 5 bash verification commands per run
+- NEVER `find /host` without -maxdepth
+- Each command must target a specific known project directory
+- Skip verification entirely for episodes older than 7 days
 
 CRITICAL: "debugging X" in an episode summary does NOT mean X is unfinished.
 Many debug sessions end with a fix. The episode only sees what happened on screen,
 not whether the underlying problem was actually resolved.
-
-If a task references a specific file/feature, check git log to see if there's a
-recent commit that resolves it. If the issue references a GitHub issue number,
-check if it's closed.
 
 ## What counts as a task?
 
